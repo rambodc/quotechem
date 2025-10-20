@@ -1,7 +1,19 @@
 // src/create-drop/CreateDrop.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, doc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  endAt,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  startAt,
+} from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
@@ -26,14 +38,18 @@ export default function CreateDrop() {
   const [tokenId, setTokenId] = useState('');
   const [type, setType] = useState(typeOptions[0]);
   const [dropVersion, setDropVersion] = useState(versionOptions[0]);
-  const [artistId, setArtistId] = useState('');
-  const [ownedByUid, setOwnedByUid] = useState('');
-  const [artistOptions, setArtistOptions] = useState([]);
-  const [artistLoading, setArtistLoading] = useState(true);
-  const [artistError, setArtistError] = useState('');
-  const [userOptions, setUserOptions] = useState([]);
-  const [userLoading, setUserLoading] = useState(true);
-  const [userError, setUserError] = useState('');
+  const [selectedArtist, setSelectedArtist] = useState(null);
+  const [artistSearchTerm, setArtistSearchTerm] = useState('');
+  const [artistResults, setArtistResults] = useState([]);
+  const [artistSearchLoading, setArtistSearchLoading] = useState(false);
+  const [artistSearchError, setArtistSearchError] = useState('');
+  const artistSearchLatestRef = useRef('');
+  const [selectedOwner, setSelectedOwner] = useState(null);
+  const [ownerSearchTerm, setOwnerSearchTerm] = useState('');
+  const [ownerResults, setOwnerResults] = useState([]);
+  const [ownerSearchLoading, setOwnerSearchLoading] = useState(false);
+  const [ownerSearchError, setOwnerSearchError] = useState('');
+  const ownerSearchLatestRef = useRef('');
   const [uri, setUri] = useState('');
 
   const [file, setFile] = useState(null);
@@ -44,6 +60,8 @@ export default function CreateDrop() {
   const [error, setError] = useState('');
 
   const fileInputRef = useRef(null);
+  const artistInputRef = useRef(null);
+  const ownerInputRef = useRef(null);
 
   const onChangePasscode = (e) => {
     const v = e.target.value.replace(/\D+/g, '').slice(0, 6);
@@ -66,81 +84,322 @@ export default function CreateDrop() {
     };
   }, [previewUrl]);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        setArtistLoading(true);
-        setArtistError('');
-        const snapshot = await getDocs(collection(db, 'artists'));
-        if (!active) return;
-        const options = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() || {};
-          const id = data.artistId || docSnap.id;
-          const label = (data.artistFullName || '').trim() || 'Untitled Artist';
-          return { id, label };
-        }).sort((a, b) => a.label.localeCompare(b.label));
-        setArtistOptions(options);
-      } catch (err) {
-        console.error('Failed to load artists list:', err);
-        if (!active) return;
-        setArtistError(err?.message || 'Failed to load artists.');
-      } finally {
-        if (!active) return;
-        setArtistLoading(false);
-      }
-    })();
+  const searchArtists = useCallback(async (term) => {
+    const normalized = term.trim();
+    if (!normalized) return;
 
-    return () => {
-      active = false;
+    const lower = normalized.toLowerCase();
+    const seen = new Set();
+    const matches = [];
+    let errorMessage = '';
+
+    const addArtist = (snap) => {
+      if (!snap?.exists()) return;
+      const data = snap.data() || {};
+      const rawId = data.artistId || snap.id || '';
+      const id = rawId.trim();
+      if (!id || seen.has(id)) return;
+      const label = (data.artistFullName || '').trim() || 'Untitled Artist';
+      const description = data.artistDescription || '';
+      const subLabel = description ? description.slice(0, 80) : '';
+      matches.push({ id, label, subLabel });
+      seen.add(id);
     };
+
+    try {
+      const byIdSnap = await getDoc(doc(db, 'artists', normalized));
+      addArtist(byIdSnap);
+    } catch (err) {
+      console.error('Artist ID lookup failed:', err);
+    }
+
+    try {
+      const nameQuery = query(
+        collection(db, 'artists'),
+        orderBy('artistFullName'),
+        startAt(normalized),
+        endAt(`${normalized}\uf8ff`),
+        limit(10)
+      );
+      const nameSnap = await getDocs(nameQuery);
+      nameSnap.forEach(addArtist);
+    } catch (err) {
+      console.warn('Artist name search fallback:', err);
+      if (err?.code === 'failed-precondition') {
+        try {
+          const fallbackSnap = await getDocs(
+            query(collection(db, 'artists'), limit(30))
+          );
+          fallbackSnap.forEach((snap) => {
+            const data = snap.data() || {};
+            const rawId = data.artistId || snap.id || '';
+            const id = rawId.trim();
+            if (!id || seen.has(id)) return;
+            const label = (data.artistFullName || '').trim();
+            const description = data.artistDescription || '';
+            if (
+              label.toLowerCase().includes(lower) ||
+              id.toLowerCase().includes(lower) ||
+              description.toLowerCase().includes(lower)
+            ) {
+              const subLabel = description ? description.slice(0, 80) : '';
+              matches.push({ id, label: label || 'Untitled Artist', subLabel });
+              seen.add(id);
+            }
+          });
+        } catch (fallbackErr) {
+          console.error('Artist fallback search failed:', fallbackErr);
+          errorMessage = fallbackErr?.message || 'Unable to search artists.';
+        }
+      } else {
+        errorMessage = err?.message || 'Unable to search artists.';
+      }
+    }
+
+    if (artistSearchLatestRef.current === normalized) {
+      setArtistResults(matches);
+      setArtistSearchError(errorMessage);
+      setArtistSearchLoading(false);
+    }
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
+  const searchUsers = useCallback(async (term) => {
+    const normalized = term.trim();
+    if (!normalized) return;
+
+    const lower = normalized.toLowerCase();
+    const seen = new Set();
+    const matches = [];
+    let errorMessage = '';
+
+    const addUser = (snap) => {
+      if (!snap?.exists()) return;
+      const data = snap.data() || {};
+      const rawId = snap.id || '';
+      const id = rawId.trim();
+      if (!id || seen.has(id)) return;
+      const nameParts = [data.firstName, data.lastName]
+        .map((part) => (part ? String(part).trim() : ''))
+        .filter(Boolean);
+      const name = nameParts.join(' ').trim();
+      const email = (data.email || '').trim();
+      const label = name || email || id;
+      const subLabel = email && email !== label ? email : '';
+      matches.push({ id, label, subLabel });
+      seen.add(id);
+    };
+
+    try {
+      const byIdSnap = await getDoc(doc(db, 'users', normalized));
+      addUser(byIdSnap);
+    } catch (err) {
+      console.error('User ID lookup failed:', err);
+    }
+
+    const runQuery = async (field, value, limitCount = 10) => {
       try {
-        setUserLoading(true);
-        setUserError('');
-        const snapshot = await getDocs(collection(db, 'users'));
-        if (!active) return;
-        const options = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() || {};
-          const nameParts = [data.firstName, data.lastName].filter(Boolean);
+        const q = query(
+          collection(db, 'users'),
+          orderBy(field),
+          startAt(value),
+          endAt(`${value}\uf8ff`),
+          limit(limitCount)
+        );
+        const snap = await getDocs(q);
+        snap.forEach(addUser);
+      } catch (err) {
+        console.warn(`User search by ${field} failed:`, err);
+        if (err?.code !== 'failed-precondition' && !errorMessage) {
+          errorMessage = err?.message || 'Unable to search users.';
+        }
+      }
+    };
+
+    await runQuery('email', normalized.toLowerCase(), 10);
+    if (matches.length < 15) await runQuery('firstName', normalized, 8);
+    if (matches.length < 15) await runQuery('lastName', normalized, 8);
+
+    if (matches.length < 10) {
+      try {
+        const fallbackSnap = await getDocs(
+          query(collection(db, 'users'), limit(40))
+        );
+        fallbackSnap.forEach((snap) => {
+          const data = snap.data() || {};
+          const rawId = snap.id || '';
+          const id = rawId.trim();
+          if (!id || seen.has(id)) return;
+          const nameParts = [data.firstName, data.lastName]
+            .map((part) => (part ? String(part).trim() : ''))
+            .filter(Boolean);
           const name = nameParts.join(' ').trim();
-          const baseLabel = name || data.email || docSnap.id;
-          const annotatedLabel = name && data.email ? `${name} (${data.email})` : baseLabel;
-          return {
-            id: docSnap.id,
-            label: annotatedLabel,
-            email: data.email || '',
-          };
-        }).sort((a, b) => a.label.localeCompare(b.label));
-        setUserOptions(options);
-      } catch (err) {
-        console.error('Failed to load users list:', err);
-        if (!active) return;
-        setUserError(err?.message || 'Failed to load users.');
-      } finally {
-        if (!active) return;
-        setUserLoading(false);
+          const email = (data.email || '').trim();
+          const combined = `${name} ${email}`.toLowerCase();
+          if (combined.includes(lower) || id.toLowerCase().includes(lower)) {
+            const label = name || email || id;
+            const subLabel = email && email !== label ? email : '';
+            matches.push({ id, label, subLabel });
+            seen.add(id);
+          }
+        });
+      } catch (fallbackErr) {
+        console.error('User fallback search failed:', fallbackErr);
+        if (!errorMessage) {
+          errorMessage = fallbackErr?.message || 'Unable to search users.';
+        }
       }
-    })();
+    }
 
-    return () => {
-      active = false;
-    };
+    if (ownerSearchLatestRef.current === normalized) {
+      setOwnerResults(matches);
+      setOwnerSearchError(errorMessage);
+      setOwnerSearchLoading(false);
+    }
   }, []);
 
-  const selectedArtist = useMemo(
-    () => artistOptions.find((option) => option.id === artistId) || null,
-    [artistOptions, artistId]
-  );
+  useEffect(() => {
+    const term = artistSearchTerm.trim();
 
-  const selectedOwner = useMemo(
-    () => userOptions.find((option) => option.id === ownedByUid) || null,
-    [userOptions, ownedByUid]
-  );
+    if (!term) {
+      artistSearchLatestRef.current = '';
+      setArtistResults([]);
+      setArtistSearchError('');
+      setArtistSearchLoading(false);
+      return;
+    }
+
+    if (term.length < 2) {
+      artistSearchLatestRef.current = '';
+      setArtistResults([]);
+      setArtistSearchError('');
+      setArtistSearchLoading(false);
+      return;
+    }
+
+    artistSearchLatestRef.current = term;
+    setArtistSearchLoading(true);
+    setArtistSearchError('');
+    const handle = setTimeout(() => {
+      searchArtists(term);
+    }, 260);
+
+    return () => clearTimeout(handle);
+  }, [artistSearchTerm, searchArtists]);
+
+  useEffect(() => {
+    const term = ownerSearchTerm.trim();
+
+    if (!term) {
+      ownerSearchLatestRef.current = '';
+      setOwnerResults([]);
+      setOwnerSearchError('');
+      setOwnerSearchLoading(false);
+      return;
+    }
+
+    if (term.length < 2) {
+      ownerSearchLatestRef.current = '';
+      setOwnerResults([]);
+      setOwnerSearchError('');
+      setOwnerSearchLoading(false);
+      return;
+    }
+
+    ownerSearchLatestRef.current = term;
+    setOwnerSearchLoading(true);
+    setOwnerSearchError('');
+    const handle = setTimeout(() => {
+      searchUsers(term);
+    }, 260);
+
+    return () => clearTimeout(handle);
+  }, [ownerSearchTerm, searchUsers]);
+
+  const handleSelectArtist = useCallback((option) => {
+    setSelectedArtist(option);
+    setArtistSearchTerm('');
+    setArtistResults([]);
+    setArtistSearchError('');
+    artistSearchLatestRef.current = '';
+  }, []);
+
+  const handleSelectOwner = useCallback((option) => {
+    setSelectedOwner(option);
+    setOwnerSearchTerm('');
+    setOwnerResults([]);
+    setOwnerSearchError('');
+    ownerSearchLatestRef.current = '';
+  }, []);
+
+  const handleClearArtist = useCallback(() => {
+    setSelectedArtist(null);
+    setArtistSearchTerm('');
+    setArtistResults([]);
+    setArtistSearchError('');
+    artistSearchLatestRef.current = '';
+    if (artistInputRef.current) {
+      artistInputRef.current.focus();
+    }
+  }, []);
+
+  const handleClearOwner = useCallback(() => {
+    setSelectedOwner(null);
+    setOwnerSearchTerm('');
+    setOwnerResults([]);
+    setOwnerSearchError('');
+    ownerSearchLatestRef.current = '';
+    if (ownerInputRef.current) {
+      ownerInputRef.current.focus();
+    }
+  }, []);
+
+  const renderDropdown = (term, loading, errorMessage, results, onSelect, metaLabel) => {
+    const trimmed = term.trim();
+    if (!trimmed) return null;
+    if (trimmed.length < 2) {
+      return (
+        <div style={searchResultsStyle}>
+          <p style={searchStatusStyle}>Keep typing to search (min 2 characters).</p>
+        </div>
+      );
+    }
+
+    const hasResults = results.length > 0;
+
+    return (
+      <div style={searchResultsStyle}>
+        {loading && <p style={searchStatusStyle}>Searching…</p>}
+        {!loading && errorMessage && <p style={searchErrorStyle}>{errorMessage}</p>}
+        {!loading && hasResults &&
+          results.map((option) => (
+            <button
+              type="button"
+              key={option.id}
+              onClick={() => onSelect(option)}
+              style={resultButtonStyle}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f8fafc';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#ffffff';
+              }}
+            >
+              <span style={resultPrimaryStyle}>{option.label}</span>
+              {option.subLabel ? <span style={resultSecondaryStyle}>{option.subLabel}</span> : null}
+              <span style={resultMetaStyle}>
+                {metaLabel}: {option.id}
+              </span>
+            </button>
+          ))}
+        {!loading && !hasResults && !errorMessage && (
+          <p style={searchStatusStyle}>No matches. Try a different search.</p>
+        )}
+      </div>
+    );
+  };
+
+  const artistId = selectedArtist?.id ?? '';
+  const ownedByUid = selectedOwner?.id ?? '';
 
   const canSubmit = useMemo(() => {
     return (
@@ -154,10 +413,8 @@ export default function CreateDrop() {
       !!file &&
       !saving &&
       !processingImage &&
-      !artistLoading &&
-      !userLoading &&
-      !artistError &&
-      !userError
+      !artistSearchLoading &&
+      !ownerSearchLoading
     );
   }, [
     unlocked,
@@ -170,10 +427,8 @@ export default function CreateDrop() {
     file,
     saving,
     processingImage,
-    artistLoading,
-    userLoading,
-    artistError,
-    userError,
+    artistSearchLoading,
+    ownerSearchLoading,
   ]);
 
   const handleFileChange = async (event) => {
@@ -389,61 +644,69 @@ export default function CreateDrop() {
             </Field>
 
             <Field label="Artist">
-              {artistLoading ? (
-                <p style={{ color: '#4b5563', fontSize: 14 }}>Loading artists…</p>
-              ) : artistError ? (
-                <p style={{ color: '#b91c1c', fontSize: 14 }}>{artistError}</p>
-              ) : artistOptions.length === 0 ? (
-                <p style={{ color: '#4b5563', fontSize: 14 }}>No artists available. Create an artist first.</p>
-              ) : (
-                <select
-                  value={artistId}
-                  onChange={(e) => setArtistId(e.target.value)}
+              <div style={searchWrapperStyle}>
+                <input
+                  ref={artistInputRef}
+                  type="text"
+                  value={artistSearchTerm}
+                  onChange={(e) => setArtistSearchTerm(e.target.value)}
+                  placeholder={selectedArtist ? `Change selection (current: ${selectedArtist.label})` : 'Search artists by name, description, or ID'}
                   style={inputStyle}
-                  required
-                >
-                  <option value="">Select an artist…</option>
-                  {artistOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              )}
+                />
+                {renderDropdown(
+                  artistSearchTerm,
+                  artistSearchLoading,
+                  artistSearchError,
+                  artistResults,
+                  handleSelectArtist,
+                  'Artist ID'
+                )}
+              </div>
               {selectedArtist && (
-                <p style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
-                  Artist ID: {selectedArtist.id}
-                </p>
+                <div style={selectionSummaryStyle}>
+                  <div style={selectionSummaryTextStyle}>
+                    <span style={resultPrimaryStyle}>{selectedArtist.label}</span>
+                    <span style={resultMetaStyle}>Artist ID: {selectedArtist.id}</span>
+                  </div>
+                  <button type="button" onClick={handleClearArtist} style={clearSelectionButtonStyle}>
+                    Change
+                  </button>
+                </div>
               )}
             </Field>
 
             <Field label="Owned By">
-              {userLoading ? (
-                <p style={{ color: '#4b5563', fontSize: 14 }}>Loading users…</p>
-              ) : userError ? (
-                <p style={{ color: '#b91c1c', fontSize: 14 }}>{userError}</p>
-              ) : userOptions.length === 0 ? (
-                <p style={{ color: '#4b5563', fontSize: 14 }}>No users available.</p>
-              ) : (
-                <select
-                  value={ownedByUid}
-                  onChange={(e) => setOwnedByUid(e.target.value)}
+              <div style={searchWrapperStyle}>
+                <input
+                  ref={ownerInputRef}
+                  type="text"
+                  value={ownerSearchTerm}
+                  onChange={(e) => setOwnerSearchTerm(e.target.value)}
+                  placeholder={selectedOwner ? `Change selection (current: ${selectedOwner.label})` : 'Search users by name, email, or UID'}
                   style={inputStyle}
-                  required
-                >
-                  <option value="">Select a user…</option>
-                  {userOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              )}
+                />
+                {renderDropdown(
+                  ownerSearchTerm,
+                  ownerSearchLoading,
+                  ownerSearchError,
+                  ownerResults,
+                  handleSelectOwner,
+                  'UID'
+                )}
+              </div>
               {selectedOwner && (
-                <p style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
-                  UID: {selectedOwner.id}
-                  {selectedOwner.email ? ` · ${selectedOwner.email}` : ''}
-                </p>
+                <div style={selectionSummaryStyle}>
+                  <div style={selectionSummaryTextStyle}>
+                    <span style={resultPrimaryStyle}>{selectedOwner.label}</span>
+                    <span style={resultMetaStyle}>
+                      UID: {selectedOwner.id}
+                      {selectedOwner.subLabel ? ` · ${selectedOwner.subLabel}` : ''}
+                    </span>
+                  </div>
+                  <button type="button" onClick={handleClearOwner} style={clearSelectionButtonStyle}>
+                    Change
+                  </button>
+                </div>
               )}
             </Field>
 
@@ -592,4 +855,88 @@ const inputStyle = {
   fontSize: 16,
   outline: 'none',
   background: '#fff',
+};
+
+const searchWrapperStyle = {
+  position: 'relative',
+};
+
+const searchResultsStyle = {
+  position: 'absolute',
+  top: 'calc(100% + 6px)',
+  left: 0,
+  right: 0,
+  maxHeight: 240,
+  overflowY: 'auto',
+  borderRadius: 12,
+  border: '1px solid #e2e8f0',
+  background: '#ffffff',
+  boxShadow: '0 16px 32px rgba(15, 23, 42, 0.12)',
+  zIndex: 30,
+  padding: 6,
+};
+
+const searchStatusStyle = {
+  margin: '6px 8px',
+  fontSize: 13,
+  color: '#475569',
+};
+
+const searchErrorStyle = {
+  ...searchStatusStyle,
+  color: '#b91c1c',
+};
+
+const resultButtonStyle = {
+  width: '100%',
+  border: 'none',
+  background: '#ffffff',
+  borderRadius: 10,
+  padding: '10px 12px',
+  textAlign: 'left',
+  cursor: 'pointer',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  transition: 'background 0.16s ease',
+};
+
+const resultPrimaryStyle = {
+  fontWeight: 600,
+  color: '#0f172a',
+};
+
+const resultSecondaryStyle = {
+  fontSize: 12.5,
+  color: '#475569',
+};
+
+const resultMetaStyle = {
+  fontSize: 11.5,
+  color: '#64748b',
+};
+
+const selectionSummaryStyle = {
+  marginTop: 12,
+  padding: '10px 12px',
+  borderRadius: 12,
+  background: '#f1f5f9',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+};
+
+const selectionSummaryTextStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+};
+
+const clearSelectionButtonStyle = {
+  border: 'none',
+  background: 'transparent',
+  color: '#0ea5e9',
+  fontWeight: 600,
+  cursor: 'pointer',
 };
