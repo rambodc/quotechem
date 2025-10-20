@@ -17,6 +17,7 @@ import {
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
+import styles from './CreateDrop.module.css';
 import { db, storage, logStorageDebug } from '../firebase';
 
 const typeOptions = ['NFT', 'MPT'];
@@ -358,8 +359,8 @@ export default function CreateDrop() {
     if (!trimmed) return null;
     if (trimmed.length < 2) {
       return (
-        <div style={searchResultsStyle}>
-          <p style={searchStatusStyle}>Keep typing to search (min 2 characters).</p>
+        <div className={styles.searchResults}>
+          <p className={styles.searchStatus}>Keep typing to search (min 2 characters).</p>
         </div>
       );
     }
@@ -367,32 +368,26 @@ export default function CreateDrop() {
     const hasResults = results.length > 0;
 
     return (
-      <div style={searchResultsStyle}>
-        {loading && <p style={searchStatusStyle}>Searching…</p>}
-        {!loading && errorMessage && <p style={searchErrorStyle}>{errorMessage}</p>}
+      <div className={styles.searchResults}>
+        {loading && <p className={styles.searchStatus}>Searching…</p>}
+        {!loading && errorMessage && <p className={styles.searchError}>{errorMessage}</p>}
         {!loading && hasResults &&
           results.map((option) => (
             <button
               type="button"
               key={option.id}
               onClick={() => onSelect(option)}
-              style={resultButtonStyle}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f8fafc';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#ffffff';
-              }}
+              className={styles.resultButton}
             >
-              <span style={resultPrimaryStyle}>{option.label}</span>
-              {option.subLabel ? <span style={resultSecondaryStyle}>{option.subLabel}</span> : null}
-              <span style={resultMetaStyle}>
+              <span className={styles.resultPrimary}>{option.label}</span>
+              {option.subLabel ? <span className={styles.resultSecondary}>{option.subLabel}</span> : null}
+              <span className={styles.resultMeta}>
                 {metaLabel}: {option.id}
               </span>
             </button>
           ))}
         {!loading && !hasResults && !errorMessage && (
-          <p style={searchStatusStyle}>No matches. Try a different search.</p>
+          <p className={styles.searchStatus}>No matches. Try a different search.</p>
         )}
       </div>
     );
@@ -532,17 +527,9 @@ export default function CreateDrop() {
       <TopBar variant="back" backLabel="Back" onBack={handleBack} />
 
       {!unlocked ? (
-        <div
-          style={{
-            maxWidth: 480,
-            width: '100%',
-            margin: '80px auto',
-            padding: '0 16px',
-            textAlign: 'center',
-          }}
-        >
-          <h1 style={{ marginBottom: 8 }}>Enter Passcode</h1>
-          <p style={{ color: '#4b5563', marginBottom: 12 }}>Enter the 6-digit passcode to continue.</p>
+        <div className={styles.passcodeShell}>
+          <h1 className={styles.passcodeTitle}>Enter Passcode</h1>
+          <p className={styles.passcodeDescription}>Enter the 6-digit passcode to continue.</p>
           <input
             inputMode="numeric"
             pattern="[0-9]*"
@@ -556,31 +543,16 @@ export default function CreateDrop() {
             placeholder="••••••"
             maxLength={6}
             autoFocus
-            style={{
-              letterSpacing: 6,
-              textAlign: 'center',
-              padding: '12px 14px',
-              borderRadius: 12,
-              border: '1px solid #ddd',
-              fontSize: 24,
-              width: 220,
-            }}
+            className={styles.passcodeInput}
           />
-          {passError && <p style={{ color: '#b91c1c', marginTop: 10 }}>{passError}</p>}
-          <p style={{ marginTop: 10, fontSize: 12, color: '#6b7280' }}>Hint for dev: 123456</p>
+          {passError && <p className={styles.errorText}>{passError}</p>}
+          <p className={styles.passcodeHint}>Hint for dev: 123456</p>
         </div>
       ) : (
-        <div
-          style={{
-            maxWidth: 720,
-            width: '100%',
-            margin: '80px auto 40px',
-            padding: '0 16px 60px',
-          }}
-        >
-          <h1 style={{ margin: '0 0 24px' }}>Create Drop</h1>
+        <div className={styles.formShell}>
+          <h1 className={styles.formTitle}>Create Drop</h1>
 
-          <form onSubmit={onSubmit}>
+          <form className={styles.form} onSubmit={onSubmit}>
             <Field label="Title">
               <input
                 type="text"
@@ -589,7 +561,7 @@ export default function CreateDrop() {
                 placeholder="Drop title"
                 maxLength={140}
                 required
-                style={inputStyle}
+                className={styles.input}
               />
             </Field>
 
@@ -599,7 +571,7 @@ export default function CreateDrop() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe this drop"
                 maxLength={2000}
-                style={{ ...inputStyle, minHeight: 120, resize: 'vertical' }}
+                className={`${styles.input} ${styles.textarea}`}
                 required
               />
             </Field>
@@ -610,7 +582,7 @@ export default function CreateDrop() {
                 value={tokenId}
                 onChange={(e) => setTokenId(e.target.value)}
                 placeholder="Token identifier"
-                style={inputStyle}
+                className={styles.input}
                 required
               />
             </Field>
@@ -619,7 +591,7 @@ export default function CreateDrop() {
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                style={inputStyle}
+                className={styles.input}
               >
                 {typeOptions.map((option) => (
                   <option key={option} value={option}>
@@ -633,7 +605,7 @@ export default function CreateDrop() {
               <select
                 value={dropVersion}
                 onChange={(e) => setDropVersion(e.target.value)}
-                style={inputStyle}
+                className={styles.input}
               >
                 {versionOptions.map((option) => (
                   <option key={option} value={option}>
@@ -644,14 +616,14 @@ export default function CreateDrop() {
             </Field>
 
             <Field label="Artist">
-              <div style={searchWrapperStyle}>
+              <div className={styles.searchWrapper}>
                 <input
                   ref={artistInputRef}
                   type="text"
                   value={artistSearchTerm}
                   onChange={(e) => setArtistSearchTerm(e.target.value)}
                   placeholder={selectedArtist ? `Change selection (current: ${selectedArtist.label})` : 'Search artists by name, description, or ID'}
-                  style={inputStyle}
+                  className={styles.input}
                 />
                 {renderDropdown(
                   artistSearchTerm,
@@ -663,12 +635,12 @@ export default function CreateDrop() {
                 )}
               </div>
               {selectedArtist && (
-                <div style={selectionSummaryStyle}>
-                  <div style={selectionSummaryTextStyle}>
-                    <span style={resultPrimaryStyle}>{selectedArtist.label}</span>
-                    <span style={resultMetaStyle}>Artist ID: {selectedArtist.id}</span>
+                <div className={styles.selectionSummary}>
+                  <div className={styles.selectionSummaryText}>
+                    <span className={styles.resultPrimary}>{selectedArtist.label}</span>
+                    <span className={styles.resultMeta}>Artist ID: {selectedArtist.id}</span>
                   </div>
-                  <button type="button" onClick={handleClearArtist} style={clearSelectionButtonStyle}>
+                  <button type="button" onClick={handleClearArtist} className={styles.changeButton}>
                     Change
                   </button>
                 </div>
@@ -676,14 +648,14 @@ export default function CreateDrop() {
             </Field>
 
             <Field label="Owned By">
-              <div style={searchWrapperStyle}>
+              <div className={styles.searchWrapper}>
                 <input
                   ref={ownerInputRef}
                   type="text"
                   value={ownerSearchTerm}
                   onChange={(e) => setOwnerSearchTerm(e.target.value)}
                   placeholder={selectedOwner ? `Change selection (current: ${selectedOwner.label})` : 'Search users by name, email, or UID'}
-                  style={inputStyle}
+                  className={styles.input}
                 />
                 {renderDropdown(
                   ownerSearchTerm,
@@ -695,15 +667,15 @@ export default function CreateDrop() {
                 )}
               </div>
               {selectedOwner && (
-                <div style={selectionSummaryStyle}>
-                  <div style={selectionSummaryTextStyle}>
-                    <span style={resultPrimaryStyle}>{selectedOwner.label}</span>
-                    <span style={resultMetaStyle}>
+                <div className={styles.selectionSummary}>
+                  <div className={styles.selectionSummaryText}>
+                    <span className={styles.resultPrimary}>{selectedOwner.label}</span>
+                    <span className={styles.resultMeta}>
                       UID: {selectedOwner.id}
                       {selectedOwner.subLabel ? ` · ${selectedOwner.subLabel}` : ''}
                     </span>
                   </div>
-                  <button type="button" onClick={handleClearOwner} style={clearSelectionButtonStyle}>
+                  <button type="button" onClick={handleClearOwner} className={styles.changeButton}>
                     Change
                   </button>
                 </div>
@@ -716,7 +688,7 @@ export default function CreateDrop() {
                 value={uri}
                 onChange={(e) => setUri(e.target.value)}
                 placeholder="https://..."
-                style={inputStyle}
+                className={styles.input}
                 required
               />
             </Field>
@@ -727,41 +699,40 @@ export default function CreateDrop() {
                 type="file"
                 accept="image/*"
                 onChange={handleFileChange}
-                style={{ display: 'block' }}
+                className={styles.fileInput}
               />
               {previewUrl ? (
-                <div style={{ marginTop: 12 }}>
+                <div className={styles.previewWrapper}>
                   <img
                     src={previewUrl}
                     alt="Drop preview"
-                    style={{ width: '100%', maxHeight: 420, objectFit: 'cover', borderRadius: 12 }}
+                    className={styles.previewImage}
                   />
                 </div>
               ) : (
-                <p style={{ color: '#6b7280', marginTop: 8 }}>Choose an image (JPG/PNG/WebP).</p>
+                <p className={styles.fileHint}>Choose an image (JPG/PNG/WebP).</p>
               )}
             </Field>
 
             {processingImage && (
-              <p style={{ margin: '12px 0', fontSize: 14 }}>Processing image…</p>
+              <p className={styles.statusText}>Processing image…</p>
             )}
 
             {saving && (
-              <p style={{ margin: '12px 0', fontSize: 14 }}>Uploading… {uploadProgress}%</p>
+              <p className={styles.statusText}>Uploading… {uploadProgress}%</p>
             )}
 
             {error && (
-              <p style={{ margin: '12px 0', color: '#b91c1c', fontSize: 14 }}>{error}</p>
+              <p className={styles.errorText}>{error}</p>
             )}
 
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div className={styles.buttonRow}>
               <button className={layoutStyles.createBtn} type="submit" disabled={!canSubmit}>
                 {saving ? 'Saving…' : 'Create Drop'}
               </button>
               <button
                 type="button"
-                className={layoutStyles.createBtn}
-                style={{ background: '#e5e7eb', color: '#1f2937' }}
+                className={`${layoutStyles.createBtn} ${styles.cancelButton}`}
                 onClick={() => navigate('/drops')}
                 disabled={saving}
               >
@@ -777,8 +748,8 @@ export default function CreateDrop() {
 
 function Field({ label, children }) {
   return (
-    <div style={{ marginBottom: 18 }}>
-      <label style={labelStyle}>{label}</label>
+    <div className={styles.field}>
+      <label className={styles.fieldLabel}>{label}</label>
       {children}
     </div>
   );
@@ -840,103 +811,4 @@ function resizeImageToMax(file, maxSize = 600) {
   });
 }
 
-const labelStyle = {
-  display: 'block',
-  fontWeight: 600,
-  marginBottom: 8,
-  fontSize: 14,
-};
-
-const inputStyle = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid #d1d5db',
-  fontSize: 16,
-  outline: 'none',
-  background: '#fff',
-};
-
-const searchWrapperStyle = {
-  position: 'relative',
-};
-
-const searchResultsStyle = {
-  position: 'absolute',
-  top: 'calc(100% + 6px)',
-  left: 0,
-  right: 0,
-  maxHeight: 240,
-  overflowY: 'auto',
-  borderRadius: 12,
-  border: '1px solid #e2e8f0',
-  background: '#ffffff',
-  boxShadow: '0 16px 32px rgba(15, 23, 42, 0.12)',
-  zIndex: 30,
-  padding: 6,
-};
-
-const searchStatusStyle = {
-  margin: '6px 8px',
-  fontSize: 13,
-  color: '#475569',
-};
-
-const searchErrorStyle = {
-  ...searchStatusStyle,
-  color: '#b91c1c',
-};
-
-const resultButtonStyle = {
-  width: '100%',
-  border: 'none',
-  background: '#ffffff',
-  borderRadius: 10,
-  padding: '10px 12px',
-  textAlign: 'left',
-  cursor: 'pointer',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  transition: 'background 0.16s ease',
-};
-
-const resultPrimaryStyle = {
-  fontWeight: 600,
-  color: '#0f172a',
-};
-
-const resultSecondaryStyle = {
-  fontSize: 12.5,
-  color: '#475569',
-};
-
-const resultMetaStyle = {
-  fontSize: 11.5,
-  color: '#64748b',
-};
-
-const selectionSummaryStyle = {
-  marginTop: 12,
-  padding: '10px 12px',
-  borderRadius: 12,
-  background: '#f1f5f9',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-};
-
-const selectionSummaryTextStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const clearSelectionButtonStyle = {
-  border: 'none',
-  background: 'transparent',
-  color: '#0ea5e9',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
+// Ensure only one default export exists in the file
