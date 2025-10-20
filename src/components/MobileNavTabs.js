@@ -9,8 +9,8 @@ export default function MobileNavTabs() {
 
   const tabs = [
     { label: 'Home', to: '/home', icon: FiHome },
-    { label: 'Drops', to: '/drops', icon: FiDroplet },
     { label: 'Artists', to: '/artists', icon: FiUsers },
+    { label: 'My Drops', to: '/drops', icon: FiDroplet },
     { label: 'More', to: '/more', icon: FiMoreHorizontal },
   ];
 
