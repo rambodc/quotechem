@@ -1,13 +1,7 @@
 // src/create-drop/CreateDrop.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  collection,
-  doc,
-  getDoc,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
+import { collection, doc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
@@ -33,9 +27,13 @@ export default function CreateDrop() {
   const [type, setType] = useState(typeOptions[0]);
   const [dropVersion, setDropVersion] = useState(versionOptions[0]);
   const [artistId, setArtistId] = useState('');
-  const [artistStatus, setArtistStatus] = useState({ state: 'idle', message: '' });
   const [ownedByUid, setOwnedByUid] = useState('');
-  const [ownerStatus, setOwnerStatus] = useState({ state: 'idle', message: '' });
+  const [artistOptions, setArtistOptions] = useState([]);
+  const [artistLoading, setArtistLoading] = useState(true);
+  const [artistError, setArtistError] = useState('');
+  const [userOptions, setUserOptions] = useState([]);
+  const [userLoading, setUserLoading] = useState(true);
+  const [userError, setUserError] = useState('');
   const [uri, setUri] = useState('');
 
   const [file, setFile] = useState(null);
@@ -68,6 +66,82 @@ export default function CreateDrop() {
     };
   }, [previewUrl]);
 
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        setArtistLoading(true);
+        setArtistError('');
+        const snapshot = await getDocs(collection(db, 'artists'));
+        if (!active) return;
+        const options = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() || {};
+          const id = data.artistId || docSnap.id;
+          const label = (data.artistFullName || '').trim() || 'Untitled Artist';
+          return { id, label };
+        }).sort((a, b) => a.label.localeCompare(b.label));
+        setArtistOptions(options);
+      } catch (err) {
+        console.error('Failed to load artists list:', err);
+        if (!active) return;
+        setArtistError(err?.message || 'Failed to load artists.');
+      } finally {
+        if (!active) return;
+        setArtistLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        setUserLoading(true);
+        setUserError('');
+        const snapshot = await getDocs(collection(db, 'users'));
+        if (!active) return;
+        const options = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() || {};
+          const nameParts = [data.firstName, data.lastName].filter(Boolean);
+          const name = nameParts.join(' ').trim();
+          const baseLabel = name || data.email || docSnap.id;
+          const annotatedLabel = name && data.email ? `${name} (${data.email})` : baseLabel;
+          return {
+            id: docSnap.id,
+            label: annotatedLabel,
+            email: data.email || '',
+          };
+        }).sort((a, b) => a.label.localeCompare(b.label));
+        setUserOptions(options);
+      } catch (err) {
+        console.error('Failed to load users list:', err);
+        if (!active) return;
+        setUserError(err?.message || 'Failed to load users.');
+      } finally {
+        if (!active) return;
+        setUserLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const selectedArtist = useMemo(
+    () => artistOptions.find((option) => option.id === artistId) || null,
+    [artistOptions, artistId]
+  );
+
+  const selectedOwner = useMemo(
+    () => userOptions.find((option) => option.id === ownedByUid) || null,
+    [userOptions, ownedByUid]
+  );
+
   const canSubmit = useMemo(() => {
     return (
       unlocked &&
@@ -75,13 +149,15 @@ export default function CreateDrop() {
       description.trim().length > 0 &&
       tokenId.trim().length > 0 &&
       uri.trim().length > 0 &&
-      artistId.trim().length > 0 &&
-      ownedByUid.trim().length > 0 &&
+      !!selectedArtist &&
+      !!selectedOwner &&
       !!file &&
       !saving &&
       !processingImage &&
-      artistStatus.state === 'success' &&
-      ownerStatus.state === 'success'
+      !artistLoading &&
+      !userLoading &&
+      !artistError &&
+      !userError
     );
   }, [
     unlocked,
@@ -89,13 +165,15 @@ export default function CreateDrop() {
     description,
     tokenId,
     uri,
-    artistId,
-    ownedByUid,
+    selectedArtist,
+    selectedOwner,
     file,
     saving,
     processingImage,
-    artistStatus.state,
-    ownerStatus.state,
+    artistLoading,
+    userLoading,
+    artistError,
+    userError,
   ]);
 
   const handleFileChange = async (event) => {
@@ -126,56 +204,6 @@ export default function CreateDrop() {
       setProcessingImage(false);
     }
   };
-
-  const verifyArtist = useCallback(async () => {
-    const trimmed = artistId.trim();
-    if (!trimmed) {
-      setArtistStatus({ state: 'error', message: 'Enter an artist ID first.' });
-      return;
-    }
-
-    setArtistStatus({ state: 'loading', message: 'Checking artist…' });
-    try {
-      const artistDoc = await getDoc(doc(db, 'artists', trimmed));
-      if (artistDoc.exists()) {
-        const data = artistDoc.data();
-        setArtistStatus({
-          state: 'success',
-          message: `Artist found: ${data.artistFullName || 'Untitled'}`,
-        });
-      } else {
-        setArtistStatus({ state: 'error', message: 'Artist ID not found.' });
-      }
-    } catch (err) {
-      console.error(err);
-      setArtistStatus({ state: 'error', message: err?.message || 'Failed to verify artist.' });
-    }
-  }, [artistId]);
-
-  const verifyOwner = useCallback(async () => {
-    const trimmed = ownedByUid.trim();
-    if (!trimmed) {
-      setOwnerStatus({ state: 'error', message: 'Enter a user UID first.' });
-      return;
-    }
-
-    setOwnerStatus({ state: 'loading', message: 'Checking user…' });
-    try {
-      const userDoc = await getDoc(doc(db, 'users', trimmed));
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        const label = data.firstName || data.lastName
-          ? `${data.firstName || ''} ${data.lastName || ''}`.trim()
-          : data.email || 'Verified user';
-        setOwnerStatus({ state: 'success', message: `User found: ${label || trimmed}` });
-      } else {
-        setOwnerStatus({ state: 'error', message: 'User UID not found.' });
-      }
-    } catch (err) {
-      console.error(err);
-      setOwnerStatus({ state: 'error', message: err?.message || 'Failed to verify user.' });
-    }
-  }, [ownedByUid]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -360,57 +388,62 @@ export default function CreateDrop() {
               </select>
             </Field>
 
-            <Field label="Artist ID">
-              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-                <input
-                  type="text"
+            <Field label="Artist">
+              {artistLoading ? (
+                <p style={{ color: '#4b5563', fontSize: 14 }}>Loading artists…</p>
+              ) : artistError ? (
+                <p style={{ color: '#b91c1c', fontSize: 14 }}>{artistError}</p>
+              ) : artistOptions.length === 0 ? (
+                <p style={{ color: '#4b5563', fontSize: 14 }}>No artists available. Create an artist first.</p>
+              ) : (
+                <select
                   value={artistId}
-                  onChange={(e) => {
-                    setArtistId(e.target.value);
-                    setArtistStatus({ state: 'idle', message: '' });
-                  }}
-                  placeholder="Enter artistId"
-                  style={{ ...inputStyle, flex: 1 }}
+                  onChange={(e) => setArtistId(e.target.value)}
+                  style={inputStyle}
                   required
-                />
-                <button
-                  type="button"
-                  onClick={verifyArtist}
-                  disabled={!artistId.trim() || artistStatus.state === 'loading'}
-                  style={verifyButtonStyle}
                 >
-                  {artistStatus.state === 'loading' ? 'Checking…' : 'Verify'}
-                </button>
-              </div>
-              {artistStatus.message && (
-                <StatusMessage state={artistStatus.state} message={artistStatus.message} />
+                  <option value="">Select an artist…</option>
+                  {artistOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {selectedArtist && (
+                <p style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
+                  Artist ID: {selectedArtist.id}
+                </p>
               )}
             </Field>
 
-            <Field label="Owned By (User UID)">
-              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-                <input
-                  type="text"
+            <Field label="Owned By">
+              {userLoading ? (
+                <p style={{ color: '#4b5563', fontSize: 14 }}>Loading users…</p>
+              ) : userError ? (
+                <p style={{ color: '#b91c1c', fontSize: 14 }}>{userError}</p>
+              ) : userOptions.length === 0 ? (
+                <p style={{ color: '#4b5563', fontSize: 14 }}>No users available.</p>
+              ) : (
+                <select
                   value={ownedByUid}
-                  onChange={(e) => {
-                    setOwnedByUid(e.target.value);
-                    setOwnerStatus({ state: 'idle', message: '' });
-                  }}
-                  placeholder="Enter user UID"
-                  style={{ ...inputStyle, flex: 1 }}
+                  onChange={(e) => setOwnedByUid(e.target.value)}
+                  style={inputStyle}
                   required
-                />
-                <button
-                  type="button"
-                  onClick={verifyOwner}
-                  disabled={!ownedByUid.trim() || ownerStatus.state === 'loading'}
-                  style={verifyButtonStyle}
                 >
-                  {ownerStatus.state === 'loading' ? 'Checking…' : 'Verify'}
-                </button>
-              </div>
-              {ownerStatus.message && (
-                <StatusMessage state={ownerStatus.state} message={ownerStatus.message} />
+                  <option value="">Select a user…</option>
+                  {userOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {selectedOwner && (
+                <p style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
+                  UID: {selectedOwner.id}
+                  {selectedOwner.email ? ` · ${selectedOwner.email}` : ''}
+                </p>
               )}
             </Field>
 
@@ -488,13 +521,6 @@ function Field({ label, children }) {
   );
 }
 
-function StatusMessage({ state, message }) {
-  const color = state === 'success' ? '#047857' : state === 'error' ? '#b91c1c' : '#374151';
-  return (
-    <p style={{ marginTop: 8, fontSize: 13, color }}>{message}</p>
-  );
-}
-
 function resizeImageToMax(file, maxSize = 600) {
   return new Promise((resolve, reject) => {
     const mimeType = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
@@ -566,14 +592,4 @@ const inputStyle = {
   fontSize: 16,
   outline: 'none',
   background: '#fff',
-};
-
-const verifyButtonStyle = {
-  padding: '10px 16px',
-  borderRadius: 10,
-  border: '1px solid #0ea5e9',
-  background: '#0ea5e9',
-  color: '#fff',
-  fontWeight: 600,
-  cursor: 'pointer',
 };
