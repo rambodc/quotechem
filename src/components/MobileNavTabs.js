@@ -1,7 +1,7 @@
 // src/components/MobileNavTabs.js
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FiHome, FiDroplet, FiCreditCard, FiMoreHorizontal } from 'react-icons/fi';
+import { FiHome, FiDroplet, FiUsers, FiMoreHorizontal } from 'react-icons/fi';
 
 export default function MobileNavTabs() {
   const { pathname } = useLocation();
@@ -10,7 +10,7 @@ export default function MobileNavTabs() {
   const tabs = [
     { label: 'Home', to: '/home', icon: FiHome },
     { label: 'Drops', to: '/drops', icon: FiDroplet },
-    { label: 'Balance', to: '/balance', icon: FiCreditCard },
+    { label: 'Artists', to: '/artists', icon: FiUsers },
     { label: 'More', to: '/more', icon: FiMoreHorizontal },
   ];
 

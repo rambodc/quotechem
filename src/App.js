@@ -17,10 +17,11 @@ import Login from './auth/Login';
 import Signup from './auth/Signup';
 import ForgotPassword from './auth/ForgotPassword';
 import Artists from './artists/Artists';
+import ArtistList from './artists/artistList';
 
 // Protected pages
 import Home from './home/Home';
-import Drop from './drop/Drop';
+import DropList from './drop/dropList';
 import DropDetail from './drop/DropDetail';
 import CreateArtist from './create/create-artist';
 import CreateDrop from './create-drop/CreateDrop';
@@ -65,10 +66,18 @@ function AppRoutes({ user }) {
           }
         />
         <Route
+          path="/artists"
+          element={
+            <ProtectedRoute>
+              <ArtistList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/drops"
           element={
             <ProtectedRoute>
-              <Drop />
+              <DropList />
             </ProtectedRoute>
           }
         />

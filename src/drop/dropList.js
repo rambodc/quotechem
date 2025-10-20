@@ -1,4 +1,4 @@
-// src/drop/Drop.js
+// src/drop/dropList.js
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
@@ -7,7 +7,7 @@ import MobileNavTabs from '../components/MobileNavTabs';
 import layoutStyles from '../styles/layout.module.css';
 import { db } from '../firebase';
 
-export default function Drop() {
+export default function DropList() {
   const navigate = useNavigate();
   const [drops, setDrops] = useState([]);
   const [loading, setLoading] = useState(true);
