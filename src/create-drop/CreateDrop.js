@@ -99,11 +99,12 @@ export default function CreateDrop() {
       const data = snap.data() || {};
       const rawId = data.artistId || snap.id || '';
       const id = rawId.trim();
-      if (!id || seen.has(id)) return;
-      const label = (data.artistFullName || '').trim() || 'Untitled Artist';
-      const description = data.artistDescription || '';
-      const subLabel = description ? description.slice(0, 80) : '';
-      matches.push({ id, label, subLabel });
+      const name = (data.artistFullName || '').trim();
+      if (!id && !name) return;
+      const idLower = id.toLowerCase();
+      const nameLower = name.toLowerCase();
+      if (seen.has(id) || (!idLower.includes(lower) && !nameLower.includes(lower))) return;
+      matches.push({ id, label: name || 'Untitled Artist', subLabel: '' });
       seen.add(id);
     };
 
@@ -114,51 +115,35 @@ export default function CreateDrop() {
       console.error('Artist ID lookup failed:', err);
     }
 
+    const tryFetch = async (q) => {
+      try {
+        const snap = await getDocs(q);
+        snap.forEach(addArtist);
+      } catch (err) {
+        if (err?.code === 'failed-precondition') {
+          throw err;
+        }
+        if (!errorMessage) errorMessage = err?.message || 'Unable to search artists.';
+      }
+    };
+
     try {
-      const nameQuery = query(
-        collection(db, 'artists'),
-        orderBy('artistFullName'),
-        startAt(normalized),
-        endAt(`${normalized}\uf8ff`),
-        limit(10)
+      await tryFetch(
+        query(collection(db, 'artists'), orderBy('artistFullName'), limit(50))
       );
-      const nameSnap = await getDocs(nameQuery);
-      nameSnap.forEach(addArtist);
     } catch (err) {
-      console.warn('Artist name search fallback:', err);
-      if (err?.code === 'failed-precondition') {
-        try {
-          const fallbackSnap = await getDocs(
-            query(collection(db, 'artists'), limit(30))
-          );
-          fallbackSnap.forEach((snap) => {
-            const data = snap.data() || {};
-            const rawId = data.artistId || snap.id || '';
-            const id = rawId.trim();
-            if (!id || seen.has(id)) return;
-            const label = (data.artistFullName || '').trim();
-            const description = data.artistDescription || '';
-            if (
-              label.toLowerCase().includes(lower) ||
-              id.toLowerCase().includes(lower) ||
-              description.toLowerCase().includes(lower)
-            ) {
-              const subLabel = description ? description.slice(0, 80) : '';
-              matches.push({ id, label: label || 'Untitled Artist', subLabel });
-              seen.add(id);
-            }
-          });
-        } catch (fallbackErr) {
-          console.error('Artist fallback search failed:', fallbackErr);
+      try {
+        await tryFetch(query(collection(db, 'artists'), limit(60)));
+      } catch (fallbackErr) {
+        console.error('Artist search failed:', fallbackErr);
+        if (!errorMessage) {
           errorMessage = fallbackErr?.message || 'Unable to search artists.';
         }
-      } else {
-        errorMessage = err?.message || 'Unable to search artists.';
       }
     }
 
     if (artistSearchLatestRef.current === normalized) {
-      setArtistResults(matches);
+      setArtistResults(matches.slice(0, 20));
       setArtistSearchError(errorMessage);
       setArtistSearchLoading(false);
     }
@@ -178,14 +163,15 @@ export default function CreateDrop() {
       const data = snap.data() || {};
       const rawId = snap.id || '';
       const id = rawId.trim();
-      if (!id || seen.has(id)) return;
-      const nameParts = [data.firstName, data.lastName]
-        .map((part) => (part ? String(part).trim() : ''))
-        .filter(Boolean);
-      const name = nameParts.join(' ').trim();
-      const email = (data.email || '').trim();
-      const label = name || email || id;
-      const subLabel = email && email !== label ? email : '';
+      if (!id) return;
+      const first = (data.firstName || '').trim();
+      const last = (data.lastName || '').trim();
+      const name = `${first} ${last}`.trim();
+      const idLower = id.toLowerCase();
+      const nameLower = name.toLowerCase();
+      if (seen.has(id) || (!idLower.includes(lower) && !nameLower.includes(lower))) return;
+      const label = name || id;
+      const subLabel = name && label === id ? name : '';
       matches.push({ id, label, subLabel });
       seen.add(id);
     };
@@ -197,54 +183,30 @@ export default function CreateDrop() {
       console.error('User ID lookup failed:', err);
     }
 
-    const runQuery = async (field, value, limitCount = 10) => {
+    const tryFetch = async (q) => {
       try {
-        const q = query(
-          collection(db, 'users'),
-          orderBy(field),
-          startAt(value),
-          endAt(`${value}\uf8ff`),
-          limit(limitCount)
-        );
         const snap = await getDocs(q);
         snap.forEach(addUser);
       } catch (err) {
-        console.warn(`User search by ${field} failed:`, err);
-        if (err?.code !== 'failed-precondition' && !errorMessage) {
-          errorMessage = err?.message || 'Unable to search users.';
+        if (err?.code === 'failed-precondition') {
+          throw err;
         }
+        if (!errorMessage) errorMessage = err?.message || 'Unable to search users.';
       }
     };
 
-    await runQuery('email', normalized.toLowerCase(), 10);
-    if (matches.length < 15) await runQuery('firstName', normalized, 8);
-    if (matches.length < 15) await runQuery('lastName', normalized, 8);
-
-    if (matches.length < 10) {
+    try {
+      await tryFetch(
+        query(collection(db, 'users'), orderBy('firstName'), limit(40))
+      );
+      await tryFetch(
+        query(collection(db, 'users'), orderBy('lastName'), limit(40))
+      );
+    } catch (err) {
       try {
-        const fallbackSnap = await getDocs(
-          query(collection(db, 'users'), limit(40))
-        );
-        fallbackSnap.forEach((snap) => {
-          const data = snap.data() || {};
-          const rawId = snap.id || '';
-          const id = rawId.trim();
-          if (!id || seen.has(id)) return;
-          const nameParts = [data.firstName, data.lastName]
-            .map((part) => (part ? String(part).trim() : ''))
-            .filter(Boolean);
-          const name = nameParts.join(' ').trim();
-          const email = (data.email || '').trim();
-          const combined = `${name} ${email}`.toLowerCase();
-          if (combined.includes(lower) || id.toLowerCase().includes(lower)) {
-            const label = name || email || id;
-            const subLabel = email && email !== label ? email : '';
-            matches.push({ id, label, subLabel });
-            seen.add(id);
-          }
-        });
+        await tryFetch(query(collection(db, 'users'), limit(60)));
       } catch (fallbackErr) {
-        console.error('User fallback search failed:', fallbackErr);
+        console.error('User search failed:', fallbackErr);
         if (!errorMessage) {
           errorMessage = fallbackErr?.message || 'Unable to search users.';
         }
@@ -252,7 +214,7 @@ export default function CreateDrop() {
     }
 
     if (ownerSearchLatestRef.current === normalized) {
-      setOwnerResults(matches);
+      setOwnerResults(matches.slice(0, 20));
       setOwnerSearchError(errorMessage);
       setOwnerSearchLoading(false);
     }
