@@ -210,8 +210,17 @@ function Artists() {
                     <AudioPlayer playlist={tracks.map((t) => ({ title: t.title, url: t.url }))} />
                   )}
 
-                  <div style={{ marginTop: tracks.length > 0 ? 18 : 12 }}>
-                    <p style={{ marginBottom: 10, fontWeight: 600, color: '#0f172a' }}>
+                  <div
+                    style={{
+                      marginTop: tracks.length > 0 ? 20 : 16,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 12,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <p style={{ margin: 0, fontWeight: 600, color: '#0f172a', fontSize: 16 }}>
                       Interested in this artist’s collectibles?
                     </p>
                     <button
@@ -219,7 +228,9 @@ function Artists() {
                       onClick={handleMarkInterested}
                       disabled={markingInterest}
                       style={{
-                        padding: '12px 24px',
+                        width: '100%',
+                        maxWidth: 320,
+                        padding: '14px 28px',
                         borderRadius: 14,
                         border: 'none',
                         background: markingInterest ? '#94a3b8' : '#0ea5e9',
@@ -247,7 +258,7 @@ function Artists() {
                       {markingInterest ? 'Saving…' : 'Interested'}
                     </button>
                     {interestError && (
-                      <p style={{ marginTop: 10, color: '#b91c1c', fontSize: 13 }}>{interestError}</p>
+                      <p style={{ margin: 0, color: '#b91c1c', fontSize: 13 }}>{interestError}</p>
                     )}
                   </div>
                 </div>
