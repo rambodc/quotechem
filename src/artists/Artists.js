@@ -20,12 +20,6 @@ function Artists() {
   // No sidebar; keep layout simple
 
   // --------- Fallback tracks (3 example files) ----------
-  const fallbackTracks = [
-    { id: 't1', title: 'Song One',   url: '/music/song1.mp3' },
-    { id: 't2', title: 'Song Two',   url: '/music/song2.mp3' },
-    { id: 't3', title: 'Song Three', url: '/music/song3.mp3' },
-  ];
-
   const normalizeTracks = (src, singleTrackUrl, artistName) => {
     const list = Array.isArray(src) ? src : [];
     const normalized = list
@@ -46,7 +40,7 @@ function Artists() {
         },
       ];
     }
-    return normalized.length ? normalized : fallbackTracks;
+    return [];
   };
 
   // --------- Fetch detail (public page) ----------
@@ -128,7 +122,7 @@ function Artists() {
         },
       ];
     }
-    return fallbackTracks;
+    return [];
   }, [item]);
 
   return (
@@ -170,11 +164,14 @@ function Artists() {
 
                   {item?.desc && <p className={layoutStyles.overlayDesc}>{item.desc}</p>}
 
-                  {/* Custom Audio Player */}
-                  <h3 style={{ marginTop: 18, marginBottom: 10 }}>Listen</h3>
-                  <AudioPlayer
-                    playlist={tracks.map((t) => ({ title: t.title, url: t.url }))}
-                  />
+                  {tracks.length > 0 && (
+                    <>
+                      <h3 style={{ marginTop: 18, marginBottom: 10 }}>Listen</h3>
+                      <AudioPlayer
+                        playlist={tracks.map((t) => ({ title: t.title, url: t.url }))}
+                      />
+                    </>
+                  )}
 
                   <div className={layoutStyles.overlayMeta} style={{ marginTop: 16 }}>
                     <div><strong>Artist ID:</strong> {item?.artistId || artistUid}</div>
