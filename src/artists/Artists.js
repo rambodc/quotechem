@@ -26,7 +26,7 @@ function Artists() {
     { id: 't3', title: 'Song Three', url: '/music/song3.mp3' },
   ];
 
-  const normalizeTracks = (src) => {
+  const normalizeTracks = (src, singleTrackUrl, artistName) => {
     const list = Array.isArray(src) ? src : [];
     const normalized = list
       .slice(0, 3)
@@ -36,6 +36,16 @@ function Artists() {
         url: t.url || t.file || '',
       }))
       .filter((t) => t.url);
+    if (normalized.length) return normalized;
+    if (singleTrackUrl) {
+      return [
+        {
+          id: 'artist_track',
+          title: artistName ? `${artistName} Track` : 'Artist Track',
+          url: singleTrackUrl,
+        },
+      ];
+    }
     return normalized.length ? normalized : fallbackTracks;
   };
 
@@ -50,6 +60,8 @@ function Artists() {
         if (!alive) return;
         if (snap.exists()) {
           const data = snap.data();
+          const artistFullName = data.artistFullName || 'Untitled';
+          const artistAudioUrl = data.artistAudioUrl || '';
           setItem({
             title:  data.artistFullName || 'Untitled',
             desc:   data.artistDescription || '',
@@ -60,8 +72,9 @@ function Artists() {
             videoWebm: data.videoWebm || '',
             animWebp:  data.animWebp || '',
             poster:    data.poster || '',
-            tracks: normalizeTracks(data.tracks),
+            tracks: normalizeTracks(data.tracks, artistAudioUrl, artistFullName),
             artistId: data.artistId || snap.id,
+            audioUrl: artistAudioUrl,
           });
         } else {
           setError('Artist not found.');
@@ -104,10 +117,19 @@ function Artists() {
   }, [item]);
 
   // Tracks to feed the player (either artist data or 3 example files)
-  const tracks = useMemo(
-    () => (item?.tracks && item.tracks.length ? item.tracks : fallbackTracks),
-    [item]
-  );
+  const tracks = useMemo(() => {
+    if (item?.tracks && item.tracks.length) return item.tracks;
+    if (item?.audioUrl) {
+      return [
+        {
+          id: 'artist_track',
+          title: item?.title ? `${item.title} Track` : 'Artist Track',
+          url: item.audioUrl,
+        },
+      ];
+    }
+    return fallbackTracks;
+  }, [item]);
 
   return (
     <div className={layoutStyles.detailPage}>

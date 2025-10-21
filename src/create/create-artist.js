@@ -20,6 +20,8 @@ function CreateArtist() {
   const [previewUrl, setPreviewUrl] = useState('');
   const [processingImage, setProcessingImage] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [audioFile, setAudioFile] = useState(null);
+  const [audioUploadProgress, setAudioUploadProgress] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [code, setCode] = useState('');
@@ -82,6 +84,26 @@ function CreateArtist() {
     }
   };
 
+  const handleAudioChange = (e) => {
+    setError('');
+    const f = e.target.files?.[0] || null;
+    if (!f) {
+      setAudioFile(null);
+      setAudioUploadProgress(0);
+      return;
+    }
+
+    if (!f.type.startsWith('audio/')) {
+      setError('Please choose an audio file (mp3, wav, etc).');
+      setAudioFile(null);
+      setAudioUploadProgress(0);
+      return;
+    }
+
+    setAudioFile(f);
+    setAudioUploadProgress(0);
+  };
+
   const genId = () => {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
     return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -121,6 +143,30 @@ function CreateArtist() {
 
       const imgUrl = await getDownloadURL(task.snapshot.ref);
 
+      let audioUrl = '';
+      if (audioFile) {
+        const audioExt = audioFile.name.includes('.') ? audioFile.name.split('.').pop() : 'mp3';
+        const audioPath = `artists/${artistUid}/track.${audioExt}`;
+        const audioRef = ref(storage, audioPath);
+        const audioTask = uploadBytesResumable(audioRef, audioFile, {
+          contentType: audioFile.type || 'audio/mpeg',
+        });
+
+        await new Promise((resolve, reject) => {
+          audioTask.on(
+            'state_changed',
+            (snap) => {
+              const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+              setAudioUploadProgress(pct);
+            },
+            (err) => reject(err),
+            () => resolve()
+          );
+        });
+
+        audioUrl = await getDownloadURL(audioTask.snapshot.ref);
+      }
+
       // Write Firestore doc
       const data = {
         artistId: artistUid,
@@ -129,6 +175,19 @@ function CreateArtist() {
         artistProfilePhoto: imgUrl,
         artistDescription: description.trim(),
       };
+
+      if (audioUrl) {
+        data.artistAudioUrl = audioUrl;
+        data.tracks = [
+          {
+            id: 'main_track',
+            title: `${fullName.trim() || 'Artist'} Track`,
+            url: audioUrl,
+          },
+        ];
+      } else {
+        data.tracks = [];
+      }
 
       await setDoc(doc(db, 'artists', artistUid), data);
 
@@ -232,13 +291,34 @@ function CreateArtist() {
           )}
         </div>
 
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Artist Audio (optional)</label>
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={handleAudioChange}
+            style={{ display: 'block' }}
+          />
+          {audioFile ? (
+            <p style={{ color: '#4b5563', marginTop: 8 }}>Selected: {audioFile.name}</p>
+          ) : (
+            <p style={{ color: '#6b7280', marginTop: 8 }}>Upload a single audio track (mp3, wav, etc).</p>
+          )}
+        </div>
+
         {processingImage && (
           <div style={{ margin: '12px 0', fontSize: 14 }}>Processing image…</div>
         )}
 
+        {audioFile && saving && (
+          <div style={{ margin: '12px 0', fontSize: 14 }}>
+            Uploading audio… {audioUploadProgress}%
+          </div>
+        )}
+
         {saving && (
           <div style={{ margin: '12px 0', fontSize: 14 }}>
-            Uploading… {progress}%
+            Uploading image… {progress}%
           </div>
         )}
 
