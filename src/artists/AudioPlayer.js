@@ -1,4 +1,4 @@
-// src/components/AudioPlayer.js
+// src/artists/AudioPlayer.js
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   FaBars,

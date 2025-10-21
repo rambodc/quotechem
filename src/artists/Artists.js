@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import TopBar from '../components/TopBar';
-import AudioPlayer from '../components/AudioPlayer';
+import AudioPlayer from './AudioPlayer';
 import { UserContext } from '../App';
 import layoutStyles from '../styles/layout.module.css';
 import { FiCheckCircle } from 'react-icons/fi';
@@ -210,56 +210,64 @@ function Artists() {
                     <AudioPlayer playlist={tracks.map((t) => ({ title: t.title, url: t.url }))} />
                   )}
 
-                  <div
-                    style={{
-                      marginTop: tracks.length > 0 ? 20 : 16,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 12,
-                      textAlign: 'center',
-                    }}
-                  >
-                    <p style={{ margin: 0, fontWeight: 600, color: '#0f172a', fontSize: 16 }}>
-                      Interested in this artist’s collectibles?
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleMarkInterested}
-                      disabled={markingInterest}
+                  <div style={{ marginTop: tracks.length > 0 ? 24 : 20, display: 'flex', justifyContent: 'center' }}>
+                    <div
                       style={{
                         width: '100%',
-                        maxWidth: 320,
-                        padding: '14px 28px',
-                        borderRadius: 14,
-                        border: 'none',
-                        background: markingInterest ? '#94a3b8' : '#0ea5e9',
-                        color: '#fff',
-                        fontWeight: 600,
-                        letterSpacing: 0.2,
-                        cursor: markingInterest ? 'default' : 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        boxShadow: '0 20px 36px rgba(14,165,233,0.28)',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!markingInterest) {
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 24px 40px rgba(14,165,233,0.32)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 20px 36px rgba(14,165,233,0.28)';
+                        maxWidth: 420,
+                        padding: '24px 28px',
+                        borderRadius: 20,
+                        background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%)',
+                        boxShadow: '0 30px 60px rgba(14, 165, 233, 0.25)',
+                        border: '1px solid rgba(14,165,233,0.2)',
+                        textAlign: 'center',
                       }}
                     >
-                      {markingInterest ? 'Saving…' : 'Interested'}
-                    </button>
-                    {interestError && (
-                      <p style={{ margin: 0, color: '#b91c1c', fontSize: 13 }}>{interestError}</p>
-                    )}
+                      <p style={{ margin: '0 0 14px', fontWeight: 600, color: '#0f172a', fontSize: 16 }}>
+                        Interested in this artist’s collectibles?
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleMarkInterested}
+                        disabled={markingInterest}
+                        style={{
+                          width: '100%',
+                          padding: '14px 0',
+                          borderRadius: 14,
+                          border: 'none',
+                          background: markingInterest ? '#94a3b8' : '#0284c7',
+                          color: '#fff',
+                          fontWeight: 600,
+                          letterSpacing: 0.3,
+                          cursor: markingInterest ? 'default' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          boxShadow: markingInterest
+                            ? '0 10px 20px rgba(148, 163, 184, 0.25)'
+                            : '0 24px 44px rgba(2, 132, 199, 0.35)',
+                          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!markingInterest) {
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 28px 48px rgba(2,132,199,0.4)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = markingInterest
+                            ? '0 10px 20px rgba(148, 163, 184, 0.25)'
+                            : '0 24px 44px rgba(2,132,199,0.35)';
+                        }}
+                      >
+                        {markingInterest ? 'Saving…' : 'Interested'}
+                      </button>
+                      {interestError && (
+                        <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: 13 }}>{interestError}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
