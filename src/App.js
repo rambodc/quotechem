@@ -23,7 +23,7 @@ import ArtistList from './artists/artistList';
 import Home from './home/Home';
 import DropList from './drop/dropList';
 import DropDetail from './drop/DropDetail';
-import CreateArtist from './create/create-artist';
+import CreateArtist from './create-artist/create-artist';
 import CreateDrop from './create-drop/CreateDrop';
 import Chat from './chat/Chat';
 import Xaman from './xaman/Xaman';

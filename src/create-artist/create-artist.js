@@ -1,4 +1,4 @@
-// src/create-artist.js
+// src/create-artist/create-artist.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -181,7 +181,7 @@ function CreateArtist() {
         data.tracks = [
           {
             id: 'main_track',
-            title: `${fullName.trim() || 'Artist'} Track`,
+            title: fullName.trim() || 'Artist',
             url: audioUrl,
           },
         ];

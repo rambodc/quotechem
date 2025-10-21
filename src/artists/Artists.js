@@ -1,13 +1,13 @@
 // src/Artists.js
 import React, { useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import TopBar from '../components/TopBar';
 import AudioPlayer from '../components/AudioPlayer';
 import { UserContext } from '../App';
 import layoutStyles from '../styles/layout.module.css';
+import { FiCheckCircle } from 'react-icons/fi';
 
 function Artists() {
   const appUser = useContext(UserContext); // null when signed out (public view)
@@ -17,16 +17,26 @@ function Artists() {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [markingInterest, setMarkingInterest] = useState(false);
+  const [interestSuccess, setInterestSuccess] = useState(false);
+  const [interestError, setInterestError] = useState('');
+  const interestTimerRef = useRef(null);
   // No sidebar; keep layout simple
 
-  // --------- Fallback tracks (3 example files) ----------
+  // --------- Track helpers ----------
+  const cleanTrackTitle = (title) => {
+    if (!title) return '';
+    const cleaned = `${title}`.replace(/\s*Track$/i, '').trim();
+    return cleaned || title;
+  };
+
   const normalizeTracks = (src, singleTrackUrl, artistName) => {
     const list = Array.isArray(src) ? src : [];
     const normalized = list
       .slice(0, 3)
       .map((t, i) => ({
         id: t.id || `trk_${i}`,
-        title: t.title || `Track ${i + 1}`,
+        title: cleanTrackTitle(t.title) || `Song ${i + 1}`,
         url: t.url || t.file || '',
       }))
       .filter((t) => t.url);
@@ -35,7 +45,7 @@ function Artists() {
       return [
         {
           id: 'artist_track',
-          title: artistName ? `${artistName} Track` : 'Artist Track',
+          title: cleanTrackTitle(artistName) || 'Featured',
           url: singleTrackUrl,
         },
       ];
@@ -93,13 +103,7 @@ function Artists() {
     }
   }, [navigate, appUser]);
 
-  // --------- Auth actions ----------
-  const handleLogout = async () => {
-    await signOut(auth);
-    window.location.href = '/signin';
-  };
-
-  // Build hero media set
+  // --------- Build hero media set ----------
   const hero = useMemo(() => {
     return {
       mp4: item?.video || '',
@@ -110,20 +114,58 @@ function Artists() {
     };
   }, [item]);
 
-  // Tracks to feed the player (either artist data or 3 example files)
+  // Tracks to feed the player (if provided)
   const tracks = useMemo(() => {
     if (item?.tracks && item.tracks.length) return item.tracks;
     if (item?.audioUrl) {
       return [
         {
           id: 'artist_track',
-          title: item?.title ? `${item.title} Track` : 'Artist Track',
+          title: cleanTrackTitle(item?.title) || 'Featured',
           url: item.audioUrl,
         },
       ];
     }
     return [];
   }, [item]);
+
+  useEffect(() => {
+    return () => {
+      if (interestTimerRef.current) {
+        clearTimeout(interestTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleMarkInterested = useCallback(async () => {
+    if (!appUser?.id) {
+      navigate('/signin');
+      return;
+    }
+    if (markingInterest) return;
+    try {
+      setMarkingInterest(true);
+      setInterestError('');
+      const artistRef = doc(db, 'artists', artistUid);
+      const interestedRef = doc(collection(artistRef, 'Interested'), appUser.id);
+      await setDoc(
+        interestedRef,
+        {
+          userId: appUser.id,
+          lastMarkedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      setInterestSuccess(true);
+      if (interestTimerRef.current) clearTimeout(interestTimerRef.current);
+      interestTimerRef.current = setTimeout(() => setInterestSuccess(false), 2000);
+    } catch (err) {
+      console.error('mark interested error:', err);
+      setInterestError('Failed to record interest. Please try again.');
+    } finally {
+      setMarkingInterest(false);
+    }
+  }, [appUser?.id, artistUid, markingInterest, navigate]);
 
   return (
     <div className={layoutStyles.detailPage}>
@@ -165,16 +207,48 @@ function Artists() {
                   {item?.desc && <p className={layoutStyles.overlayDesc}>{item.desc}</p>}
 
                   {tracks.length > 0 && (
-                    <>
-                      <h3 style={{ marginTop: 18, marginBottom: 10 }}>Listen</h3>
-                      <AudioPlayer
-                        playlist={tracks.map((t) => ({ title: t.title, url: t.url }))}
-                      />
-                    </>
+                    <AudioPlayer playlist={tracks.map((t) => ({ title: t.title, url: t.url }))} />
                   )}
 
-                  <div className={layoutStyles.overlayMeta} style={{ marginTop: 16 }}>
-                    <div><strong>Artist ID:</strong> {item?.artistId || artistUid}</div>
+                  <div style={{ marginTop: tracks.length > 0 ? 18 : 12 }}>
+                    <p style={{ marginBottom: 10, fontWeight: 600, color: '#0f172a' }}>
+                      Interested in this artist’s collectibles?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleMarkInterested}
+                      disabled={markingInterest}
+                      style={{
+                        padding: '12px 24px',
+                        borderRadius: 14,
+                        border: 'none',
+                        background: markingInterest ? '#94a3b8' : '#0ea5e9',
+                        color: '#fff',
+                        fontWeight: 600,
+                        letterSpacing: 0.2,
+                        cursor: markingInterest ? 'default' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        boxShadow: '0 20px 36px rgba(14,165,233,0.28)',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!markingInterest) {
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 24px 40px rgba(14,165,233,0.32)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 20px 36px rgba(14,165,233,0.28)';
+                      }}
+                    >
+                      {markingInterest ? 'Saving…' : 'Interested'}
+                    </button>
+                    {interestError && (
+                      <p style={{ marginTop: 10, color: '#b91c1c', fontSize: 13 }}>{interestError}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -182,6 +256,38 @@ function Artists() {
           </div>
         )}
       </div>
+
+      {interestSuccess && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 20,
+              padding: '32px 36px',
+              boxShadow: '0 32px 60px rgba(15,23,42,0.32)',
+              textAlign: 'center',
+              maxWidth: 340,
+              width: '90%',
+            }}
+          >
+            <FiCheckCircle size={46} color="#10b981" style={{ marginBottom: 12 }} />
+            <h3 style={{ margin: '0 0 8px', color: '#0f172a' }}>Marked as Interested!</h3>
+            <p style={{ margin: 0, color: '#475569', fontSize: 15 }}>
+              You’ve registered interest in this artist’s collectibles.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* No sidebar */}
     </div>
