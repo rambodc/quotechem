@@ -1,26 +1,14 @@
 // src/drop/DropDetail.js
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
+import { FiChevronDown } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
+import styles from './DropDetail.module.css';
 import { db } from '../firebase';
 
 const SUPPORTED_PURCHASE_CURRENCIES = ['USD', 'CAD'];
-const purchaseButtonStyle = {
-  marginTop: 28,
-  width: '100%',
-  padding: '14px 18px',
-  borderRadius: 14,
-  border: 'none',
-  background: '#0ea5e9',
-  color: '#ffffff',
-  fontWeight: 600,
-  fontSize: 16,
-  cursor: 'pointer',
-  boxShadow: '0 18px 32px rgba(14, 165, 233, 0.22)',
-  transition: 'transform 0.18s ease, box-shadow 0.18s ease',
-};
 
 export default function DropDetail() {
   const { dropId } = useParams();
@@ -29,6 +17,7 @@ export default function DropDetail() {
   const [drop, setDrop] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
 
   const handleBack = useCallback(() => {
     if (window.history.length > 2) navigate(-1);
@@ -75,91 +64,124 @@ export default function DropDetail() {
     : '';
   const showPurchaseButton = isPurchaseNow && hasPurchasePrice;
 
+  const detailRows = useMemo(() => {
+    if (!drop) return [];
+    const uriValue = drop.uri
+      ? (
+          <a
+            href={drop.uri}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.detailLink}
+          >
+            {drop.uri}
+          </a>
+        )
+      : '';
+
+    return [
+      { label: 'Drop ID', value: drop.dropId },
+      { label: 'Token ID', value: drop.tokenId },
+      { label: 'Type', value: drop.type },
+      { label: 'Version', value: drop.dropVersion?.toUpperCase() },
+      { label: 'Artist ID', value: drop.artistId },
+      { label: 'Owned By UID', value: drop.ownedByUid },
+      { label: 'URI', value: uriValue },
+      { label: 'Purchase Type', value: purchaseTypeLabel },
+      { label: 'Price', value: hasPurchasePrice ? formattedPurchaseAmount : '' },
+      { label: 'Currency', value: hasPurchasePrice ? purchaseCurrency : '' },
+    ].filter((row) => row.value);
+  }, [drop, formattedPurchaseAmount, hasPurchasePrice, purchaseCurrency, purchaseTypeLabel]);
+
+  const hasMoreDetails = detailRows.length > 0;
+  const toggleLabel = showDetails ? 'Hide Details' : 'More Info';
+
   return (
     <div className={layoutStyles.detailPage}>
       <TopBar variant="back" backLabel="Back" onBack={handleBack} />
 
-      <div
-        className={layoutStyles.detailContent}
-        style={{ marginTop: 72, maxWidth: 720, width: '100%' }}
-      >
+      <div className={`${layoutStyles.detailContent} ${styles.pageShell}`}>
         {loading ? (
           <p>Loading…</p>
         ) : error ? (
           <p style={{ color: '#b91c1c' }}>{error}</p>
         ) : drop ? (
-          <article
-            style={{
-              background: '#ffffff',
-              borderRadius: 20,
-              border: '1px solid #e5e7eb',
-              padding: 24,
-              boxShadow: '0 24px 48px rgba(15, 23, 42, 0.08)',
-            }}
-          >
-            {mediaUrl && (
-              <div style={{ marginBottom: 20 }}>
-                {derivedMediaType === 'video' ? (
-                  <video
-                    src={mediaUrl}
-                    controls
-                    playsInline
-                    style={{ width: '100%', borderRadius: 16, maxHeight: 520, background: '#000' }}
-                  />
+          <div className={styles.heroWrapper}>
+            <div className={styles.heroShell}>
+              <div className={styles.heroMediaFrame}>
+                {mediaUrl ? (
+                  derivedMediaType === 'video' ? (
+                    <video src={mediaUrl} controls playsInline />
+                  ) : (
+                    <img src={mediaUrl} alt={drop.title || 'Drop media'} />
+                  )
                 ) : (
-                  <img
-                    src={mediaUrl}
-                    alt={drop.title || 'Drop media'}
-                    style={{ width: '100%', borderRadius: 16, objectFit: 'cover' }}
-                  />
+                  <div className={styles.heroPlaceholder}>No Media</div>
                 )}
               </div>
-            )}
+            </div>
 
-            <h1 style={{ margin: '0 0 12px', fontSize: 28 }}>{drop.title || 'Untitled Drop'}</h1>
-            {drop.description && (
-              <p style={{ color: '#4b5563', lineHeight: 1.6 }}>{drop.description}</p>
-            )}
+            <div className={styles.infoCard}>
+              <div>
+                <h1 className={styles.title}>{drop.title || 'Untitled Drop'}</h1>
+                {drop.description ? (
+                  <p className={styles.description}>{drop.description}</p>
+                ) : null}
+              </div>
 
-            <dl style={{ marginTop: 24, display: 'grid', gap: 12 }}>
-              <DetailRow label="Drop ID">{drop.dropId}</DetailRow>
-              <DetailRow label="Token ID">{drop.tokenId}</DetailRow>
-              <DetailRow label="Type">{drop.type}</DetailRow>
-              <DetailRow label="Version">{drop.dropVersion?.toUpperCase()}</DetailRow>
-              <DetailRow label="Artist ID">{drop.artistId}</DetailRow>
-              <DetailRow label="Owned By UID">{drop.ownedByUid}</DetailRow>
-              <DetailRow label="URI">{drop.uri}</DetailRow>
-              <DetailRow label="Purchase Type">{purchaseTypeLabel}</DetailRow>
-              {hasPurchasePrice && (
+              {showPurchaseButton && (
+                <div className={styles.purchaseCard}>
+                  <div className={styles.purchaseCopy}>
+                    <h2>Purchase Now</h2>
+                    <p>Own this collectible instantly. Payments will be enabled soon.</p>
+                  </div>
+                  <button type="button" className={styles.purchaseButton}>
+                    Purchase Now · {formattedPurchaseAmount}
+                  </button>
+                </div>
+              )}
+
+              {hasMoreDetails && (
                 <>
-                  <DetailRow label="Price">{formattedPurchaseAmount}</DetailRow>
-                  <DetailRow label="Currency">{purchaseCurrency}</DetailRow>
+                  <button
+                    type="button"
+                    className={styles.moreInfoToggle}
+                    onClick={() => setShowDetails((prev) => !prev)}
+                    aria-expanded={showDetails}
+                  >
+                    {toggleLabel}
+                    <FiChevronDown
+                      className={`${styles.toggleIcon} ${showDetails ? styles.openIcon : ''}`}
+                      size={18}
+                    />
+                  </button>
+
+                  <div
+                    className={`${styles.detailsPanel} ${showDetails ? styles.detailsPanelOpen : ''}`}
+                    aria-hidden={!showDetails}
+                  >
+                    <dl className={styles.detailList}>
+                      {detailRows.map((row) => (
+                        <DetailRow key={row.label} label={row.label} value={row.value} />
+                      ))}
+                    </dl>
+                  </div>
                 </>
               )}
-            </dl>
-
-            {showPurchaseButton && (
-              <button type="button" style={purchaseButtonStyle}>
-                Purchase Now
-              </button>
-            )}
-          </article>
+            </div>
+          </div>
         ) : null}
       </div>
     </div>
   );
 }
 
-function DetailRow({ label, children }) {
-  if (!children) return null;
+function DetailRow({ label, value }) {
+  if (!value) return null;
   return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      <dt style={{ fontSize: 13, letterSpacing: 0.08, textTransform: 'uppercase', color: '#6b7280' }}>
-        {label}
-      </dt>
-      <dd style={{ margin: 0, fontWeight: 600, color: '#111827', wordBreak: 'break-word' }}>
-        {children}
-      </dd>
+    <div className={styles.detailRow}>
+      <dt className={styles.detailLabel}>{label}</dt>
+      <dd className={styles.detailValue}>{value}</dd>
     </div>
   );
 }
