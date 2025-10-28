@@ -6,6 +6,22 @@ import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import { db } from '../firebase';
 
+const SUPPORTED_PURCHASE_CURRENCIES = ['USD', 'CAD'];
+const purchaseButtonStyle = {
+  marginTop: 28,
+  width: '100%',
+  padding: '14px 18px',
+  borderRadius: 14,
+  border: 'none',
+  background: '#0ea5e9',
+  color: '#ffffff',
+  fontWeight: 600,
+  fontSize: 16,
+  cursor: 'pointer',
+  boxShadow: '0 18px 32px rgba(14, 165, 233, 0.22)',
+  transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+};
+
 export default function DropDetail() {
   const { dropId } = useParams();
   const navigate = useNavigate();
@@ -46,6 +62,19 @@ export default function DropDetail() {
     };
   }, [dropId]);
 
+  const mediaUrl = drop?.mediaUrl || drop?.mediaPhoto || '';
+  const derivedMediaType = drop?.mediaType || (mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4') ? 'video' : mediaUrl ? 'image' : '');
+  const purchaseTypeLabel = drop?.purchaseType === 'purchase_now' ? 'Purchase Now' : drop?.purchaseType === 'bid' ? 'Bid' : '';
+  const isPurchaseNow = drop?.purchaseType === 'purchase_now';
+  const hasPurchasePrice = isPurchaseNow && typeof drop?.purchaseNowAmount === 'number' && !Number.isNaN(drop.purchaseNowAmount);
+  const purchaseCurrency = drop?.purchaseNowCurrency && SUPPORTED_PURCHASE_CURRENCIES.includes(drop.purchaseNowCurrency)
+    ? drop.purchaseNowCurrency
+    : SUPPORTED_PURCHASE_CURRENCIES[0];
+  const formattedPurchaseAmount = hasPurchasePrice
+    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: purchaseCurrency }).format(drop.purchaseNowAmount)
+    : '';
+  const showPurchaseButton = isPurchaseNow && hasPurchasePrice;
+
   return (
     <div className={layoutStyles.detailPage}>
       <TopBar variant="back" backLabel="Back" onBack={handleBack} />
@@ -68,13 +97,22 @@ export default function DropDetail() {
               boxShadow: '0 24px 48px rgba(15, 23, 42, 0.08)',
             }}
           >
-            {drop.mediaPhoto && (
+            {mediaUrl && (
               <div style={{ marginBottom: 20 }}>
-                <img
-                  src={drop.mediaPhoto}
-                  alt={drop.title || 'Drop media'}
-                  style={{ width: '100%', borderRadius: 16, objectFit: 'cover' }}
-                />
+                {derivedMediaType === 'video' ? (
+                  <video
+                    src={mediaUrl}
+                    controls
+                    playsInline
+                    style={{ width: '100%', borderRadius: 16, maxHeight: 520, background: '#000' }}
+                  />
+                ) : (
+                  <img
+                    src={mediaUrl}
+                    alt={drop.title || 'Drop media'}
+                    style={{ width: '100%', borderRadius: 16, objectFit: 'cover' }}
+                  />
+                )}
               </div>
             )}
 
@@ -91,7 +129,20 @@ export default function DropDetail() {
               <DetailRow label="Artist ID">{drop.artistId}</DetailRow>
               <DetailRow label="Owned By UID">{drop.ownedByUid}</DetailRow>
               <DetailRow label="URI">{drop.uri}</DetailRow>
+              <DetailRow label="Purchase Type">{purchaseTypeLabel}</DetailRow>
+              {hasPurchasePrice && (
+                <>
+                  <DetailRow label="Price">{formattedPurchaseAmount}</DetailRow>
+                  <DetailRow label="Currency">{purchaseCurrency}</DetailRow>
+                </>
+              )}
             </dl>
+
+            {showPurchaseButton && (
+              <button type="button" style={purchaseButtonStyle}>
+                Purchase Now
+              </button>
+            )}
           </article>
         ) : null}
       </div>

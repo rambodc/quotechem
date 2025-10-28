@@ -21,15 +21,28 @@ export default function DropList() {
         const list = snap.docs.map((docSnap) => {
           const data = docSnap.data() || {};
           const dropId = data.dropId || docSnap.id;
+          const mediaUrl = data.mediaUrl || data.mediaPhoto || '';
+          const mediaType = data.mediaType || (mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4') ? 'video' : mediaUrl ? 'image' : '');
+          const purchaseType = data.purchaseType || '';
+          const amount = typeof data.purchaseNowAmount === 'number' ? data.purchaseNowAmount : null;
+          const currency = typeof data.purchaseNowCurrency === 'string' ? data.purchaseNowCurrency : null;
+          const supportedCurrency = currency && ['USD', 'CAD'].includes(currency) ? currency : 'USD';
+          const purchaseLabel =
+            purchaseType === 'purchase_now' && amount !== null
+              ? new Intl.NumberFormat('en-US', { style: 'currency', currency: supportedCurrency }).format(amount)
+              : '';
           return {
             id: docSnap.id,
             dropId,
             title: data.title || 'Untitled Drop',
             description: data.description || '',
-            mediaPhoto: data.mediaPhoto || '',
+            mediaUrl,
+            mediaType,
             type: data.type || '',
             dropVersion: data.dropVersion || '',
             tokenId: data.tokenId || '',
+            purchaseType,
+            purchaseLabel,
           };
         });
         setDrops(list);
@@ -66,22 +79,40 @@ export default function DropList() {
             onClick={() => navigate(`/drop/${drop.dropId}`)}
             style={cardStyle}
           >
-            {drop.mediaPhoto ? (
+            {drop.mediaUrl ? (
               <div style={{ width: '100%', paddingBottom: '60%', position: 'relative', borderRadius: 16, overflow: 'hidden' }}>
-                <img
-                  src={drop.mediaPhoto}
-                  alt={drop.title}
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                  }}
-                />
+                {drop.mediaType === 'video' ? (
+                  <video
+                    src={drop.mediaUrl}
+                    muted
+                    autoPlay
+                    loop
+                    playsInline
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      background: '#000',
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={drop.mediaUrl}
+                    alt={drop.title}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                )}
               </div>
             ) : (
-              <div style={placeholderStyle}>No Image</div>
+              <div style={placeholderStyle}>No Media</div>
             )}
 
             <div style={{ textAlign: 'left', width: '100%' }}>
@@ -93,6 +124,9 @@ export default function DropList() {
                 {drop.type && <span style={pillStyle}>{drop.type}</span>}
                 {drop.dropVersion && <span style={pillStyle}>{drop.dropVersion.toUpperCase()}</span>}
                 {drop.tokenId && <span style={pillStyle}>Token {truncate(drop.tokenId, 12)}</span>}
+                {drop.purchaseType === 'purchase_now' && drop.purchaseLabel && (
+                  <span style={{ ...pillStyle, background: '#dcfce7', color: '#166534' }}>{drop.purchaseLabel}</span>
+                )}
               </div>
             </div>
           </button>

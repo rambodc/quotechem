@@ -206,10 +206,23 @@
   border-radius: 12px;
 }
 
+.previewVideo {
+  width: 100%;
+  max-height: 420px;
+  border-radius: 12px;
+  background: #000;
+}
+
 .fileHint {
   color: #6b7280;
   margin-top: 8px;
   font-size: 14px;
+}
+
+.helperText {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #64748b;
 }
 
 .statusText {

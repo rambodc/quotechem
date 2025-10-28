@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   collection,
   doc,
-  endAt,
   getDoc,
   getDocs,
   limit,
@@ -12,7 +11,6 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  startAt,
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import TopBar from '../components/TopBar';
@@ -22,6 +20,11 @@ import { db, storage, logStorageDebug } from '../firebase';
 
 const typeOptions = ['NFT', 'MPT'];
 const versionOptions = ['v1', 'v2'];
+const purchaseTypeOptions = [
+  { value: 'purchase_now', label: 'Purchase Now' },
+  { value: 'bid', label: 'Bid' },
+];
+const currencyOptions = ['USD', 'CAD'];
 
 export default function CreateDrop() {
   const navigate = useNavigate();
@@ -39,6 +42,9 @@ export default function CreateDrop() {
   const [tokenId, setTokenId] = useState('');
   const [type, setType] = useState(typeOptions[0]);
   const [dropVersion, setDropVersion] = useState(versionOptions[0]);
+  const [purchaseType, setPurchaseType] = useState(purchaseTypeOptions[0].value);
+  const [purchaseNowAmount, setPurchaseNowAmount] = useState('');
+  const [purchaseNowCurrency, setPurchaseNowCurrency] = useState(currencyOptions[0]);
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [artistSearchTerm, setArtistSearchTerm] = useState('');
   const [artistResults, setArtistResults] = useState([]);
@@ -55,7 +61,8 @@ export default function CreateDrop() {
 
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
-  const [processingImage, setProcessingImage] = useState(false);
+  const [mediaType, setMediaType] = useState('');
+  const [processingMedia, setProcessingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -359,6 +366,11 @@ export default function CreateDrop() {
   const ownedByUid = selectedOwner?.id ?? '';
 
   const canSubmit = useMemo(() => {
+    const isPurchaseNow = purchaseType === 'purchase_now';
+    const amountValue = Number(purchaseNowAmount);
+    const amountIsValid = Number.isFinite(amountValue) && amountValue > 0;
+    const currencyIsValid = currencyOptions.includes(purchaseNowCurrency);
+
     return (
       unlocked &&
       title.trim().length > 0 &&
@@ -369,9 +381,12 @@ export default function CreateDrop() {
       !!selectedOwner &&
       !!file &&
       !saving &&
-      !processingImage &&
+      !processingMedia &&
       !artistSearchLoading &&
-      !ownerSearchLoading
+      !ownerSearchLoading &&
+      isPurchaseNow &&
+      amountIsValid &&
+      currencyIsValid
     );
   }, [
     unlocked,
@@ -383,9 +398,12 @@ export default function CreateDrop() {
     selectedOwner,
     file,
     saving,
-    processingImage,
+    processingMedia,
     artistSearchLoading,
     ownerSearchLoading,
+    purchaseType,
+    purchaseNowAmount,
+    purchaseNowCurrency,
   ]);
 
   const handleFileChange = async (event) => {
@@ -393,28 +411,47 @@ export default function CreateDrop() {
     const selected = event.target.files?.[0];
     if (!selected) return;
 
-    if (!selected.type.startsWith('image/')) {
-      setError('Please choose an image file (jpg, png, webp, etc).');
-      setFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
       setPreviewUrl('');
+    }
+
+    if (selected.type.startsWith('image/')) {
+      setProcessingMedia(true);
+      setUploadProgress(0);
+      try {
+        const { file: resizedFile, previewUrl: resizedUrl } = await resizeImageToMax(selected, 600);
+        setFile(resizedFile);
+        setPreviewUrl(resizedUrl);
+        setMediaType('image');
+      } catch (err) {
+        console.error(err);
+        setError(err?.message || 'Unable to process image. Please try another file.');
+        setFile(null);
+        setPreviewUrl('');
+        setMediaType('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      } finally {
+        setProcessingMedia(false);
+      }
       return;
     }
 
-    setProcessingImage(true);
-    setUploadProgress(0);
-    try {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      const { file: resizedFile, previewUrl: resizedUrl } = await resizeImageToMax(selected, 600);
-      setFile(resizedFile);
-      setPreviewUrl(resizedUrl);
-    } catch (err) {
-      console.error(err);
-      setError(err?.message || 'Unable to process image. Please try another file.');
-      setFile(null);
-      setPreviewUrl('');
-    } finally {
-      setProcessingImage(false);
+    if (selected.type === 'video/mp4' || selected.type.startsWith('video/')) {
+      setUploadProgress(0);
+      const videoUrl = URL.createObjectURL(selected);
+      setFile(selected);
+      setPreviewUrl(videoUrl);
+      setMediaType('video');
+      setProcessingMedia(false);
+      return;
     }
+
+    setError('Please choose an image or MP4 video file.');
+    setFile(null);
+    setPreviewUrl('');
+    setMediaType('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const onSubmit = async (event) => {
@@ -423,6 +460,9 @@ export default function CreateDrop() {
 
     const trimmedArtist = artistId.trim();
     const trimmedOwner = ownedByUid.trim();
+    const isPurchaseNow = purchaseType === 'purchase_now';
+    const rawAmount = Number(purchaseNowAmount);
+    const roundedAmount = Number.isFinite(rawAmount) ? Math.round(rawAmount * 100) / 100 : null;
 
     try {
       setSaving(true);
@@ -438,12 +478,14 @@ export default function CreateDrop() {
         // ignore debug errors
       }
 
-      const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
+      const derivedMediaType = mediaType || (file.type?.startsWith('video/') ? 'video' : 'image');
+      const fallbackExtension = derivedMediaType === 'video' ? 'mp4' : 'jpg';
+      const ext = file.name.includes('.') ? file.name.split('.').pop() : fallbackExtension;
       const objectPath = `drops/${dropId}/media.${ext}`;
       const storageRef = ref(storage, objectPath);
 
       const uploadTask = uploadBytesResumable(storageRef, file, {
-        contentType: file.type || 'image/jpeg',
+        contentType: file.type || (derivedMediaType === 'video' ? 'video/mp4' : 'image/jpeg'),
       });
 
       await new Promise((resolve, reject) => {
@@ -458,7 +500,7 @@ export default function CreateDrop() {
         );
       });
 
-      const mediaPhotoUrl = await getDownloadURL(uploadTask.snapshot.ref);
+      const mediaUrl = await getDownloadURL(uploadTask.snapshot.ref);
 
       const data = {
         dropId,
@@ -467,11 +509,16 @@ export default function CreateDrop() {
         description: description.trim(),
         tokenId: tokenId.trim(),
         type,
-        mediaPhoto: mediaPhotoUrl,
+        mediaUrl,
+        mediaType: derivedMediaType,
+        mediaPhoto: derivedMediaType === 'image' ? mediaUrl : '',
         artistId: trimmedArtist,
         dropVersion,
         ownedByUid: trimmedOwner,
         uri: uri.trim(),
+        purchaseType,
+        purchaseNowAmount: isPurchaseNow ? roundedAmount : null,
+        purchaseNowCurrency: isPurchaseNow ? purchaseNowCurrency : null,
       };
 
       await setDoc(dropDocRef, data);
@@ -577,6 +624,60 @@ export default function CreateDrop() {
               </select>
             </Field>
 
+            <Field label="Purchase Type">
+              <select
+                value={purchaseType}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setPurchaseType(value);
+                  if (value !== 'purchase_now') {
+                    setPurchaseNowAmount('');
+                  }
+                }}
+                className={styles.input}
+              >
+                {purchaseTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {purchaseType === 'bid' && (
+                <p className={styles.helperText}>Bid mode is coming soon. Switch back to Purchase Now to continue.</p>
+              )}
+            </Field>
+
+            {purchaseType === 'purchase_now' && (
+              <>
+                <Field label="Purchase Now Amount">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={purchaseNowAmount}
+                    onChange={(e) => setPurchaseNowAmount(e.target.value)}
+                    placeholder="Enter amount in dollars"
+                    className={styles.input}
+                  />
+                  <p className={styles.helperText}>Storefront will use this amount when we connect payments.</p>
+                </Field>
+
+                <Field label="Currency">
+                  <select
+                    value={purchaseNowCurrency}
+                    onChange={(e) => setPurchaseNowCurrency(e.target.value)}
+                    className={styles.input}
+                  >
+                    {currencyOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            )}
+
             <Field label="Artist">
               <div className={styles.searchWrapper}>
                 <input
@@ -655,29 +756,38 @@ export default function CreateDrop() {
               />
             </Field>
 
-            <Field label="Media Photo">
+            <Field label="Media">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/mp4"
                 onChange={handleFileChange}
                 className={styles.fileInput}
               />
               {previewUrl ? (
                 <div className={styles.previewWrapper}>
-                  <img
-                    src={previewUrl}
-                    alt="Drop preview"
-                    className={styles.previewImage}
-                  />
+                  {mediaType === 'video' ? (
+                    <video
+                      src={previewUrl}
+                      controls
+                      playsInline
+                      className={styles.previewVideo}
+                    />
+                  ) : (
+                    <img
+                      src={previewUrl}
+                      alt="Drop preview"
+                      className={styles.previewImage}
+                    />
+                  )}
                 </div>
               ) : (
-                <p className={styles.fileHint}>Choose an image (JPG/PNG/WebP).</p>
+                <p className={styles.fileHint}>Choose an image (JPG/PNG/WebP) or an MP4 video.</p>
               )}
             </Field>
 
-            {processingImage && (
-              <p className={styles.statusText}>Processing image…</p>
+            {processingMedia && (
+              <p className={styles.statusText}>Processing media…</p>
             )}
 
             {saving && (
