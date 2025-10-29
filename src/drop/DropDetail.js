@@ -7,8 +7,11 @@ import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './DropDetail.module.css';
 import { db } from '../firebase';
+import { getStripeClient } from '../services/stripe';
 
 const SUPPORTED_PURCHASE_CURRENCIES = ['USD', 'CAD'];
+const CREATE_CHECKOUT_URL =
+  process.env.REACT_APP_CREATE_STRIPE_SESSION_URL || '/api/createStripeCheckoutSession';
 
 export default function DropDetail() {
   const { dropId } = useParams();
@@ -18,6 +21,8 @@ export default function DropDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
 
   const handleBack = useCallback(() => {
     if (window.history.length > 2) navigate(-1);
@@ -96,6 +101,50 @@ export default function DropDetail() {
   const hasMoreDetails = detailRows.length > 0;
   const toggleLabel = showDetails ? 'Hide Details' : 'More Info';
 
+  const handlePurchaseClick = useCallback(async () => {
+    if (!drop?.dropId) return;
+    try {
+      setCheckoutBusy(true);
+      setCheckoutError('');
+
+      const stripe = await getStripeClient();
+      if (!stripe) {
+        throw new Error('Stripe is not configured.');
+      }
+
+      const response = await fetch(CREATE_CHECKOUT_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          dropId: drop.dropId,
+          baseUrl: window.location.origin,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.id) {
+        throw new Error(data?.error || 'Failed to start checkout.');
+      }
+
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      const { error: stripeError } = await stripe.redirectToCheckout({ sessionId: data.id });
+      if (stripeError) {
+        throw new Error(stripeError.message || 'Checkout redirect failed.');
+      }
+    } catch (err) {
+      console.error(err);
+      setCheckoutError(err?.message || 'Unable to launch checkout.');
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }, [drop?.dropId]);
+
   return (
     <div className={layoutStyles.detailPage}>
       <TopBar variant="back" backLabel="Back" onBack={handleBack} />
@@ -135,10 +184,19 @@ export default function DropDetail() {
                     <h2>Purchase Now</h2>
                     <p>Own this collectible instantly. Payments will be enabled soon.</p>
                   </div>
-                  <button type="button" className={styles.purchaseButton}>
-                    Purchase Now · {formattedPurchaseAmount}
+                  <button
+                    type="button"
+                    className={styles.purchaseButton}
+                    onClick={handlePurchaseClick}
+                    disabled={checkoutBusy}
+                  >
+                    {checkoutBusy ? 'Redirecting…' : `Purchase Now · ${formattedPurchaseAmount}`}
                   </button>
                 </div>
+              )}
+
+              {checkoutError && (
+                <p className={styles.checkoutError}>{checkoutError}</p>
               )}
 
               {hasMoreDetails && (
