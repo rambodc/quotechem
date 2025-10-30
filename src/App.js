@@ -25,18 +25,12 @@ import DropList from './drop/dropList';
 import DropDetail from './drop/DropDetail';
 import CreateArtist from './create-artist/create-artist';
 import CreateDrop from './create-drop/CreateDrop';
-import Chat from './chat/Chat';
-import Xaman from './xaman/Xaman';
-import Fund from './fund/Fund';
-import Balance from './balance';
-import Wallet from './wallet/Wallet';
 import More from './more/More';
 import Terms from './terms/Terms';
 import Services from './services/Services';
 import Account from './account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
-import ValidateDrops from './validate-drops/ValidateDrops';
 
 // Route guard
 import ProtectedRoute from './ProtectedRoute';
@@ -98,54 +92,10 @@ function AppRoutes({ user }) {
           }
         />
         <Route
-          path="/chat"
-          element={
-            <ProtectedRoute>
-              <Chat />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/drop/:dropId"
           element={
             <ProtectedRoute>
               <DropDetail />
-            </ProtectedRoute>
-          }
-        />
-        {/* ✅ New protected Xaman route */}
-        <Route
-          path="/xaman"
-          element={
-            <ProtectedRoute>
-              <Xaman />
-            </ProtectedRoute>
-          }
-        />
-        {/* ✅ New protected Fund route */}
-        <Route
-          path="/fund"
-          element={
-            <ProtectedRoute>
-              <Fund />
-            </ProtectedRoute>
-          }
-        />
-        {/* ✅ New protected Balance route */}
-        <Route
-          path="/balance"
-          element={
-            <ProtectedRoute>
-              <Balance />
-            </ProtectedRoute>
-          }
-        />
-        {/* ✅ Existing wallet route */}
-        <Route
-          path="/wallet"
-          element={
-            <ProtectedRoute>
-              <Wallet />
             </ProtectedRoute>
           }
         />
@@ -198,15 +148,6 @@ function AppRoutes({ user }) {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/validate-drops"
-          element={
-            <ProtectedRoute>
-              <ValidateDrops />
-            </ProtectedRoute>
-          }
-        />
-
         {/* Catch-all */}
         <Route path="*" element={<Navigate to={user ? '/home' : '/'} />} />
       </Routes>
