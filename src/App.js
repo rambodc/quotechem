@@ -25,6 +25,7 @@ import DropList from './drop/dropList';
 import DropDetail from './drop/DropDetail';
 import CreateArtist from './create-artist/create-artist';
 import CreateDrop from './create-drop/CreateDrop';
+import BecomeArtist from './become-artist/BecomeArtist';
 import More from './more/More';
 import Terms from './terms/Terms';
 import Services from './services/Services';
@@ -88,6 +89,14 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <CreateDrop />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/become-artist"
+          element={
+            <ProtectedRoute>
+              <BecomeArtist />
             </ProtectedRoute>
           }
         />
