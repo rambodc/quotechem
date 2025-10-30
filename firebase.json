@@ -8,58 +8,9 @@
     ],
     "rewrites": [
       {
-        "source": "/api/createTransakSession",
-        "function": {
-          "functionId": "createTransakSession",
-          "region": "us-central1"
-        }
-      },
-      {
         "source": "/api/createStripeCheckoutSession",
         "function": {
           "functionId": "createStripeCheckoutSession",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/api/transak/webhook",
-        "function": {
-          "functionId": "handleTransakWebhook",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/api/fireblocks/webhook",
-        "function": {
-          "functionId": "handleFireblocksWebhook",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/api/fireblocks/ping",
-        "function": {
-          "functionId": "fireblocksPing",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/api/fireblocks/createOrGetVaults",
-        "function": {
-          "functionId": "fireblocksCreateOrGetVaults",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/api/fireblocks/createDepositHandle",
-        "function": {
-          "functionId": "fireblocksCreateDepositHandle",
-          "region": "us-central1"
-        }
-      },
-      {
-        "source": "/api/fireblocks/xrplTransferTest",
-        "function": {
-          "functionId": "fireblocksXrplTransferTest",
           "region": "us-central1"
         }
       },

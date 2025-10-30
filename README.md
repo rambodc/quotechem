@@ -43,13 +43,7 @@ Branches
 - SPA fallback and API rewrites are configured.
 
 ### API Rewrites (firebase.json)
-- `/api/createTransakSession` → Cloud Function `createTransakSession` (us-central1)
-- `/api/transak/webhook` → Cloud Function `handleTransakWebhook` (us-central1)
-- `/api/fireblocks/webhook` → Cloud Function `handleFireblocksWebhook` (us-central1)
-- `/api/fireblocks/ping` → Cloud Function `fireblocksPing` (us-central1)
-- `/api/fireblocks/createOrGetVaults` → Cloud Function `fireblocksCreateOrGetVaults` (us-central1)
-- `/api/fireblocks/createDepositHandle` → Cloud Function `fireblocksCreateDepositHandle` (us-central1)
-- `/api/fireblocks/xrplTransferTest` → Cloud Function `fireblocksXrplTransferTest` (us-central1)
+- `/api/createStripeCheckoutSession` → Cloud Function `createStripeCheckoutSession` (us-central1)
 - `**` → `/index.html` (SPA fallback)
 
 ## Workflows
