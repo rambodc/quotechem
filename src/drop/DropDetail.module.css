@@ -110,6 +110,44 @@
   white-space: pre-line;
 }
 
+.albumBadge {
+  margin-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.albumLink {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.albumLink:hover {
+  text-decoration: underline;
+}
+
+.albumMeta {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.albumErrorText {
+  margin: 6px 0 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
 .purchaseCard {
   display: flex;
   align-items: center;
@@ -249,6 +287,19 @@
 }
 
 .detailLink:hover {
+  text-decoration: underline;
+}
+
+.detailLinkButton {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+}
+
+.detailLinkButton:hover {
   text-decoration: underline;
 }
 

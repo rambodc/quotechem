@@ -7,10 +7,13 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
+  increment,
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import TopBar from '../components/TopBar';
@@ -66,6 +69,11 @@ export default function CreateDrop() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const [albums, setAlbums] = useState([]);
+  const [albumsLoading, setAlbumsLoading] = useState(true);
+  const [albumError, setAlbumError] = useState('');
+  const [selectedAlbumId, setSelectedAlbumId] = useState('');
 
   const fileInputRef = useRef(null);
   const artistInputRef = useRef(null);
@@ -285,6 +293,38 @@ export default function CreateDrop() {
     return () => clearTimeout(handle);
   }, [ownerSearchTerm, searchUsers]);
 
+  useEffect(() => {
+    const albumsQuery = query(collection(db, 'albums'), orderBy('title'));
+    const unsubscribe = onSnapshot(
+      albumsQuery,
+      (snap) => {
+        const list = snap.docs.map((docSnap) => {
+          const data = docSnap.data() || {};
+          const albumId = data.albumId || docSnap.id;
+          return {
+            id: docSnap.id,
+            albumId,
+            title: data.title || 'Untitled Album',
+            description: data.description || '',
+          };
+        });
+        setAlbums(list);
+        setAlbumsLoading(false);
+        setAlbumError('');
+        setSelectedAlbumId((prev) =>
+          prev && list.some((album) => album.albumId === prev) ? prev : ''
+        );
+      },
+      (err) => {
+        console.error('albums snapshot error:', err);
+        setAlbums([]);
+        setAlbumsLoading(false);
+        setAlbumError(err?.message || 'Failed to load albums.');
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
   const handleSelectArtist = useCallback((option) => {
     setSelectedArtist(option);
     setArtistSearchTerm('');
@@ -379,7 +419,10 @@ export default function CreateDrop() {
       uri.trim().length > 0 &&
       !!selectedArtist &&
       !!selectedOwner &&
+      !!selectedAlbumId &&
       !!file &&
+      !albumsLoading &&
+      !albumError &&
       !saving &&
       !processingMedia &&
       !artistSearchLoading &&
@@ -396,7 +439,10 @@ export default function CreateDrop() {
     uri,
     selectedArtist,
     selectedOwner,
+    selectedAlbumId,
     file,
+    albumsLoading,
+    albumError,
     saving,
     processingMedia,
     artistSearchLoading,
@@ -463,6 +509,12 @@ export default function CreateDrop() {
     const isPurchaseNow = purchaseType === 'purchase_now';
     const rawAmount = Number(purchaseNowAmount);
     const roundedAmount = Number.isFinite(rawAmount) ? Math.round(rawAmount * 100) / 100 : null;
+    const selectedAlbum = albums.find((album) => album.albumId === selectedAlbumId);
+    if (!selectedAlbum) {
+      setError('Please select a valid album.');
+      setSaving(false);
+      return;
+    }
 
     try {
       setSaving(true);
@@ -519,9 +571,21 @@ export default function CreateDrop() {
         purchaseType,
         purchaseNowAmount: isPurchaseNow ? roundedAmount : null,
         purchaseNowCurrency: isPurchaseNow ? purchaseNowCurrency : null,
+        albumId: selectedAlbum.albumId,
+        albumTitle: selectedAlbum.title,
       };
 
       await setDoc(dropDocRef, data);
+
+      try {
+        await updateDoc(doc(db, 'albums', selectedAlbum.albumId), {
+          updatedAt: serverTimestamp(),
+          dropCount: increment(1),
+          latestDropId: dropId,
+        });
+      } catch (albumUpdateErr) {
+        console.error('Failed to update album metadata:', albumUpdateErr);
+      }
 
       navigate(`/drop/${dropId}`);
     } catch (err) {
@@ -562,6 +626,52 @@ export default function CreateDrop() {
           <h1 className={styles.formTitle}>Create Drop</h1>
 
           <form className={styles.form} onSubmit={onSubmit}>
+            <Field label="Album">
+              <select
+                value={selectedAlbumId}
+                onChange={(e) => setSelectedAlbumId(e.target.value)}
+                className={styles.input}
+                disabled={albumsLoading}
+                required
+              >
+                <option value="">Select an album…</option>
+                {albums.map((album) => (
+                  <option key={album.id} value={album.albumId}>
+                    {album.title}
+                  </option>
+                ))}
+              </select>
+              {albumError ? (
+                <p className={styles.errorText}>{albumError}</p>
+              ) : albumsLoading ? (
+                <p className={styles.helperText}>Loading albums…</p>
+              ) : albums.length === 0 ? (
+                <p className={styles.helperText}>
+                  No albums available yet.{' '}
+                  <button
+                    type="button"
+                    className={styles.linkButton}
+                    onClick={() => navigate('/create-album')}
+                  >
+                    Create one now
+                  </button>
+                  .
+                </p>
+              ) : (
+                <p className={styles.helperText}>
+                  Need a new album?{' '}
+                  <button
+                    type="button"
+                    className={styles.linkButton}
+                    onClick={() => navigate('/create-album')}
+                  >
+                    Create album
+                  </button>
+                  .
+                </p>
+              )}
+            </Field>
+
             <Field label="Title">
               <input
                 type="text"

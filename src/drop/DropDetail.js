@@ -23,6 +23,9 @@ export default function DropDetail() {
   const [showDetails, setShowDetails] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+  const [album, setAlbum] = useState(null);
+  const [albumLoading, setAlbumLoading] = useState(false);
+  const [albumError, setAlbumError] = useState('');
 
   const handleBack = useCallback(() => {
     if (window.history.length > 2) navigate(-1);
@@ -56,6 +59,45 @@ export default function DropDetail() {
     };
   }, [dropId]);
 
+  useEffect(() => {
+    if (!drop?.albumId) {
+      setAlbum(null);
+      setAlbumError('');
+      setAlbumLoading(false);
+      return;
+    }
+
+    let active = true;
+    setAlbumLoading(true);
+    setAlbumError('');
+
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'albums', drop.albumId));
+        if (!active) return;
+
+        if (snap.exists()) {
+          setAlbum(snap.data());
+          setAlbumError('');
+        } else {
+          setAlbum(null);
+          setAlbumError('Album not found.');
+        }
+      } catch (err) {
+        if (!active) return;
+        console.error('album fetch error:', err);
+        setAlbum(null);
+        setAlbumError('Unable to load album details right now.');
+      } finally {
+        if (active) setAlbumLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [drop?.albumId]);
+
   const mediaUrl = drop?.mediaUrl || drop?.mediaPhoto || '';
   const derivedMediaType = drop?.mediaType || (mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4') ? 'video' : mediaUrl ? 'image' : '');
   const purchaseTypeLabel = drop?.purchaseType === 'purchase_now' ? 'Purchase Now' : drop?.purchaseType === 'bid' ? 'Bid' : '';
@@ -83,8 +125,23 @@ export default function DropDetail() {
           </a>
         )
       : '';
+    const albumName = drop.albumId
+      ? album?.title || drop.albumTitle || drop.albumId
+      : '';
+    const albumValue = drop.albumId
+      ? (
+          <button
+            type="button"
+            className={styles.detailLinkButton}
+            onClick={() => navigate(`/album/${drop.albumId}`)}
+          >
+            {albumName}
+          </button>
+        )
+      : '';
 
     return [
+      { label: 'Album', value: albumValue },
       { label: 'Drop ID', value: drop.dropId },
       { label: 'Token ID', value: drop.tokenId },
       { label: 'Type', value: drop.type },
@@ -96,8 +153,17 @@ export default function DropDetail() {
       { label: 'Price', value: hasPurchasePrice ? formattedPurchaseAmount : '' },
       { label: 'Currency', value: hasPurchasePrice ? purchaseCurrency : '' },
     ].filter((row) => row.value);
-  }, [drop, formattedPurchaseAmount, hasPurchasePrice, purchaseCurrency, purchaseTypeLabel]);
+  }, [
+    album,
+    drop,
+    formattedPurchaseAmount,
+    hasPurchasePrice,
+    navigate,
+    purchaseCurrency,
+    purchaseTypeLabel,
+  ]);
 
+  const albumNameDisplay = drop?.albumId ? album?.title || drop.albumTitle || drop.albumId : '';
   const hasMoreDetails = detailRows.length > 0;
   const toggleLabel = showDetails ? 'Hide Details' : 'More Info';
 
@@ -175,6 +241,25 @@ export default function DropDetail() {
                 <h1 className={styles.title}>{drop.title || 'Untitled Drop'}</h1>
                 {drop.description ? (
                   <p className={styles.description}>{drop.description}</p>
+                ) : null}
+                {drop.albumId ? (
+                  <>
+                    <div className={styles.albumBadge}>
+                      <span>Album</span>
+                      <button
+                        type="button"
+                        className={styles.albumLink}
+                        onClick={() => navigate(`/album/${drop.albumId}`)}
+                      >
+                        {albumNameDisplay}
+                      </button>
+                    </div>
+                    {albumLoading ? (
+                      <p className={styles.albumMeta}>Loading album details…</p>
+                    ) : albumError ? (
+                      <p className={styles.albumErrorText}>{albumError}</p>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
 

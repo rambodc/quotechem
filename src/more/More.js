@@ -16,6 +16,8 @@ import {
   FaPlus,
   FaUserPlus,
   FaUserCog,
+  FaImages,
+  FaLayerGroup,
 } from 'react-icons/fa';
 
 export default function More() {
@@ -55,6 +57,8 @@ export default function More() {
             <Item icon={FaPaintBrush} color="#ec4899" label="Become an Artist" onClick={() => navigate('/become-artist')} />
             <Item icon={FaFileAlt} color="#0ea5e9" label="Terms" onClick={() => navigate('/terms')} />
             <Item icon={FaCogs} color="#6366f1" label="Services" onClick={() => navigate('/services')} />
+            <Item icon={FaImages} color="#0ea5e9" label="Albums" onClick={() => navigate('/albums')} />
+            <Item icon={FaLayerGroup} color="#10b981" label="Create Album" onClick={() => navigate('/create-album')} />
             <Item icon={FaUserPlus} color="#2563eb" label="Create Artist" onClick={() => navigate('/create-artists')} />
             <Item icon={FaPlus} color="#111827" label="Create Drop" onClick={() => navigate('/create-drop')} />
             <Item icon={FaSignOutAlt} color="#ef4444" label="Logout" onClick={onLogout} className={styles.itemSpacing} />

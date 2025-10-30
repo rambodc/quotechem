@@ -43,6 +43,8 @@ export default function DropList() {
             tokenId: data.tokenId || '',
             purchaseType,
             purchaseLabel,
+            albumId: data.albumId || '',
+            albumTitle: data.albumTitle || '',
           };
         });
         setDrops(list);
@@ -121,6 +123,11 @@ export default function DropList() {
                 <p style={descriptionStyle}>{truncate(drop.description, 140)}</p>
               )}
               <div style={metaRowStyle}>
+                {(drop.albumTitle || drop.albumId) && (
+                  <span style={albumPillStyle}>
+                    {truncate(drop.albumTitle || drop.albumId, 24)}
+                  </span>
+                )}
                 {drop.type && <span style={pillStyle}>{drop.type}</span>}
                 {drop.dropVersion && <span style={pillStyle}>{drop.dropVersion.toUpperCase()}</span>}
                 {drop.tokenId && <span style={pillStyle}>Token {truncate(drop.tokenId, 12)}</span>}
@@ -216,4 +223,10 @@ const pillStyle = {
   fontWeight: 600,
   letterSpacing: 0.3,
   textTransform: 'uppercase',
+};
+
+const albumPillStyle = {
+  ...pillStyle,
+  background: '#ede9fe',
+  color: '#5b21b6',
 };

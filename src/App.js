@@ -26,6 +26,9 @@ import DropDetail from './drop/DropDetail';
 import CreateArtist from './create-artist/create-artist';
 import CreateDrop from './create-drop/CreateDrop';
 import BecomeArtist from './become-artist/BecomeArtist';
+import AlbumList from './albums/AlbumList';
+import AlbumDetail from './albums/AlbumDetail';
+import CreateAlbum from './create-album/CreateAlbum';
 import More from './more/More';
 import Terms from './terms/Terms';
 import Services from './services/Services';
@@ -77,10 +80,34 @@ function AppRoutes({ user }) {
           }
         />
         <Route
+          path="/albums"
+          element={
+            <ProtectedRoute>
+              <AlbumList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/album/:albumId"
+          element={
+            <ProtectedRoute>
+              <AlbumDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/create-artists"
           element={
             <ProtectedRoute>
               <CreateArtist />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/create-album"
+          element={
+            <ProtectedRoute>
+              <CreateAlbum />
             </ProtectedRoute>
           }
         />
