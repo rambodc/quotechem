@@ -29,6 +29,7 @@ import BecomeArtist from './become-artist/BecomeArtist';
 import AlbumList from './albums/AlbumList';
 import AlbumDetail from './albums/AlbumDetail';
 import CreateAlbum from './create-album/CreateAlbum';
+import History from './history/History';
 import More from './more/More';
 import Terms from './terms/Terms';
 import Services from './services/Services';
@@ -133,6 +134,14 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <More />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <ProtectedRoute>
+              <History />
             </ProtectedRoute>
           }
         />
