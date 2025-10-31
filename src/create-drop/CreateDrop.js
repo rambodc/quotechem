@@ -915,7 +915,7 @@ export default function CreateDrop() {
               <button
                 type="button"
                 className={`${layoutStyles.createBtn} ${styles.cancelButton}`}
-                onClick={() => navigate('/drops')}
+                onClick={() => navigate('/albums')}
                 disabled={saving}
               >
                 Cancel

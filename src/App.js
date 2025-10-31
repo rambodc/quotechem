@@ -21,7 +21,6 @@ import ArtistList from './artists/artistList';
 
 // Protected pages
 import Home from './home/Home';
-import DropList from './drop/dropList';
 import DropDetail from './drop/DropDetail';
 import CreateArtist from './create-artist/create-artist';
 import CreateDrop from './create-drop/CreateDrop';
@@ -68,14 +67,6 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <ArtistList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/drops"
-          element={
-            <ProtectedRoute>
-              <DropList />
             </ProtectedRoute>
           }
         />

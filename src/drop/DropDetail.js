@@ -1,5 +1,5 @@
 // src/drop/DropDetail.js
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { FiChevronDown } from 'react-icons/fi';
@@ -8,6 +8,7 @@ import layoutStyles from '../styles/layout.module.css';
 import styles from './DropDetail.module.css';
 import { db } from '../firebase';
 import { getStripeClient } from '../services/stripe';
+import { UserContext } from '../App';
 
 const SUPPORTED_PURCHASE_CURRENCIES = ['USD', 'CAD'];
 const CREATE_CHECKOUT_URL =
@@ -16,6 +17,7 @@ const CREATE_CHECKOUT_URL =
 export default function DropDetail() {
   const { dropId } = useParams();
   const navigate = useNavigate();
+  const appUser = useContext(UserContext);
 
   const [drop, setDrop] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,9 +30,16 @@ export default function DropDetail() {
   const [albumError, setAlbumError] = useState('');
 
   const handleBack = useCallback(() => {
-    if (window.history.length > 2) navigate(-1);
-    else navigate('/drops');
-  }, [navigate]);
+    if (window.history.length > 2) {
+      navigate(-1);
+      return;
+    }
+    if (drop?.albumId) {
+      navigate(`/album/${drop.albumId}`);
+    } else {
+      navigate('/albums');
+    }
+  }, [navigate, drop?.albumId]);
 
   useEffect(() => {
     let alive = true;
@@ -169,6 +178,10 @@ export default function DropDetail() {
 
   const handlePurchaseClick = useCallback(async () => {
     if (!drop?.dropId) return;
+    if (!appUser?.id) {
+      setCheckoutError('You need an account to purchase this drop.');
+      return;
+    }
     try {
       setCheckoutBusy(true);
       setCheckoutError('');
@@ -186,6 +199,8 @@ export default function DropDetail() {
         body: JSON.stringify({
           dropId: drop.dropId,
           baseUrl: window.location.origin,
+          buyerUid: appUser.id,
+          buyerEmail: appUser.email || '',
         }),
       });
 
@@ -209,7 +224,7 @@ export default function DropDetail() {
     } finally {
       setCheckoutBusy(false);
     }
-  }, [drop?.dropId]);
+  }, [appUser?.email, appUser?.id, drop?.dropId]);
 
   return (
     <div className={layoutStyles.detailPage}>

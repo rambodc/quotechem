@@ -1,7 +1,6 @@
 // src/Home.js
 import React, { useContext, useEffect, useState } from 'react';
-import { auth, db } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../App';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
@@ -13,48 +12,38 @@ import { UI_BUILD_TAG } from '../version';
 
 function Home() {
   const appUser = useContext(UserContext);
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'cart'
 
-  const [artists, setArtists] = useState([]);
+  const [albums, setAlbums] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const navigate = useNavigate();
-
-  // No sidebar; no responsive sidebar toggling needed
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    window.location.href = '/signin';
-  };
 
   const truncate = (text, maxLength) => {
     if (!text) return '';
     return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
   };
 
-  // Fetch initial artists snapshot
+  // Fetch latest albums snapshot
   useEffect(() => {
-    const q = query(collection(db, 'artists'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'albums'), orderBy('updatedAt', 'desc'));
     const unsub = onSnapshot(
       q,
       (snap) => {
         const list = snap.docs.map((docSnap) => {
           const data = docSnap.data() || {};
-          const artistId = data.artistId || docSnap.id;
-
           return {
             id: docSnap.id,
-            artistId,
-            artistFullName: data.artistFullName || 'Untitled',
-            artistDescription: data.artistDescription || '',
-            artistProfilePhoto: data.artistProfilePhoto || '',
-            rating: data.rating || '',
-            nights: data.nights || '',
-            tracks: data.tracks || [],
+            albumId: data.albumId || docSnap.id,
+            title: data.title || 'Untitled Album',
+            description: data.description || '',
+            coverUrl: data.coverUrl || '',
+            dropCount: typeof data.dropCount === 'number' ? data.dropCount : 0,
           };
         });
-        setArtists(list);
+        setAlbums(list);
         setLoading(false);
+        setError('');
 
         // ---- Restore scroll position if we have one in history.state ----
         const savedY = typeof window.history.state?.homeScrollY === 'number'
@@ -70,20 +59,18 @@ function Home() {
 
       },
       (err) => {
-        console.error('artists snapshot error:', err);
-        setArtists([]);
+        console.error('albums snapshot error:', err);
+        setAlbums([]);
         setLoading(false);
+        setError(err?.message || 'Failed to load albums.');
       }
     );
     return () => unsub();
   }, []);
 
-  // Open the full artist page with a smooth loader transition
-  const openCard = (item) => {
-    const artistUid = item.artistId || item.id;
+  const openAlbum = (album) => {
+    const albumId = album.albumId || album.id;
 
-    // Save current scroll Y into the *current* history entry, so when the user
-    // hits Back, that entry still carries the exact position to restore.
     try {
       const currentState = window.history.state || {};
       window.history.replaceState(
@@ -94,7 +81,7 @@ function Home() {
       // ignore if replaceState is blocked
     }
 
-    navigate(`/artist/${artistUid}`);
+    navigate(`/album/${albumId}`);
   };
 
   const Dashboard = () => (
@@ -112,32 +99,37 @@ function Home() {
       {/* Loading / Empty / Grid */}
       {loading ? (
         <p>Loading…</p>
-      ) : artists.length === 0 ? (
-        <div>
-          <p>No artists yet.</p>
-        </div>
+      ) : error ? (
+        <p style={{ color: '#b91c1c' }}>{error}</p>
+      ) : albums.length === 0 ? (
+        <div><p>No albums yet.</p></div>
       ) : (
         <div className="card-grid" style={{ paddingTop: 6 }}>
-          {artists.map((c) => (
+          {albums.map((album) => (
             <div
               className="glass-card"
-              key={c.artistId}
+              key={album.albumId}
               role="button"
               tabIndex={0}
-              onClick={() => openCard(c)}
-              onKeyDown={(e) => (e.key === 'Enter' ? openCard(c) : null)}
+              onClick={() => openAlbum(album)}
+              onKeyDown={(e) => (e.key === 'Enter' ? openAlbum(album) : null)}
             >
               <div className="card-image-wrap">
-                <img className="card-image" src={c.artistProfilePhoto} alt={c.artistFullName || 'Artist'} />
-                <div className="card-gradient" />
+                {album.coverUrl ? (
+                  <>
+                    <img className="card-image" src={album.coverUrl} alt={album.title || 'Album'} />
+                    <div className="card-gradient" />
+                  </>
+                ) : (
+                  <div className="album-placeholder">No Cover</div>
+                )}
                 <div className="card-text-overlay">
-                  <h2>{truncate(c.artistFullName || 'Untitled', 30)}</h2>
-                  <p>{truncate(c.artistDescription || '', 50)}</p>
+                  <h2>{truncate(album.title || 'Untitled', 30)}</h2>
+                  <p>{truncate(album.description || '', 80)}</p>
                   <div className={layoutStyles.chips}>
-                    {c.rating && <span>{c.rating}</span>}
-                    {c.nights && <span>{c.nights}</span>}
+                    <span>{album.dropCount === 1 ? '1 drop' : `${album.dropCount} drops`}</span>
                   </div>
-                  <button>Open</button>
+                  <button type="button">View Album</button>
                 </div>
               </div>
             </div>
@@ -146,17 +138,6 @@ function Home() {
       )}
     </>
   );
-
-  const renderTab = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'cart':
-        return <h2 style={{ marginTop: 86 }}>🛒 Shopping Cart (Coming soon)</h2>;
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className={layoutStyles.homeContainer} style={{ paddingBottom: 0 }}>
@@ -169,7 +150,9 @@ function Home() {
       <div className="build-badge" aria-label="Build tag">{UI_BUILD_TAG}</div>
 
       {/* Page content */}
-      <div className="home-content">{renderTab()}</div>
+      <div className="home-content">
+        <Dashboard />
+      </div>
 
       {/* No sidebar — topbar tabs only */}
     </div>

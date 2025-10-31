@@ -96,6 +96,14 @@ export const createStripeCheckoutSession = onRequest(
         return;
       }
 
+      const buyerUid = String(payload.buyerUid || '').trim();
+      if (!buyerUid) {
+        res.status(400).json({ error: 'missing_buyer_uid' });
+        return;
+      }
+
+      const buyerEmail = String(payload.buyerEmail || '').trim();
+
       const dropSnap = await db.collection('drops').doc(dropId).get();
       if (!dropSnap.exists) {
         res.status(404).json({ error: 'drop_not_found' });
@@ -115,9 +123,43 @@ export const createStripeCheckoutSession = onRequest(
         return;
       }
 
+      const userSnap = await db.collection('users').doc(buyerUid).get();
+      if (!userSnap.exists) {
+        res.status(404).json({ error: 'user_not_found' });
+        return;
+      }
+
+      const user = userSnap.data() || {};
+      const primaryEmail = String(user.email || user.contactEmail || '').trim();
+      const effectiveEmail = buyerEmail || primaryEmail;
+
       const stripe = getStripe();
       const unitAmount = Math.round(amount * 100);
       const displayName = drop.title || `Drop ${dropId}`;
+
+      let stripeCustomerId = String(user.stripeCustomerId || '').trim();
+      if (!stripeCustomerId) {
+        try {
+          const customer = await stripe.customers.create({
+            email: effectiveEmail || undefined,
+            metadata: {
+              uid: buyerUid,
+            },
+          });
+          stripeCustomerId = customer.id;
+          await db.collection('users').doc(buyerUid).set(
+            {
+              stripeCustomerId,
+              stripeCustomerCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (customerError) {
+          logger.error('[createStripeCheckoutSession] failed_to_create_customer', customerError);
+          res.status(500).json({ error: 'customer_creation_failed' });
+          return;
+        }
+      }
 
       const baseUrl = payload.baseUrl || origin || 'https://example.com';
       const successUrl = payload.successUrl || `${baseUrl.replace(/\/$/, '')}/drop/${dropId}?status=success`;
@@ -126,6 +168,7 @@ export const createStripeCheckoutSession = onRequest(
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         payment_method_types: ['card'],
+        customer: stripeCustomerId || undefined,
         line_items: [
           {
             quantity: 1,
@@ -143,6 +186,7 @@ export const createStripeCheckoutSession = onRequest(
         ],
         metadata: {
           dropId,
+          buyerUid,
         },
         success_url: successUrl,
         cancel_url: cancelUrl,
@@ -155,4 +199,3 @@ export const createStripeCheckoutSession = onRequest(
     }
   }
 );
-
