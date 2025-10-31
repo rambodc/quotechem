@@ -201,6 +201,7 @@ export default function DropDetail() {
           baseUrl: window.location.origin,
           buyerUid: appUser.id,
           buyerEmail: appUser.email || '',
+          stripeCustomerId: appUser.stripeCustomerId || '',
         }),
       });
 
@@ -224,7 +225,7 @@ export default function DropDetail() {
     } finally {
       setCheckoutBusy(false);
     }
-  }, [appUser?.email, appUser?.id, drop?.dropId]);
+  }, [appUser?.email, appUser?.id, appUser?.stripeCustomerId, drop?.dropId]);
 
   return (
     <div className={layoutStyles.detailPage}>

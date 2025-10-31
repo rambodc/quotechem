@@ -1,31 +1,6 @@
-// Test2
-
-
-
 import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
-import admin from 'firebase-admin';
-import Stripe from 'stripe';
-
-const STRIPE_SECRET_KEY = defineSecret('STRIPE_SECRET_KEY');
-
-try { admin.app(); } catch { admin.initializeApp(); }
-const db = admin.firestore();
-
-let stripeClient = null;
-function getStripe() {
-  if (!stripeClient) {
-    const secret = STRIPE_SECRET_KEY.value();
-    if (!secret) {
-      throw new Error('missing_stripe_secret');
-    }
-    stripeClient = new Stripe(secret, {
-      apiVersion: '2023-10-16',
-    });
-  }
-  return stripeClient;
-}
+import { STRIPE_SECRET_KEY, getStripe, db, admin } from './stripeClient.js';
 
 function parseBody(body) {
   if (!body) return {};
@@ -103,6 +78,7 @@ export const createStripeCheckoutSession = onRequest(
       }
 
       const buyerEmail = String(payload.buyerEmail || '').trim();
+      const providedCustomerId = String(payload.stripeCustomerId || '').trim();
 
       const dropSnap = await db.collection('drops').doc(dropId).get();
       if (!dropSnap.exists) {
@@ -123,7 +99,8 @@ export const createStripeCheckoutSession = onRequest(
         return;
       }
 
-      const userSnap = await db.collection('users').doc(buyerUid).get();
+      const userRef = db.collection('users').doc(buyerUid);
+      const userSnap = await userRef.get();
       if (!userSnap.exists) {
         res.status(404).json({ error: 'user_not_found' });
         return;
@@ -137,7 +114,16 @@ export const createStripeCheckoutSession = onRequest(
       const unitAmount = Math.round(amount * 100);
       const displayName = drop.title || `Drop ${dropId}`;
 
-      let stripeCustomerId = String(user.stripeCustomerId || '').trim();
+      let stripeCustomerId = providedCustomerId || String(user.stripeCustomerId || '').trim();
+      if (stripeCustomerId) {
+        try {
+          await stripe.customers.retrieve(stripeCustomerId);
+        } catch (retrieveErr) {
+          logger.warn('[createStripeCheckoutSession] provided customer invalid, will recreate', retrieveErr?.message || retrieveErr);
+          stripeCustomerId = '';
+        }
+      }
+
       if (!stripeCustomerId) {
         try {
           const customer = await stripe.customers.create({
@@ -147,7 +133,7 @@ export const createStripeCheckoutSession = onRequest(
             },
           });
           stripeCustomerId = customer.id;
-          await db.collection('users').doc(buyerUid).set(
+          await userRef.set(
             {
               stripeCustomerId,
               stripeCustomerCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -158,6 +144,21 @@ export const createStripeCheckoutSession = onRequest(
           logger.error('[createStripeCheckoutSession] failed_to_create_customer', customerError);
           res.status(500).json({ error: 'customer_creation_failed' });
           return;
+        }
+      } else if (effectiveEmail) {
+        try {
+          await stripe.customers.update(stripeCustomerId, {
+            email: effectiveEmail,
+          });
+          await userRef.set(
+            {
+              stripeCustomerId,
+              email: user.email || effectiveEmail,
+            },
+            { merge: true }
+          );
+        } catch (updateErr) {
+          logger.warn('[createStripeCheckoutSession] unable to update customer email', updateErr?.message || updateErr);
         }
       }
 

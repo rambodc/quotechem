@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useEffect, useState, createContext } from 'react';
+import React, { useEffect, useState, useRef, createContext } from 'react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -8,8 +8,9 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth, db } from './firebase';
+import { auth, db, functions } from './firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 // Public pages
 import LandingPage from './landing/LandingPage';
@@ -198,6 +199,7 @@ function App() {
   const [appUser, setAppUser] = useState(null);                // canonical /users/{uid} doc
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [checkingProfile, setCheckingProfile] = useState(true);
+  const ensureStripeCustomerPromiseRef = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -242,6 +244,35 @@ function App() {
 
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (!appUser?.id) return;
+    if (appUser?.stripeCustomerId) return;
+
+    if (ensureStripeCustomerPromiseRef.current) return;
+
+    const ensureCallable = httpsCallable(functions, 'ensureStripeCustomer');
+    const payload = {
+      email: appUser.email || '',
+      name: `${appUser.firstName || ''} ${appUser.lastName || ''}`.trim(),
+    };
+
+    ensureStripeCustomerPromiseRef.current = ensureCallable(payload)
+      .then((result) => {
+        const stripeCustomerId = result?.data?.stripeCustomerId;
+        if (stripeCustomerId) {
+          setAppUser((prev) =>
+            prev ? { ...prev, stripeCustomerId } : prev
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to ensure Stripe customer:', err);
+      })
+      .finally(() => {
+        ensureStripeCustomerPromiseRef.current = null;
+      });
+  }, [appUser, setAppUser]);
 
   if (checkingAuth || checkingProfile) return null; // could render a loader if you prefer
 
