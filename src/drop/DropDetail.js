@@ -118,7 +118,10 @@ export default function DropDetail() {
   const formattedPurchaseAmount = hasPurchasePrice
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: purchaseCurrency }).format(drop.purchaseNowAmount)
     : '';
-  const showPurchaseButton = isPurchaseNow && hasPurchasePrice;
+  const purchasedByUid = drop?.purchasedByUid || '';
+  const isSoldOut = Boolean(purchasedByUid);
+  const isOwnedByCurrentUser = isSoldOut && purchasedByUid === appUser?.id;
+  const showPurchaseButton = isPurchaseNow && hasPurchasePrice && !isSoldOut;
 
   const detailRows = useMemo(() => {
     if (!drop) return [];
@@ -157,6 +160,14 @@ export default function DropDetail() {
       { label: 'Version', value: drop.dropVersion?.toUpperCase() },
       { label: 'Artist ID', value: drop.artistId },
       { label: 'Owned By UID', value: drop.ownedByUid },
+      {
+        label: 'Purchased By',
+        value: purchasedByUid
+          ? purchasedByUid === appUser?.id
+            ? 'You'
+            : purchasedByUid
+          : '',
+      },
       { label: 'URI', value: uriValue },
       { label: 'Purchase Type', value: purchaseTypeLabel },
       { label: 'Price', value: hasPurchasePrice ? formattedPurchaseAmount : '' },
@@ -167,6 +178,8 @@ export default function DropDetail() {
     drop,
     formattedPurchaseAmount,
     hasPurchasePrice,
+    appUser?.id,
+    purchasedByUid,
     navigate,
     purchaseCurrency,
     purchaseTypeLabel,
@@ -180,6 +193,14 @@ export default function DropDetail() {
     if (!drop?.dropId) return;
     if (!appUser?.id) {
       setCheckoutError('You need an account to purchase this drop.');
+      return;
+    }
+    if (purchasedByUid) {
+      setCheckoutError(
+        purchasedByUid === appUser.id
+          ? 'You already own this collectible.'
+          : 'This collectible has already been claimed by another collector.'
+      );
       return;
     }
     try {
@@ -225,7 +246,7 @@ export default function DropDetail() {
     } finally {
       setCheckoutBusy(false);
     }
-  }, [appUser?.email, appUser?.id, appUser?.stripeCustomerId, drop?.dropId]);
+  }, [appUser?.email, appUser?.id, appUser?.stripeCustomerId, drop?.dropId, purchasedByUid]);
 
   return (
     <div className={layoutStyles.detailPage}>
@@ -257,6 +278,11 @@ export default function DropDetail() {
                 <h1 className={styles.title}>{drop.title || 'Untitled Drop'}</h1>
                 {drop.description ? (
                   <p className={styles.description}>{drop.description}</p>
+                ) : null}
+                {isOwnedByCurrentUser ? (
+                  <div className={styles.dropStatusOwned}>You already own this collectible.</div>
+                ) : isSoldOut ? (
+                  <div className={styles.dropStatusSold}>This collectible has been claimed by another collector.</div>
                 ) : null}
                 {drop.albumId ? (
                   <>

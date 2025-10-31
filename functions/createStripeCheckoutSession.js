@@ -170,6 +170,12 @@ export const createStripeCheckoutSession = onRequest(
         mode: 'payment',
         payment_method_types: ['card'],
         customer: stripeCustomerId || undefined,
+        payment_intent_data: {
+          metadata: {
+            dropId,
+            buyerUid,
+          },
+        },
         line_items: [
           {
             quantity: 1,

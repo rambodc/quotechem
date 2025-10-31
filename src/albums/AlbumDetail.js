@@ -1,5 +1,5 @@
 // src/albums/AlbumDetail.js
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   collection,
@@ -14,10 +14,12 @@ import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './AlbumDetail.module.css';
 import { db } from '../firebase';
+import { UserContext } from '../App';
 
 export default function AlbumDetail() {
   const { albumId } = useParams();
   const navigate = useNavigate();
+  const appUser = useContext(UserContext);
 
   const [album, setAlbum] = useState(null);
   const [albumLoading, setAlbumLoading] = useState(true);
@@ -106,6 +108,8 @@ export default function AlbumDetail() {
               type: data.type || '',
               dropVersion: data.dropVersion || '',
               tokenId: data.tokenId || '',
+              purchasedByUid: data.purchasedByUid || '',
+              purchasedAt: data.purchasedAt || null,
             };
           });
 
@@ -135,6 +139,7 @@ export default function AlbumDetail() {
   }, [albumId]);
 
   const dropCards = useMemo(() => {
+    const currentUid = appUser?.id || '';
     if (dropsLoading) {
       return <p className={styles.statusText}>Loading drops…</p>;
     }
@@ -149,39 +154,60 @@ export default function AlbumDetail() {
 
     return (
       <div className={styles.dropsGrid}>
-        {drops.map((drop) => (
-          <button
-            key={drop.id}
-            type="button"
-            className={styles.dropCard}
-            onClick={() => navigate(`/drop/${drop.dropId}`)}
-          >
-            <div className={styles.dropMedia}>
-              {drop.mediaUrl ? (
-                drop.mediaType === 'video' ? (
-                  <video src={drop.mediaUrl} muted autoPlay loop playsInline />
+        {drops.map((drop) => {
+          const ownedByCurrent = drop.purchasedByUid && drop.purchasedByUid === currentUid;
+          const soldToAnother = drop.purchasedByUid && drop.purchasedByUid !== currentUid;
+          let statusLabel = 'Available';
+          let statusClass = styles.statusAvailable;
+          if (ownedByCurrent) {
+            statusLabel = 'Purchased';
+            statusClass = styles.statusOwned;
+          } else if (soldToAnother) {
+            statusLabel = 'Sold';
+            statusClass = styles.statusSold;
+          }
+          return (
+            <button
+              key={drop.id}
+              type="button"
+              className={styles.dropCard}
+              onClick={() => navigate(`/drop/${drop.dropId}`)}
+            >
+              <div className={styles.dropMedia}>
+                {drop.mediaUrl ? (
+                  drop.mediaType === 'video' ? (
+                    <video src={drop.mediaUrl} muted autoPlay loop playsInline />
+                  ) : (
+                    <img src={drop.mediaUrl} alt={drop.title} />
+                  )
                 ) : (
-                  <img src={drop.mediaUrl} alt={drop.title} />
-                )
-              ) : (
-                <div className={styles.dropPlaceholder}>No Media</div>
-              )}
-            </div>
-            <div>
-              <h3 className={styles.dropTitle}>{drop.title}</h3>
-              <div className={styles.dropMeta}>
-                {drop.type ? <span>{drop.type}</span> : null}
-                {drop.dropVersion ? <span>{drop.dropVersion.toUpperCase()}</span> : null}
-                {drop.tokenId ? <span>Token {drop.tokenId}</span> : null}
+                  <div className={styles.dropPlaceholder}>No Media</div>
+                )}
+                <span className={`${styles.statusChip} ${statusClass}`}>{statusLabel}</span>
               </div>
-            </div>
-          </button>
-        ))}
+              <div>
+                <h3 className={styles.dropTitle}>{drop.title}</h3>
+                <div className={styles.dropMeta}>
+                  {drop.type ? <span>{drop.type}</span> : null}
+                  {drop.dropVersion ? <span>{drop.dropVersion.toUpperCase()}</span> : null}
+                  {drop.tokenId ? <span>Token {drop.tokenId}</span> : null}
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     );
-  }, [drops, dropsError, dropsLoading, navigate]);
+  }, [appUser?.id, drops, dropsError, dropsLoading, navigate]);
 
   const dropCountLabel = album?.dropCount === 1 ? '1 drop' : `${album?.dropCount || 0} drops`;
+  const totalDrops = drops.length;
+  const ownedDrops = useMemo(() => {
+    const currentUid = appUser?.id;
+    if (!currentUid) return 0;
+    return drops.filter((drop) => drop.purchasedByUid === currentUid).length;
+  }, [appUser?.id, drops]);
+  const albumComplete = totalDrops > 0 && ownedDrops === totalDrops;
 
   return (
     <div className={layoutStyles.detailPage}>
@@ -212,6 +238,16 @@ export default function AlbumDetail() {
                   <span>{dropCountLabel}</span>
                   <span>Album ID: {album.albumId || albumId}</span>
                 </div>
+                {totalDrops > 0 ? (
+                  <div className={styles.progressBar}>
+                    <span className={styles.progressLabel}>
+                      You own {ownedDrops} of {totalDrops} drops
+                    </span>
+                    {albumComplete ? (
+                      <span className={styles.progressBadge}>Album Complete</span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </section>
 

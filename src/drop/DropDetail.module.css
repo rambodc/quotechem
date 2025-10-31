@@ -110,6 +110,25 @@
   white-space: pre-line;
 }
 
+.dropStatusOwned,
+.dropStatusSold {
+  margin-top: 14px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+}
+
+.dropStatusOwned {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.dropStatusSold {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .albumBadge {
   margin-top: 18px;
   display: inline-flex;

@@ -61,19 +61,47 @@ export const stripeWebhook = onRequest(
           );
 
           if (dropId) {
-            await db
-              .collection('drops')
-              .doc(dropId)
-              .set(
-                {
-                  lastPurchaseAt: admin.firestore.FieldValue.serverTimestamp(),
-                  lastPurchaseBuyerUid: buyerUid,
-                },
-                { merge: true }
-              );
+            const dropRef = db.collection('drops').doc(dropId);
+            await db.runTransaction(async (transaction) => {
+              const dropSnap = await transaction.get(dropRef);
+              if (!dropSnap.exists) return;
+              const dropData = dropSnap.data() || {};
+
+              const alreadyPurchased = Boolean(dropData.purchasedByUid);
+              const isSameBuyer = alreadyPurchased && dropData.purchasedByUid === buyerUid;
+              if (alreadyPurchased && !isSameBuyer) {
+                logger.warn('[stripeWebhook] drop already purchased by another user', { dropId, buyerUid });
+                return;
+              }
+
+              const updates = {
+                lastPurchaseAt: admin.firestore.FieldValue.serverTimestamp(),
+                lastPurchaseBuyerUid: buyerUid,
+                purchasedByUid: buyerUid,
+                purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
+                purchasedPaymentIntentId: session.payment_intent || null,
+                purchasedCurrency: session.currency ? session.currency.toUpperCase() : null,
+                purchasedAmountCents: amountTotal,
+              };
+
+              transaction.set(dropRef, updates, { merge: true });
+
+              const albumId = dropData.albumId || dropData.albumID; // fallback if older casing
+              if (albumId) {
+                const albumRef = db.collection('albums').doc(albumId);
+                transaction.set(
+                  albumRef,
+                  {
+                    lastPurchaseAt: admin.firestore.FieldValue.serverTimestamp(),
+                    purchasedDropCount: admin.firestore.FieldValue.increment(isSameBuyer ? 0 : 1),
+                  },
+                  { merge: true }
+                );
+              }
+            });
           }
-          break;
-        }
+         break;
+       }
         case 'payment_intent.payment_failed': {
           const intent = event.data.object;
           const buyerUid = intent.metadata?.buyerUid;
