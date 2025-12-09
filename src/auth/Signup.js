@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { setDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, getDoc, runTransaction } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import './Auth.css';
 
@@ -15,6 +15,7 @@ function Signup() {
 
   const [firstName, setFirstName] = useState('');
   const [lastName,  setLastName]  = useState('');
+  const [username,  setUsername]  = useState('');
   const [email,     setEmail]     = useState('');
   const [password,  setPassword]  = useState('');
   const [error,     setError]     = useState('');
@@ -27,17 +28,33 @@ function Signup() {
     setError('');
     setLoading(true);
 
+    let createdUser = null;
+
     try {
+      const trimmedUsername = username.trim();
+      if (trimmedUsername.length < 3) {
+        throw new Error('Username must be at least 3 characters.');
+      }
+      const normalizedUsername = trimmedUsername.toLowerCase();
+      const usernameRef = doc(db, 'usernames', normalizedUsername);
+      const existingUsername = await getDoc(usernameRef);
+      if (existingUsername.exists()) {
+        throw new Error('That username is already taken. Please choose another.');
+      }
+
       // 1) Create Firebase Auth user
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const user = cred.user;
+      createdUser = user;
 
-      // 2) Build profile doc (canonical user) — use auth.uid as ID
+      // 2) Reserve username + write profile doc atomically
       const now = serverTimestamp();
       const profileDoc = {
         uid: user.uid,
         firstName,
         lastName,
+        username: trimmedUsername,
+        usernameNormalized: normalizedUsername,
         email: user.email || email,
         photoURL: user.photoURL || '',
         identities: [
@@ -48,10 +65,21 @@ function Signup() {
         updatedAt: now,
       };
 
-      // 3) Write /users/{auth.uid}
-      await setDoc(doc(db, 'users', user.uid), profileDoc, { merge: true });
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(usernameRef);
+        if (snap.exists()) {
+          throw new Error('That username is already taken. Please choose another.');
+        }
+        tx.set(usernameRef, {
+          uid: user.uid,
+          username: trimmedUsername,
+          normalized: normalizedUsername,
+          createdAt: now,
+        });
+        tx.set(doc(db, 'users', user.uid), profileDoc, { merge: true });
+      });
 
-      // 4) Send verification email
+      // 3) Send verification email
       await sendEmailVerification(user);
 
       alert('Account created! Please check your email to verify your address.');
@@ -59,6 +87,13 @@ function Signup() {
     } catch (err) {
       console.error(err);
       setError(err.message || 'Signup failed');
+      if (createdUser?.uid) {
+        try {
+          await createdUser.delete();
+        } catch {
+          // Best-effort cleanup only
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -93,6 +128,14 @@ function Signup() {
           placeholder="Last Name"
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
+          required
+        />
+
+        <input
+          type="text"
+          placeholder="Username (unique)"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           required
         />
 
