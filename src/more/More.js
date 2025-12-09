@@ -1,8 +1,9 @@
 // src/More.js
-import React from 'react';
+import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
+import { UserContext } from '../App';
 import TopBar from '../components/TopBar';
 import MobileNavTabs from '../components/MobileNavTabs';
 import layoutStyles from '../styles/layout.module.css';
@@ -24,6 +25,7 @@ import {
 
 export default function More() {
   const navigate = useNavigate();
+  const appUser = useContext(UserContext);
 
   const onLogout = async () => {
     await signOut(auth);
@@ -53,6 +55,24 @@ export default function More() {
       <div className={styles.pageShell}>
         <div className={styles.pageInner}>
           <h1 style={{ margin: '0 0 20px', textAlign: 'center' }}>More</h1>
+          {appUser ? (
+            <div className={styles.profileCard}>
+              <div className={styles.profileLine}>
+                <span className={styles.profileLabel}>Name</span>
+                <span className={styles.profileValue}>
+                  {(appUser.firstName || '') + ' ' + (appUser.lastName || '')}
+                </span>
+              </div>
+              <div className={styles.profileLine}>
+                <span className={styles.profileLabel}>Email</span>
+                <span className={styles.profileValue}>{appUser.email || '—'}</span>
+              </div>
+              <div className={styles.profileLine}>
+                <span className={styles.profileLabel}>Username</span>
+                <span className={styles.profileValue}>{appUser.username || '—'}</span>
+              </div>
+            </div>
+          ) : null}
 
           <div className={styles.list}>
             <Item icon={FaUserCog} color="#111827" label="Account" onClick={() => navigate('/account')} />

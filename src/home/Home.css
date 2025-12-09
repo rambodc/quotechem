@@ -4,36 +4,9 @@
   flex: 1;
   padding: 0.5rem;
   max-width: 1200px;
-  margin: 0 auto;
+  margin: 64px auto 0;
   text-align: center;
-  /* Leave space for fixed top nav (~52px) + a bit of breathing room */
-  margin-top: 64px;
 }
-
-/* Build/version badge shown at top so you can confirm new deploys */
-.build-badge {
-  position: fixed;
-  top: 56px; /* just under the fixed TopBar */
-  right: 10px;
-  z-index: 1000;
-  background: #111;
-  color: #fff;
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.3px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  box-shadow: 0 6px 18px rgba(0,0,0,.18);
-  opacity: 0.9;
-}
-
-.email-text { color: #444; margin-top: 6px; }
-
-/* Dashboard Topbar (scrolls with content) */
-.home-topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 20px; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; }
-.home-topbar-left { text-align: left; }
-.home-welcome { margin: 0; font-size: 1.25rem; font-weight: 600; }
-.home-topbar-right { display: flex; align-items: center; }
 
 /* Grid + Card (Home listing) */
 .card-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); justify-items: center; }

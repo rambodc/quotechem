@@ -4,7 +4,7 @@ import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './Account.module.css';
 import { useNavigate } from 'react-router-dom';
-import { FaChevronRight, FaEnvelope, FaKey } from 'react-icons/fa';
+import { FaChevronRight, FaEnvelope, FaKey, FaUserTag } from 'react-icons/fa';
 
 function Item({ icon: Icon, label, onClick, color = '#111827' }) {
   return (
@@ -35,6 +35,7 @@ export default function Account() {
           <div className={styles.list}>
             <Item icon={FaEnvelope} color="#22c55e" label="Change Email" onClick={() => navigate('/account/email')} />
             <Item icon={FaKey} color="#f59e0b" label="Change Password" onClick={() => navigate('/account/password')} />
+            <Item icon={FaUserTag} color="#2563eb" label="Edit Username" onClick={() => navigate('/username')} />
           </div>
         </div>
       </div>

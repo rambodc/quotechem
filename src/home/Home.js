@@ -87,17 +87,6 @@ function Home() {
 
   const Dashboard = () => (
     <>
-      {/* Welcome message */}
-      <div className="home-topbar" style={{ marginTop: 64 }}>
-        <div className="home-topbar-left">
-          <h1 className="home-welcome">
-            Welcome, {appUser?.firstName || 'Friend'} {appUser?.lastName || ''} 👋
-          </h1>
-          {appUser?.email && <p className="email-text">Email: {appUser.email}</p>}
-        </div>
-      </div>
-
-      {/* Loading / Empty / Grid */}
       {loading ? (
         <p>Loading…</p>
       ) : error ? (
@@ -151,9 +140,6 @@ function Home() {
       <TopBar hideLeft>
         <MobileNavTabs />
       </TopBar>
-
-      {/* Small build/version badge so you can spot new deploys */}
-      <div className="build-badge" aria-label="Build tag">{UI_BUILD_TAG}</div>
 
       {/* Page content */}
       <div className="home-content">
