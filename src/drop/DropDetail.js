@@ -2,7 +2,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { FiChevronDown } from 'react-icons/fi';
+import { FiChevronDown, FiUser } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './DropDetail.module.css';
@@ -28,6 +28,9 @@ export default function DropDetail() {
   const [album, setAlbum] = useState(null);
   const [albumLoading, setAlbumLoading] = useState(false);
   const [albumError, setAlbumError] = useState('');
+  const [artist, setArtist] = useState(null);
+  const [artistLoading, setArtistLoading] = useState(false);
+  const [artistError, setArtistError] = useState('');
 
   const handleBack = useCallback(() => {
     if (window.history.length > 2) {
@@ -107,6 +110,44 @@ export default function DropDetail() {
     };
   }, [drop?.albumId]);
 
+  useEffect(() => {
+    if (!drop?.artistId) {
+      setArtist(null);
+      setArtistError('');
+      setArtistLoading(false);
+      return;
+    }
+
+    let active = true;
+    setArtistLoading(true);
+    setArtistError('');
+
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'artists', drop.artistId));
+        if (!active) return;
+
+        if (snap.exists()) {
+          setArtist(snap.data());
+        } else {
+          setArtist(null);
+          setArtistError('Artist not found.');
+        }
+      } catch (err) {
+        if (!active) return;
+        console.error('artist fetch error:', err);
+        setArtist(null);
+        setArtistError('Unable to load artist right now.');
+      } finally {
+        if (active) setArtistLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [drop?.artistId]);
+
   const mediaUrl = drop?.mediaUrl || drop?.mediaPhoto || '';
   const derivedMediaType = drop?.mediaType || (mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4') ? 'video' : mediaUrl ? 'image' : '');
   const purchaseTypeLabel = drop?.purchaseType === 'purchase_now' ? 'Purchase Now' : drop?.purchaseType === 'bid' ? 'Bid' : '';
@@ -158,7 +199,18 @@ export default function DropDetail() {
       { label: 'Token ID', value: drop.tokenId },
       { label: 'Type', value: drop.type },
       { label: 'Version', value: drop.dropVersion?.toUpperCase() },
-      { label: 'Artist ID', value: drop.artistId },
+      {
+        label: 'Artist',
+        value: drop.artistId ? (
+          <button
+            type="button"
+            className={styles.detailLinkButton}
+            onClick={() => navigate(`/artist/${drop.artistId}`)}
+          >
+            {artist?.artistFullName || drop.artistName || drop.artistId}
+          </button>
+        ) : '',
+      },
       { label: 'Owned By UID', value: drop.ownedByUid },
       {
         label: 'Purchased By',
@@ -175,6 +227,7 @@ export default function DropDetail() {
     ].filter((row) => row.value);
   }, [
     album,
+    artist?.artistFullName,
     drop,
     formattedPurchaseAmount,
     hasPurchasePrice,
@@ -186,6 +239,8 @@ export default function DropDetail() {
   ]);
 
   const albumNameDisplay = drop?.albumId ? album?.title || drop.albumTitle || drop.albumId : '';
+  const artistNameDisplay = drop?.artistId ? artist?.artistFullName || drop.artistName || 'Artist' : '';
+  const artistAvatar = artist?.artistProfilePhoto || '';
   const hasMoreDetails = detailRows.length > 0;
   const toggleLabel = showDetails ? 'Hide Details' : 'More Info';
 
@@ -283,6 +338,32 @@ export default function DropDetail() {
                   <div className={styles.dropStatusOwned}>You already own this collectible.</div>
                 ) : isSoldOut ? (
                   <div className={styles.dropStatusSold}>This collectible has been claimed by another collector.</div>
+                ) : null}
+                {drop.artistId ? (
+                  <div className={styles.artistRow}>
+                    <button
+                      type="button"
+                      className={styles.artistChip}
+                      onClick={() => navigate(`/artist/${drop.artistId}`)}
+                    >
+                      {artistAvatar ? (
+                        <img src={artistAvatar} alt={artistNameDisplay} className={styles.artistAvatar} />
+                      ) : (
+                        <div className={styles.artistAvatarFallback}>
+                          <FiUser size={16} />
+                        </div>
+                      )}
+                      <div className={styles.artistMeta}>
+                        <span className={styles.artistLabel}>Artist</span>
+                        <span className={styles.artistName}>{artistNameDisplay}</span>
+                      </div>
+                    </button>
+                    {artistLoading ? (
+                      <span className={styles.artistStatus}>Loading…</span>
+                    ) : artistError ? (
+                      <span className={styles.artistError}>{artistError}</span>
+                    ) : null}
+                  </div>
                 ) : null}
                 {drop.albumId ? (
                   <>
