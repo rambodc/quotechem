@@ -139,8 +139,6 @@ export default function AlbumDetail() {
   }, [albumId]);
 
   const dropCards = useMemo(() => {
-    const currentUid = appUser?.id || '';
-    const purchasedDrops = drops.filter((drop) => drop.purchasedByUid === currentUid);
     if (dropsLoading) {
       return <p className={styles.statusText}>Loading drops…</p>;
     }
@@ -153,13 +151,9 @@ export default function AlbumDetail() {
       return <p className={styles.statusText}>No drops assigned to this album yet.</p>;
     }
 
-    if (purchasedDrops.length === 0) {
-      return <p className={styles.statusText}>You haven’t purchased any drops from this album yet.</p>;
-    }
-
     return (
       <div className={styles.dropsGrid}>
-        {purchasedDrops.map((drop) => (
+        {drops.map((drop) => (
           <button
             key={drop.id}
             type="button"
@@ -189,7 +183,7 @@ export default function AlbumDetail() {
         ))}
       </div>
     );
-  }, [appUser?.id, drops, dropsError, dropsLoading, navigate]);
+  }, [drops, dropsError, dropsLoading, navigate]);
 
   const dropCountLabel = album?.dropCount === 1 ? '1 drop' : `${album?.dropCount || 0} drops`;
 
