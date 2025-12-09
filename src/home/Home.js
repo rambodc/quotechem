@@ -9,6 +9,7 @@ import MobileNavTabs from '../components/MobileNavTabs';
 import layoutStyles from '../styles/layout.module.css';
 import './Home.css';
 import { UI_BUILD_TAG } from '../version';
+import { FiDisc } from 'react-icons/fi';
 
 function Home() {
   const appUser = useContext(UserContext);
@@ -115,22 +116,27 @@ function Home() {
               onKeyDown={(e) => (e.key === 'Enter' ? openAlbum(album) : null)}
             >
               <div className="card-image-wrap">
+                <div className="album-badge">
+                  <FiDisc size={14} />
+                  <span>Album</span>
+                </div>
                 {album.coverUrl ? (
-                  <>
-                    <img className="card-image" src={album.coverUrl} alt={album.title || 'Album'} />
-                    <div className="card-gradient" />
-                  </>
+                  <img className="card-image" src={album.coverUrl} alt={album.title || 'Album'} />
                 ) : (
                   <div className="album-placeholder">No Cover</div>
                 )}
-                <div className="card-text-overlay">
-                  <h2>{truncate(album.title || 'Untitled', 30)}</h2>
-                  <p>{truncate(album.description || '', 80)}</p>
-                  <div className={layoutStyles.chips}>
-                    <span>{album.dropCount === 1 ? '1 drop' : `${album.dropCount} drops`}</span>
-                  </div>
-                  <button type="button">View Album</button>
+              </div>
+              <div className="card-body">
+                <div className="card-meta">
+                  <FiDisc size={14} />
+                  <span>Album</span>
                 </div>
+                <h2>{truncate(album.title || 'Untitled', 32)}</h2>
+                <p>{truncate(album.description || '', 120)}</p>
+                <div className="card-chips">
+                  <span>{album.dropCount === 1 ? '1 drop' : `${album.dropCount} drops`}</span>
+                </div>
+                <button type="button" className="card-cta">Open Album</button>
               </div>
             </div>
           ))}

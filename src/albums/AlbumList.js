@@ -63,7 +63,7 @@ export default function AlbumList() {
 
     const dropsQuery = query(
       collection(db, 'drops'),
-      where('ownedByUid', '==', appUser.id)
+      where('purchasedByUid', '==', appUser.id)
     );
 
     const unsubscribe = onSnapshot(
