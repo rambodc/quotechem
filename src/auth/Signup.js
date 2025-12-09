@@ -15,13 +15,47 @@ function Signup() {
 
   const [firstName, setFirstName] = useState('');
   const [lastName,  setLastName]  = useState('');
-  const [username,  setUsername]  = useState('');
   const [email,     setEmail]     = useState('');
   const [password,  setPassword]  = useState('');
   const [error,     setError]     = useState('');
   const [loading,   setLoading]   = useState(false);
 
   const navigate = useNavigate();
+
+  const normalizeUsername = (value) => {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 24);
+  };
+
+  const buildBaseUsername = () => {
+    const baseFromName = normalizeUsername(`${firstName}${lastName}` || '');
+    if (baseFromName.length >= 3) return baseFromName;
+    const emailPrefix = normalizeUsername(email.split('@')[0] || '');
+    if (emailPrefix.length >= 3) return emailPrefix;
+    return `user${Math.floor(Math.random() * 9000) + 1000}`;
+  };
+
+  const findAvailableUsername = async (base) => {
+    let attempt = 0;
+    let candidate = base || 'user';
+
+    while (attempt < 20) {
+      const normalized = normalizeUsername(candidate);
+      if (normalized.length >= 3) {
+        const ref = doc(db, 'usernames', normalized);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) {
+          return { username: candidate, normalized };
+        }
+      }
+      candidate = `${base}${Math.floor(Math.random() * 9000) + 1000}`;
+      attempt += 1;
+    }
+    throw new Error('Unable to generate a username right now. Please try again.');
+  };
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -31,30 +65,17 @@ function Signup() {
     let createdUser = null;
 
     try {
-      const trimmedUsername = username.trim();
-      if (trimmedUsername.length < 3) {
-        throw new Error('Username must be at least 3 characters.');
-      }
-      const normalizedUsername = trimmedUsername.toLowerCase();
-      const usernameRef = doc(db, 'usernames', normalizedUsername);
-      const existingUsername = await getDoc(usernameRef);
-      if (existingUsername.exists()) {
-        throw new Error('That username is already taken. Please choose another.');
-      }
-
       // 1) Create Firebase Auth user
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const user = cred.user;
       createdUser = user;
 
-      // 2) Reserve username + write profile doc atomically
+      // 2) Build profile doc and reserve an auto-generated username atomically
       const now = serverTimestamp();
-      const profileDoc = {
+      const profileDocBase = {
         uid: user.uid,
         firstName,
         lastName,
-        username: trimmedUsername,
-        usernameNormalized: normalizedUsername,
         email: user.email || email,
         photoURL: user.photoURL || '',
         identities: [
@@ -65,25 +86,37 @@ function Signup() {
         updatedAt: now,
       };
 
+      const baseUsername = buildBaseUsername();
+      const { username: autoUsername, normalized } = await findAvailableUsername(baseUsername);
+
       await runTransaction(db, async (tx) => {
-        const snap = await tx.get(usernameRef);
-        if (snap.exists()) {
+        const unameRef = doc(db, 'usernames', normalized);
+        const unameSnap = await tx.get(unameRef);
+        if (unameSnap.exists()) {
           throw new Error('That username is already taken. Please choose another.');
         }
-        tx.set(usernameRef, {
+        tx.set(unameRef, {
           uid: user.uid,
-          username: trimmedUsername,
-          normalized: normalizedUsername,
+          username: autoUsername,
+          normalized,
           createdAt: now,
+          updatedAt: now,
         });
-        tx.set(doc(db, 'users', user.uid), profileDoc, { merge: true });
+        tx.set(
+          doc(db, 'users', user.uid),
+          {
+            ...profileDocBase,
+            username: autoUsername,
+            usernameNormalized: normalized,
+          },
+          { merge: true }
+        );
       });
 
       // 3) Send verification email
       await sendEmailVerification(user);
 
-      alert('Account created! Please check your email to verify your address.');
-      navigate('/signin');
+      navigate('/username', { state: { fromSignup: true } });
     } catch (err) {
       console.error(err);
       setError(err.message || 'Signup failed');
@@ -133,16 +166,6 @@ function Signup() {
           required
           autoComplete="family-name"
           name="lastName"
-        />
-
-        <input
-          type="text"
-          placeholder="Username (unique)"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-          autoComplete="nickname"
-          name="username"
         />
 
         <input

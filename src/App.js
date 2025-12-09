@@ -36,6 +36,7 @@ import Services from './services/Services';
 import Account from './account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
+import EditUsername from './account/EditUsername';
 
 // Route guard
 import ProtectedRoute from './ProtectedRoute';
@@ -150,6 +151,14 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <Account />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/username"
+          element={
+            <ProtectedRoute>
+              <EditUsername />
             </ProtectedRoute>
           }
         />
