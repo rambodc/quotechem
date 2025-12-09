@@ -121,6 +121,8 @@ function Signup() {
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
           required
+          autoComplete="given-name"
+          name="firstName"
         />
 
         <input
@@ -129,6 +131,8 @@ function Signup() {
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           required
+          autoComplete="family-name"
+          name="lastName"
         />
 
         <input
@@ -137,6 +141,8 @@ function Signup() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
+          autoComplete="nickname"
+          name="username"
         />
 
         <input
@@ -145,6 +151,8 @@ function Signup() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          autoComplete="email"
+          name="email"
         />
 
         <input
@@ -153,6 +161,8 @@ function Signup() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          autoComplete="new-password"
+          name="newPassword"
         />
 
         <button type="submit" disabled={loading}>
