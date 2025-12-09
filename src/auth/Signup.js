@@ -31,7 +31,7 @@ function Signup() {
   };
 
   const buildBaseUsername = () => {
-    const baseFromName = normalizeUsername(`${firstName}${lastName}` || '');
+    const baseFromName = normalizeUsername(`${firstName.trim()}${lastName.trim()}` || '');
     if (baseFromName.length >= 3) return baseFromName;
     const emailPrefix = normalizeUsername(email.split('@')[0] || '');
     if (emailPrefix.length >= 3) return emailPrefix;
@@ -65,6 +65,12 @@ function Signup() {
     let createdUser = null;
 
     try {
+      const trimmedFirst = firstName.trim();
+      const trimmedLast = lastName.trim();
+      if (!trimmedFirst || !trimmedLast) {
+        throw new Error('Please enter your first and last name.');
+      }
+
       // 1) Create Firebase Auth user
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const user = cred.user;
@@ -74,8 +80,8 @@ function Signup() {
       const now = serverTimestamp();
       const profileDocBase = {
         uid: user.uid,
-        firstName,
-        lastName,
+        firstName: trimmedFirst,
+        lastName: trimmedLast,
         email: user.email || email,
         photoURL: user.photoURL || '',
         identities: [
