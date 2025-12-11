@@ -1,7 +1,7 @@
 // src/drop/DropDetail.js
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { FiChevronDown, FiUser } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
@@ -303,6 +303,37 @@ export default function DropDetail() {
     }
   }, [appUser?.email, appUser?.id, appUser?.stripeCustomerId, drop?.dropId, purchasedByUid]);
 
+  const handleFastPurchase = useCallback(async () => {
+    if (!drop?.dropId) return;
+    if (!appUser?.id) {
+      setCheckoutError('You need an account to purchase this drop.');
+      return;
+    }
+    if (purchasedByUid) {
+      setCheckoutError(
+        purchasedByUid === appUser.id
+          ? 'You already own this collectible.'
+          : 'This collectible has already been claimed.'
+      );
+      return;
+    }
+    try {
+      setCheckoutBusy(true);
+      setCheckoutError('');
+      await updateDoc(doc(db, 'drops', drop.dropId), {
+        purchasedByUid: appUser.id,
+        purchasedAt: serverTimestamp(),
+        buyerEmail: appUser.email || '',
+      });
+      setDrop((prev) => (prev ? { ...prev, purchasedByUid: appUser.id } : prev));
+    } catch (err) {
+      console.error('fast purchase error:', err);
+      setCheckoutError(err?.message || 'Unable to complete fast purchase.');
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }, [appUser?.email, appUser?.id, drop?.dropId, purchasedByUid]);
+
   return (
     <div className={layoutStyles.detailPage}>
       <TopBar variant="back" backLabel="Back" onBack={handleBack} />
@@ -401,6 +432,17 @@ export default function DropDetail() {
                     {checkoutBusy ? 'Redirecting…' : `Purchase Now · ${formattedPurchaseAmount}`}
                   </button>
                 </div>
+              )}
+
+              {!isSoldOut && (
+                <button
+                  type="button"
+                  className={styles.fastPurchaseButton}
+                  onClick={handleFastPurchase}
+                  disabled={checkoutBusy}
+                >
+                  {checkoutBusy ? 'Processing…' : 'Fast Purchase'}
+                </button>
               )}
 
               {checkoutError && (

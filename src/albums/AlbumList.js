@@ -13,78 +13,60 @@ export default function AlbumList() {
   const navigate = useNavigate();
   const appUser = useContext(UserContext);
 
-  const [allAlbums, setAllAlbums] = useState([]);
-  const [albumsLoading, setAlbumsLoading] = useState(true);
-  const [albumError, setAlbumError] = useState('');
-
-  const [purchasedAlbumIds, setPurchasedAlbumIds] = useState([]);
+  const [purchasedDrops, setPurchasedDrops] = useState([]);
   const [purchasesLoading, setPurchasesLoading] = useState(true);
   const [purchasesError, setPurchasesError] = useState('');
-
-  useEffect(() => {
-    const albumsQuery = query(collection(db, 'albums'), orderBy('updatedAt', 'desc'));
-    const unsubscribe = onSnapshot(
-      albumsQuery,
-      (snapshot) => {
-        const list = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() || {};
-          return {
-            id: docSnap.id,
-            albumId: data.albumId || docSnap.id,
-            title: data.title || 'Untitled Album',
-            description: data.description || '',
-            coverUrl: data.coverUrl || '',
-            dropCount: typeof data.dropCount === 'number' ? data.dropCount : 0,
-            updatedAt: data.updatedAt,
-          };
-        });
-        setAllAlbums(list);
-        setAlbumsLoading(false);
-        setAlbumError('');
-      },
-      (err) => {
-        console.error('albums snapshot error:', err);
-        setAlbumError(err?.message || 'Failed to load albums.');
-        setAllAlbums([]);
-        setAlbumsLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!appUser?.id) {
-      setPurchasedAlbumIds([]);
+      setPurchasedDrops([]);
       setPurchasesLoading(false);
       setPurchasesError('');
       return;
     }
 
-    const dropsQuery = query(
+    let q = query(
       collection(db, 'drops'),
-      where('purchasedByUid', '==', appUser.id)
+      where('purchasedByUid', '==', appUser.id),
+      orderBy('purchasedAt', 'desc')
     );
 
     const unsubscribe = onSnapshot(
-      dropsQuery,
+      q,
       (snapshot) => {
-        const unique = new Set();
-        snapshot.forEach((docSnap) => {
+        const list = snapshot.docs.map((docSnap) => {
           const data = docSnap.data() || {};
-          if (data.albumId) {
-            unique.add(String(data.albumId));
-          }
+          const mediaUrl = data.mediaUrl || data.mediaPhoto || '';
+          const derivedMediaType =
+            data.mediaType ||
+            (mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4')
+              ? 'video'
+              : mediaUrl
+              ? 'image'
+              : '');
+          return {
+            id: docSnap.id,
+            dropId: data.dropId || docSnap.id,
+            title: data.title || 'Untitled Drop',
+            artistName: data.artistName || '',
+            artistId: data.artistId || '',
+            albumTitle: data.albumTitle || '',
+            albumId: data.albumId || '',
+            mediaUrl,
+            mediaType: derivedMediaType,
+            purchasedAt: data.purchasedAt,
+          };
         });
-        setPurchasedAlbumIds(Array.from(unique));
+        setPurchasedDrops(list);
         setPurchasesLoading(false);
         setPurchasesError('');
       },
       (err) => {
-        console.error('user drops snapshot error:', err);
-        setPurchasedAlbumIds([]);
+        console.error('user purchased drops snapshot error:', err);
+        setPurchasedDrops([]);
         setPurchasesLoading(false);
-        setPurchasesError(err?.message || 'Failed to load your albums.');
+        setPurchasesError(err?.message || 'Failed to load your purchased drops.');
       }
     );
 
@@ -96,81 +78,84 @@ export default function AlbumList() {
     return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
   };
 
-  const derivedAlbums = useMemo(() => {
-    if (!purchasedAlbumIds.length) return [];
-    const allowed = new Set(purchasedAlbumIds);
-    return allAlbums.filter((album) => allowed.has(album.albumId));
-  }, [allAlbums, purchasedAlbumIds]);
-
-  const isLoading = albumsLoading || purchasesLoading;
+  const isLoading = purchasesLoading;
 
   const content = useMemo(() => {
     if (isLoading) {
       return <p style={{ color: '#4b5563', textAlign: 'center' }}>Loading…</p>;
     }
 
-    if (albumError) {
-      return <div className={styles.error}>{albumError}</div>;
-    }
-
     if (purchasesError) {
       return <div className={styles.error}>{purchasesError}</div>;
     }
 
-    if (!purchasedAlbumIds.length) {
-      return (
-        <div className={styles.emptyState}>
-          You have not collected any albums yet. Purchase a drop to see its album here.
-        </div>
-      );
+    if (!purchasedDrops.length) {
+      return <div className={styles.emptyState}>Your purchased drops will appear here.</div>;
     }
 
-    if (derivedAlbums.length === 0) {
+    const filtered = purchasedDrops.filter((drop) => {
+      if (!search.trim()) return true;
+      const term = search.trim().toLowerCase();
       return (
-        <div className={styles.emptyState}>
-          We could not find details for the albums tied to your drops right now.
-        </div>
+        (drop.title || '').toLowerCase().includes(term) ||
+        (drop.artistName || '').toLowerCase().includes(term)
       );
-    }
+    });
 
     return (
-      <div className={styles.grid}>
-        {derivedAlbums.map((album) => (
-          <button
-            key={album.id}
-            type="button"
-            onClick={() => navigate(`/album/${album.albumId}`)}
-            className={styles.card}
-          >
-            <div className={styles.cover}>
-              {album.coverUrl ? (
-                <img src={album.coverUrl} alt={album.title} />
-              ) : (
-                <div className={styles.placeholder}>No Cover</div>
-              )}
-            </div>
-
-            <div>
-              <h2 className={styles.title}>{truncate(album.title, 60)}</h2>
-              {album.description ? (
-                <p className={styles.description}>{truncate(album.description, 140)}</p>
-              ) : null}
-            </div>
-
-            <div className={styles.metaRow}>
-              <span>{album.dropCount} {album.dropCount === 1 ? 'drop' : 'drops'}</span>
-            </div>
-          </button>
-        ))}
-      </div>
+      <>
+        <div className={styles.searchRow}>
+          <input
+            type="search"
+            placeholder="Search by drop or artist"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={styles.searchInput}
+          />
+        </div>
+        <div className={styles.list}>
+          {filtered.map((drop) => (
+            <button
+              key={drop.id}
+              type="button"
+              className={styles.card}
+              onClick={() => navigate(`/drop/${drop.dropId}`)}
+            >
+              <div className={styles.mediaThumb}>
+                {drop.mediaUrl ? (
+                  drop.mediaType === 'video' ? (
+                    <video src={drop.mediaUrl} muted autoPlay loop playsInline />
+                  ) : (
+                    <img src={drop.mediaUrl} alt={drop.title} />
+                  )
+                ) : (
+                  <div className={styles.placeholder}>No Media</div>
+                )}
+              </div>
+              <div className={styles.cardBody}>
+                <h2 className={styles.title}>{truncate(drop.title, 48)}</h2>
+                {drop.artistName ? (
+                  <p className={styles.description}>{truncate(drop.artistName, 80)}</p>
+                ) : null}
+                <div className={styles.metaRow}>
+                  {drop.albumTitle ? <span>{drop.albumTitle}</span> : null}
+                  {drop.purchasedAt ? <span>Purchased</span> : null}
+                </div>
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 ? (
+            <div className={styles.emptyState}>No matches for that search.</div>
+          ) : null}
+        </div>
+      </>
     );
   }, [
-    albumError,
-    derivedAlbums,
+    purchasedDrops,
     isLoading,
-    navigate,
-    purchasedAlbumIds.length,
     purchasesError,
+    search,
+    navigate,
   ]);
 
   return (
@@ -181,8 +166,8 @@ export default function AlbumList() {
 
       <div className={styles.pageShell}>
         <header className={styles.header}>
-          <h1>My Albums</h1>
-          <p>Albums appear here once you’ve collected at least one drop from them.</p>
+          <h1>Purchased</h1>
+          <p>Every drop you’ve bought lives here. Search by drop title or artist.</p>
         </header>
 
         {content}
