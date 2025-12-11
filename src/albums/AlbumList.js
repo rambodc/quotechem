@@ -1,7 +1,7 @@
 // src/albums/AlbumList.js
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import TopBar from '../components/TopBar';
 import MobileNavTabs from '../components/MobileNavTabs';
 import layoutStyles from '../styles/layout.module.css';
@@ -26,11 +26,7 @@ export default function AlbumList() {
       return;
     }
 
-    let q = query(
-      collection(db, 'drops'),
-      where('purchasedByUid', '==', appUser.id),
-      orderBy('purchasedAt', 'desc')
-    );
+    let q = query(collection(db, 'drops'), where('purchasedByUid', '==', appUser.id));
 
     const unsubscribe = onSnapshot(
       q,
@@ -58,7 +54,12 @@ export default function AlbumList() {
             purchasedAt: data.purchasedAt,
           };
         });
-        setPurchasedDrops(list);
+        const sorted = list.sort((a, b) => {
+          const aTime = a.purchasedAt?.toMillis ? a.purchasedAt.toMillis() : 0;
+          const bTime = b.purchasedAt?.toMillis ? b.purchasedAt.toMillis() : 0;
+          return bTime - aTime;
+        });
+        setPurchasedDrops(sorted);
         setPurchasesLoading(false);
         setPurchasesError('');
       },
