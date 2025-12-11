@@ -218,11 +218,17 @@ function App() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [checkingProfile, setCheckingProfile] = useState(true);
   const ensureStripeCustomerPromiseRef = useRef(null);
+  const profileUnsubRef = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setFirebaseUser(u);
       setCheckingAuth(false);
+
+      if (profileUnsubRef.current) {
+        profileUnsubRef.current();
+        profileUnsubRef.current = null;
+      }
 
       if (!u) {
         setAppUser(null);
@@ -231,11 +237,9 @@ function App() {
       }
 
       try {
-        // Load canonical user at /users/{auth.uid}
         const userRef = doc(db, 'users', u.uid);
         let userSnap = await getDoc(userRef);
 
-        // If missing, initialize a minimal profile
         if (!userSnap.exists()) {
           const now = serverTimestamp();
           await setDoc(userRef, {
@@ -250,17 +254,30 @@ function App() {
           userSnap = await getDoc(userRef);
         }
 
-        const data = userSnap.exists() ? userSnap.data() : {};
-        setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, ...data });
+        profileUnsubRef.current = onSnapshot(
+          userRef,
+          (snap) => {
+            const data = snap.exists() ? snap.data() : {};
+            setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, ...data });
+            setCheckingProfile(false);
+          },
+          (err) => {
+            console.error('Failed to load app user profile:', err);
+            setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null });
+            setCheckingProfile(false);
+          }
+        );
       } catch (err) {
         console.error('Failed to load app user profile:', err);
         setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null });
-      } finally {
         setCheckingProfile(false);
       }
     });
 
-    return () => unsub();
+    return () => {
+      if (profileUnsubRef.current) profileUnsubRef.current();
+      unsub();
+    };
   }, []);
 
   useEffect(() => {

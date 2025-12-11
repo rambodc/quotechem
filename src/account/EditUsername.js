@@ -101,9 +101,7 @@ export default function EditUsername() {
 
       setInitialNormalized(normalized);
       setStatus('Saved!');
-      if (fromSignup) {
-        navigate('/home', { replace: true });
-      }
+      navigate('/more', { replace: true });
     } catch (err) {
       console.error('save username error:', err);
       setError(err?.message || 'Unable to save username right now.');
@@ -114,7 +112,7 @@ export default function EditUsername() {
 
   const handleCancel = () => {
     if (fromSignup) {
-      navigate('/home', { replace: true });
+      navigate('/more', { replace: true });
       return;
     }
     if (window.history.length > 2) {
