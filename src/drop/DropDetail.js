@@ -93,13 +93,13 @@ export default function DropDetail() {
           setAlbumError('');
         } else {
           setAlbum(null);
-          setAlbumError('Album not found.');
+          setAlbumError('Set not found.');
         }
       } catch (err) {
         if (!active) return;
         console.error('album fetch error:', err);
         setAlbum(null);
-        setAlbumError('Unable to load album details right now.');
+        setAlbumError('Unable to load set details right now.');
       } finally {
         if (active) setAlbumLoading(false);
       }
@@ -194,7 +194,7 @@ export default function DropDetail() {
       : '';
 
     return [
-      { label: 'Album', value: albumValue },
+      { label: 'Set', value: albumValue },
       { label: 'Drop ID', value: drop.dropId },
       { label: 'Token ID', value: drop.tokenId },
       { label: 'Type', value: drop.type },
@@ -399,7 +399,7 @@ export default function DropDetail() {
                 {drop.albumId ? (
                   <>
                     <div className={styles.albumBadge}>
-                      <span>Album</span>
+                      <span>Set</span>
                       <button
                         type="button"
                         className={styles.albumLink}
@@ -409,7 +409,7 @@ export default function DropDetail() {
                       </button>
                     </div>
                     {albumLoading ? (
-                      <p className={styles.albumMeta}>Loading album details…</p>
+                      <p className={styles.albumMeta}>Loading set details…</p>
                     ) : albumError ? (
                       <p className={styles.albumErrorText}>{albumError}</p>
                     ) : null}

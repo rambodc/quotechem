@@ -304,7 +304,7 @@ export default function CreateDrop() {
           return {
             id: docSnap.id,
             albumId,
-            title: data.title || 'Untitled Album',
+            title: data.title || 'Untitled Set',
             description: data.description || '',
           };
         });
@@ -319,7 +319,7 @@ export default function CreateDrop() {
         console.error('albums snapshot error:', err);
         setAlbums([]);
         setAlbumsLoading(false);
-        setAlbumError(err?.message || 'Failed to load albums.');
+        setAlbumError(err?.message || 'Failed to load sets.');
       }
     );
     return () => unsubscribe();
@@ -511,7 +511,7 @@ export default function CreateDrop() {
     const roundedAmount = Number.isFinite(rawAmount) ? Math.round(rawAmount * 100) / 100 : null;
     const selectedAlbum = albums.find((album) => album.albumId === selectedAlbumId);
     if (!selectedAlbum) {
-      setError('Please select a valid album.');
+      setError('Please select a valid set.');
       setSaving(false);
       return;
     }
@@ -626,7 +626,7 @@ export default function CreateDrop() {
           <h1 className={styles.formTitle}>Create Drop</h1>
 
           <form className={styles.form} onSubmit={onSubmit}>
-            <Field label="Album">
+            <Field label="Set">
               <select
                 value={selectedAlbumId}
                 onChange={(e) => setSelectedAlbumId(e.target.value)}

@@ -76,7 +76,7 @@ export default function More() {
             <Item icon={FaUserCog} color="#111827" label="Account" onClick={() => navigate('/account')} />
             <Item icon={FaHistory} color="#0ea5e9" label="Purchase History" onClick={() => navigate('/history')} />
             <Item icon={FaPaintBrush} color="#ec4899" label="Become an Artist" onClick={() => navigate('/become-artist')} />
-            <Item icon={FaLayerGroup} color="#10b981" label="Create Album" onClick={() => navigate('/create-album')} />
+            <Item icon={FaLayerGroup} color="#10b981" label="Create Set" onClick={() => navigate('/create-album')} />
             <Item icon={FaUserPlus} color="#2563eb" label="Create Artist" onClick={() => navigate('/create-artists')} />
             <Item icon={FaPlus} color="#111827" label="Create Drop" onClick={() => navigate('/create-drop')} />
             <Item icon={FaFileAlt} color="#0ea5e9" label="Terms" onClick={() => navigate('/terms')} className={styles.itemSpacing} />

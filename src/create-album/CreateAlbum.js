@@ -162,7 +162,7 @@ export default function CreateAlbum() {
       navigate(`/album/${albumId}`);
     } catch (err) {
       console.error(err);
-      setError(err?.message || 'Failed to create album.');
+      setError(err?.message || 'Failed to create set.');
       setSaving(false);
     }
   };
@@ -195,15 +195,15 @@ export default function CreateAlbum() {
         </div>
       ) : (
         <div className={styles.formShell}>
-          <h1 className={styles.formTitle}>Create Album</h1>
+          <h1 className={styles.formTitle}>Create Set</h1>
 
           <form className={styles.form} onSubmit={onSubmit}>
-            <Field label="Album Title">
+            <Field label="Set Title">
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Album title"
+                placeholder="Set title"
                 maxLength={140}
                 required
                 className={styles.input}
@@ -214,7 +214,7 @@ export default function CreateAlbum() {
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe the album (displayed publicly)"
+                placeholder="Describe the set (displayed publicly)"
                 maxLength={2000}
                 className={`${styles.input} ${styles.textarea}`}
                 required
@@ -232,7 +232,7 @@ export default function CreateAlbum() {
 
               {previewUrl ? (
                 <div className={styles.previewWrapper}>
-                  <img src={previewUrl} alt="Album cover preview" className={styles.previewImage} />
+                  <img src={previewUrl} alt="Set cover preview" className={styles.previewImage} />
                 </div>
               ) : (
                 <p className={styles.statusText}>Choose a square or landscape cover image.</p>
@@ -245,7 +245,7 @@ export default function CreateAlbum() {
 
             <div className={styles.buttonRow}>
               <button className={layoutStyles.createBtn} type="submit" disabled={!canSubmit}>
-                {saving ? 'Saving…' : 'Create Album'}
+                {saving ? 'Saving…' : 'Create Set'}
               </button>
               <button
                 type="button"

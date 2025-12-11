@@ -36,7 +36,7 @@ function Home() {
           return {
             id: docSnap.id,
             albumId: data.albumId || docSnap.id,
-            title: data.title || 'Untitled Album',
+            title: data.title || 'Untitled Set',
             description: data.description || '',
             coverUrl: data.coverUrl || '',
             dropCount: typeof data.dropCount === 'number' ? data.dropCount : 0,
@@ -92,7 +92,7 @@ function Home() {
       ) : error ? (
         <p style={{ color: '#b91c1c' }}>{error}</p>
       ) : albums.length === 0 ? (
-        <div><p>No albums yet.</p></div>
+        <div><p>No sets yet.</p></div>
       ) : (
         <div className="card-grid" style={{ paddingTop: 6 }}>
           {albums.map((album) => (
@@ -107,10 +107,10 @@ function Home() {
               <div className="card-image-wrap">
                 <div className="album-badge">
                   <FiDisc size={14} />
-                  <span>Album</span>
+                  <span>Set</span>
                 </div>
                 {album.coverUrl ? (
-                  <img className="card-image" src={album.coverUrl} alt={album.title || 'Album'} />
+                  <img className="card-image" src={album.coverUrl} alt={album.title || 'Set'} />
                 ) : (
                   <div className="album-placeholder">No Cover</div>
                 )}
@@ -118,14 +118,14 @@ function Home() {
               <div className="card-body">
                 <div className="card-meta">
                   <FiDisc size={14} />
-                  <span>Album</span>
+                  <span>Set</span>
                 </div>
                 <h2>{truncate(album.title || 'Untitled', 32)}</h2>
                 <p>{truncate(album.description || '', 120)}</p>
                 <div className="card-chips">
                   <span>{album.dropCount === 1 ? '1 drop' : `${album.dropCount} drops`}</span>
                 </div>
-                <button type="button" className="card-cta">Open Album</button>
+                <button type="button" className="card-cta">Open Set</button>
               </div>
             </div>
           ))}

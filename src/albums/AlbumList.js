@@ -167,7 +167,7 @@ export default function AlbumList() {
 
       <div className={styles.pageShell}>
         <header className={styles.header}>
-          <h1>Purchased</h1>
+          <h1>Purchased Sets</h1>
           <p>Every drop you’ve bought lives here. Search by drop title or artist.</p>
         </header>
 

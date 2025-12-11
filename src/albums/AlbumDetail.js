@@ -49,13 +49,13 @@ export default function AlbumDetail() {
           setAlbum(snap.data());
         } else {
           setAlbum(null);
-          setAlbumError('Album not found.');
+          setAlbumError('Set not found.');
         }
       } catch (err) {
         if (!active) return;
         console.error('album fetch error:', err);
         setAlbum(null);
-        setAlbumError(err?.message || 'Failed to load album.');
+        setAlbumError(err?.message || 'Failed to load set.');
       } finally {
         if (active) setAlbumLoading(false);
       }
@@ -129,7 +129,7 @@ export default function AlbumDetail() {
 
           setDrops([]);
           setDropsLoading(false);
-          setDropsError(err?.message || 'Failed to load drops for this album.');
+          setDropsError(err?.message || 'Failed to load drops for this set.');
         }
       );
 
@@ -148,7 +148,7 @@ export default function AlbumDetail() {
     }
 
     if (drops.length === 0) {
-      return <p className={styles.statusText}>No drops assigned to this album yet.</p>;
+      return <p className={styles.statusText}>No drops assigned to this set yet.</p>;
     }
 
     return (
@@ -193,7 +193,7 @@ export default function AlbumDetail() {
 
       <div className={styles.pageShell}>
         {albumLoading ? (
-          <p className={styles.statusText}>Loading album…</p>
+          <p className={styles.statusText}>Loading set…</p>
         ) : albumError ? (
           <p className={styles.error}>{albumError}</p>
         ) : album ? (
@@ -208,20 +208,20 @@ export default function AlbumDetail() {
               </div>
 
               <div className={styles.info}>
-                <h1 className={styles.title}>{album.title || 'Untitled Album'}</h1>
+                <h1 className={styles.title}>{album.title || 'Untitled Set'}</h1>
                 {album.description ? (
                   <p className={styles.description}>{album.description}</p>
                 ) : null}
                 <div className={styles.meta}>
                   <span>{dropCountLabel}</span>
-                  <span>Album ID: {album.albumId || albumId}</span>
+                  <span>Set ID: {album.albumId || albumId}</span>
                 </div>
               </div>
             </section>
 
             <section className={styles.dropsSection}>
               <div className={styles.dropsHeader}>
-                <h2>Drops in this album</h2>
+                <h2>Drops in this set</h2>
               </div>
               {dropCards}
             </section>
