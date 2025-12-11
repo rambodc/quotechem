@@ -1,7 +1,7 @@
 // src/account/EditUsername.js
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, getDocs, query, where, collection, limit, setDoc } from 'firebase/firestore';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './EditUsername.module.css';
@@ -81,40 +81,23 @@ export default function EditUsername() {
 
     try {
       const now = serverTimestamp();
-      const desiredRef = doc(db, 'usernames', normalized);
-      await runTransaction(db, async (tx) => {
-        const desiredSnap = await tx.get(desiredRef);
-        const desiredData = desiredSnap.data();
-        if (desiredSnap.exists() && desiredData?.uid !== appUser.id) {
-          throw new Error('That username is already taken.');
-        }
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('usernameNormalized', '==', normalized), limit(1));
+      const existing = await getDocs(q);
+      const conflict = existing.docs.find((docSnap) => docSnap.id !== appUser.id);
+      if (conflict) {
+        throw new Error('That username is already taken.');
+      }
 
-        if (initialNormalized && initialNormalized !== normalized) {
-          const prevRef = doc(db, 'usernames', initialNormalized);
-          const prevSnap = await tx.get(prevRef);
-          if (prevSnap.exists() && prevSnap.data()?.uid === appUser.id) {
-            tx.delete(prevRef);
-          }
-        }
-
-        tx.set(desiredRef, {
-          uid: appUser.id,
+      await setDoc(
+        doc(db, 'users', appUser.id),
+        {
           username: trimmed,
-          normalized,
-          createdAt: desiredData?.createdAt || now,
+          usernameNormalized: normalized,
           updatedAt: now,
-        });
-
-        tx.set(
-          doc(db, 'users', appUser.id),
-          {
-            username: trimmed,
-            usernameNormalized: normalized,
-            updatedAt: now,
-          },
-          { merge: true }
-        );
-      });
+        },
+        { merge: true }
+      );
 
       setInitialNormalized(normalized);
       setStatus('Saved!');

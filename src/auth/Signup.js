@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { doc, serverTimestamp, getDoc, runTransaction } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDocs, query, where, collection, limit } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import './Auth.css';
 
@@ -45,9 +45,10 @@ function Signup() {
     while (attempt < 20) {
       const normalized = normalizeUsername(candidate);
       if (normalized.length >= 3) {
-        const ref = doc(db, 'usernames', normalized);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('usernameNormalized', '==', normalized), limit(1));
+        const snap = await getDocs(q);
+        if (snap.empty) {
           return { username: candidate, normalized };
         }
       }
@@ -95,29 +96,15 @@ function Signup() {
       const baseUsername = buildBaseUsername();
       const { username: autoUsername, normalized } = await findAvailableUsername(baseUsername);
 
-      await runTransaction(db, async (tx) => {
-        const unameRef = doc(db, 'usernames', normalized);
-        const unameSnap = await tx.get(unameRef);
-        if (unameSnap.exists()) {
-          throw new Error('That username is already taken. Please choose another.');
-        }
-        tx.set(unameRef, {
-          uid: user.uid,
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          ...profileDocBase,
           username: autoUsername,
-          normalized,
-          createdAt: now,
-          updatedAt: now,
-        });
-        tx.set(
-          doc(db, 'users', user.uid),
-          {
-            ...profileDocBase,
-            username: autoUsername,
-            usernameNormalized: normalized,
-          },
-          { merge: true }
-        );
-      });
+          usernameNormalized: normalized,
+        },
+        { merge: true }
+      );
 
       // 3) Send verification email
       await sendEmailVerification(user);
