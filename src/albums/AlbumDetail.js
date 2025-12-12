@@ -34,12 +34,8 @@ export default function AlbumDetail() {
       navigate(-1);
       return;
     }
-    if (drop?.albumId) {
-      navigate(`/set/${drop.albumId}`);
-      return;
-    }
     navigate('/purchased');
-  }, [drop?.albumId, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
     let active = true;
