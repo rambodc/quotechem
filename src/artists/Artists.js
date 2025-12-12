@@ -180,7 +180,7 @@ function Artists() {
           <p className="error">{error}</p>
         ) : (
           <div className={layoutStyles.detailShell}>
-            <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 10 }}>Artist</div>
+            <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 22, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 14 }}>Artist</div>
             {/* Responsive grid:
                 - < 1100px: single column, max 500px, centered
                 - ≥ 1100px: two columns 500 / 500 with gap, left hero is sticky

@@ -345,8 +345,8 @@ export default function DropDetail() {
           <p style={{ color: '#b91c1c' }}>{error}</p>
         ) : drop ? (
           <div className={styles.heroWrapper}>
+            <div className={styles.pageTitle}>Drop</div>
             <div className={styles.heroShell}>
-              <div className={styles.sectionTitle}>Drop</div>
               <div className={styles.heroMediaFrame}>
                 {mediaUrl ? (
                   derivedMediaType === 'video' ? (

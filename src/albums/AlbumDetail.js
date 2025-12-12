@@ -201,8 +201,8 @@ export default function AlbumDetail() {
           <p className={styles.error}>{albumError}</p>
         ) : album ? (
           <>
+            <div className={styles.pageTitle}>Set</div>
             <section className={styles.hero}>
-              <div className={styles.sectionTitle}>Set</div>
               <div className={styles.coverFrame}>
                 {album.coverUrl ? (
                   <img src={album.coverUrl} alt={album.title} />
