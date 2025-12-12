@@ -336,9 +336,7 @@ export default function DropDetail() {
 
   return (
     <div className={layoutStyles.detailPage}>
-      <TopBar variant="back" backLabel="Drop" onBack={handleBack}>
-        <span style={{ fontWeight: 700, fontSize: 16 }}>Drop</span>
-      </TopBar>
+      <TopBar variant="back" backLabel="Back" onBack={handleBack} />
 
       <div className={`${layoutStyles.detailContent} ${styles.pageShell}`}>
         {loading ? (
@@ -348,6 +346,7 @@ export default function DropDetail() {
         ) : drop ? (
           <div className={styles.heroWrapper}>
             <div className={styles.heroShell}>
+              <div className={styles.sectionTitle}>Drop</div>
               <div className={styles.heroMediaFrame}>
                 {mediaUrl ? (
                   derivedMediaType === 'video' ? (

@@ -192,9 +192,7 @@ export default function AlbumDetail() {
 
   return (
     <div className={layoutStyles.detailPage}>
-      <TopBar variant="back" backLabel="Set" onBack={handleBack}>
-        <span style={{ fontWeight: 700, fontSize: 16 }}>Set</span>
-      </TopBar>
+      <TopBar variant="back" backLabel="Back" onBack={handleBack} />
 
       <div className={styles.pageShell}>
         {albumLoading ? (
@@ -204,6 +202,7 @@ export default function AlbumDetail() {
         ) : album ? (
           <>
             <section className={styles.hero}>
+              <div className={styles.sectionTitle}>Set</div>
               <div className={styles.coverFrame}>
                 {album.coverUrl ? (
                   <img src={album.coverUrl} alt={album.title} />

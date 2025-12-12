@@ -1,7 +1,7 @@
 .pageShell {
   margin: 88px auto 120px;
   width: 100%;
-  max-width: 500px;
+  max-width: 940px;
   padding: 0 18px 80px;
   display: flex;
   flex-direction: column;
@@ -26,6 +26,14 @@
   background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.35), rgba(15, 23, 42, 0.92));
   overflow: hidden;
   box-shadow: 0 48px 90px rgba(15, 23, 42, 0.35);
+}
+
+.sectionTitle {
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
 }
 
 .heroShell::before,

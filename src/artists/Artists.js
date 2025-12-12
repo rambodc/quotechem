@@ -170,9 +170,7 @@ function Artists() {
   return (
     <div className={layoutStyles.detailPage}>
       {/* Reusable top bar: public page, with Back on the left; optional center tabs */}
-      <TopBar variant="back" backLabel="Artist" onBack={handleBack}>
-        <span style={{ fontWeight: 700, fontSize: 16 }}>Artist</span>
-      </TopBar>
+      <TopBar variant="back" backLabel="Back" onBack={handleBack} />
 
       {/* Page content; offset for fixed TopBar */}
       <div className={layoutStyles.detailContent} style={{ marginTop: 64 }}>
@@ -182,6 +180,7 @@ function Artists() {
           <p className="error">{error}</p>
         ) : (
           <div className={layoutStyles.detailShell}>
+            <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 10 }}>Artist</div>
             {/* Responsive grid:
                 - < 1100px: single column, max 500px, centered
                 - ≥ 1100px: two columns 500 / 500 with gap, left hero is sticky
