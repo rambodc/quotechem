@@ -40,6 +40,7 @@ function Home() {
             description: data.description || '',
             coverUrl: data.coverUrl || '',
             dropCount: typeof data.dropCount === 'number' ? data.dropCount : 0,
+            artistName: data.artistName || data.artistFullName || '',
           };
         });
         setAlbums(list);
@@ -82,7 +83,7 @@ function Home() {
       // ignore if replaceState is blocked
     }
 
-    navigate(`/album/${albumId}`);
+    navigate(`/set/${albumId}`);
   };
 
   const Dashboard = () => (
@@ -105,10 +106,6 @@ function Home() {
               onKeyDown={(e) => (e.key === 'Enter' ? openAlbum(album) : null)}
             >
               <div className="card-image-wrap">
-                <div className="album-badge">
-                  <FiDisc size={14} />
-                  <span>Set</span>
-                </div>
                 {album.coverUrl ? (
                   <img className="card-image" src={album.coverUrl} alt={album.title || 'Set'} />
                 ) : (
@@ -116,10 +113,12 @@ function Home() {
                 )}
               </div>
               <div className="card-body">
-                <div className="card-meta">
-                  <FiDisc size={14} />
-                  <span>Set</span>
-                </div>
+                {album.artistName ? (
+                  <div className="card-meta">
+                    <FiDisc size={14} />
+                    <span>{album.artistName}</span>
+                  </div>
+                ) : null}
                 <h2>{truncate(album.title || 'Untitled', 32)}</h2>
                 <p>{truncate(album.description || '', 120)}</p>
                 <div className="card-chips">

@@ -10,12 +10,13 @@ export default function MobileNavTabs() {
   const tabs = [
     { label: 'Home', to: '/home', icon: FiHome },
     { label: 'Artists', to: '/artists', icon: FiUsers },
-    { label: 'Purchased', to: '/albums', icon: FiBook },
+    { label: 'Purchased', to: '/purchased', icon: FiBook },
     { label: 'More', to: '/more', icon: FiMoreHorizontal },
   ];
 
   const isActive = (to) => {
     if (to === '/home') return pathname === '/home';
+    if (to === '/purchased') return pathname.startsWith('/purchased') || pathname.startsWith('/set');
     return pathname.startsWith(to);
   };
 

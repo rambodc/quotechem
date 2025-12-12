@@ -170,7 +170,7 @@ function Artists() {
   return (
     <div className={layoutStyles.detailPage}>
       {/* Reusable top bar: public page, with Back on the left; optional center tabs */}
-      <TopBar variant="back" backLabel="Back" onBack={handleBack} />
+      <TopBar variant="back" backLabel="Artist" onBack={handleBack} />
 
       {/* Page content; offset for fixed TopBar */}
       <div className={layoutStyles.detailContent} style={{ marginTop: 64 }}>

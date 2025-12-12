@@ -33,15 +33,11 @@ export default function DropDetail() {
   const [artistError, setArtistError] = useState('');
 
   const handleBack = useCallback(() => {
-    if (window.history.length > 2) {
-      navigate(-1);
+    if (drop?.albumId) {
+      navigate(`/set/${drop.albumId}`);
       return;
     }
-    if (drop?.albumId) {
-      navigate(`/album/${drop.albumId}`);
-    } else {
-      navigate('/albums');
-    }
+    navigate('/purchased');
   }, [navigate, drop?.albumId]);
 
   useEffect(() => {
@@ -336,7 +332,7 @@ export default function DropDetail() {
 
   return (
     <div className={layoutStyles.detailPage}>
-      <TopBar variant="back" backLabel="Back" onBack={handleBack} />
+      <TopBar variant="back" backLabel="Drop" onBack={handleBack} />
 
       <div className={`${layoutStyles.detailContent} ${styles.pageShell}`}>
         {loading ? (

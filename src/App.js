@@ -74,7 +74,7 @@ function AppRoutes({ user }) {
           }
         />
         <Route
-          path="/albums"
+          path="/purchased"
           element={
             <ProtectedRoute>
               <AlbumList />
@@ -82,7 +82,7 @@ function AppRoutes({ user }) {
           }
         />
         <Route
-          path="/album/:albumId"
+          path="/set/:albumId"
           element={
             <ProtectedRoute>
               <AlbumDetail />

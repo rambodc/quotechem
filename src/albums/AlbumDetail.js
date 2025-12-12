@@ -30,9 +30,12 @@ export default function AlbumDetail() {
   const [dropsError, setDropsError] = useState('');
 
   const handleBack = useCallback(() => {
-    if (window.history.length > 2) navigate(-1);
-    else navigate('/albums');
-  }, [navigate]);
+    if (drop?.albumId) {
+      navigate(`/set/${drop.albumId}`, { replace: false });
+      return;
+    }
+    navigate('/purchased');
+  }, [drop?.albumId, navigate]);
 
   useEffect(() => {
     let active = true;
@@ -189,7 +192,7 @@ export default function AlbumDetail() {
 
   return (
     <div className={layoutStyles.detailPage}>
-      <TopBar variant="back" backLabel="Back" onBack={handleBack} />
+      <TopBar variant="back" backLabel="Set" onBack={handleBack} />
 
       <div className={styles.pageShell}>
         {albumLoading ? (

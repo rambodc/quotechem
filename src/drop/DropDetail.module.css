@@ -1,7 +1,7 @@
 .pageShell {
   margin: 88px auto 120px;
   width: 100%;
-  max-width: 940px;
+  max-width: 500px;
   padding: 0 18px 80px;
   display: flex;
   flex-direction: column;
