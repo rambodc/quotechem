@@ -27,7 +27,7 @@ function Home() {
 
   // Fetch latest albums snapshot
   useEffect(() => {
-    const q = query(collection(db, 'albums'), orderBy('updatedAt', 'desc'));
+    const q = query(collection(db, 'sets'), orderBy('updatedAt', 'desc'));
     const unsub = onSnapshot(
       q,
       (snap) => {

@@ -42,7 +42,7 @@ export default function AlbumDetail() {
         setAlbumLoading(true);
         setAlbumError('');
 
-        const snap = await getDoc(doc(db, 'albums', albumId));
+        const snap = await getDoc(doc(db, 'sets', albumId));
         if (!active) return;
 
         if (snap.exists()) {

@@ -112,7 +112,7 @@ export default function CreateAlbum() {
       setSaving(true);
       setError('');
 
-      const albumsCollection = collection(db, 'albums');
+      const albumsCollection = collection(db, 'sets');
       const albumDocRef = doc(albumsCollection);
       const albumId = albumDocRef.id;
 

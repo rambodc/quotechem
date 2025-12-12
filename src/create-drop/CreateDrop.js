@@ -294,7 +294,7 @@ export default function CreateDrop() {
   }, [ownerSearchTerm, searchUsers]);
 
   useEffect(() => {
-    const albumsQuery = query(collection(db, 'albums'), orderBy('title'));
+    const albumsQuery = query(collection(db, 'sets'), orderBy('title'));
     const unsubscribe = onSnapshot(
       albumsQuery,
       (snap) => {
@@ -578,7 +578,7 @@ export default function CreateDrop() {
       await setDoc(dropDocRef, data);
 
       try {
-        await updateDoc(doc(db, 'albums', selectedAlbum.albumId), {
+        await updateDoc(doc(db, 'sets', selectedAlbum.albumId), {
           updatedAt: serverTimestamp(),
           dropCount: increment(1),
           latestDropId: dropId,

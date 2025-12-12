@@ -85,7 +85,7 @@ export default function DropDetail() {
 
     (async () => {
       try {
-        const snap = await getDoc(doc(db, 'albums', drop.albumId));
+        const snap = await getDoc(doc(db, 'sets', drop.albumId));
         if (!active) return;
 
         if (snap.exists()) {

@@ -88,7 +88,7 @@ export const stripeWebhook = onRequest(
 
               const albumId = dropData.albumId || dropData.albumID; // fallback if older casing
               if (albumId) {
-                const albumRef = db.collection('albums').doc(albumId);
+                const albumRef = db.collection('sets').doc(albumId);
                 transaction.set(
                   albumRef,
                   {
