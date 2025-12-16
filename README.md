@@ -1,4 +1,4 @@
-# Razzberry CI/CD with Firebase Hosting
+# Razzberry CI/CD with Firebase Hosting 2
 
 Branch-based environments deploy a compiled React app to Firebase Hosting, with API routes rewritten to Cloud Functions.
 
