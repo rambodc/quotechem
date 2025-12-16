@@ -49,6 +49,16 @@
   cursor: pointer;
 }
 
+.overlay {
+  margin: 10px 0;
+  padding: 12px;
+  text-align: center;
+  border-radius: 12px;
+  background: rgba(14, 165, 233, 0.1);
+  color: #0f172a;
+  font-weight: 600;
+}
+
 .cardsList {
   display: flex;
   flex-direction: column;

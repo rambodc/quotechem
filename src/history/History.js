@@ -56,6 +56,7 @@ export default function History() {
   const [cards, setCards] = useState([]);
   const [cardsLoading, setCardsLoading] = useState(false);
   const [cardsError, setCardsError] = useState('');
+  const [managingCards, setManagingCards] = useState(false);
 
   useEffect(() => {
     if (!appUser?.id) {
@@ -188,6 +189,7 @@ export default function History() {
       return;
     }
     try {
+      setManagingCards(true);
       const callable = httpsCallable(functions, 'createCustomerPortalSession');
       const resp = await callable({
         returnUrl: window.location.origin + '/payment',
@@ -200,6 +202,7 @@ export default function History() {
     } catch (err) {
       console.error('manage cards error:', err);
       setCardsError(err?.message || 'Unable to open card management.');
+      setManagingCards(false);
     }
   }, [appUser?.stripeCustomerId]);
 
@@ -280,9 +283,10 @@ export default function History() {
           <div className={styles.cardsHeader}>
             <h2>Cards on file</h2>
             <button type="button" className={styles.manageButton} onClick={handleManageCards}>
-              Add / Edit Card
+              {managingCards ? 'Opening…' : 'Add / Edit Card'}
             </button>
           </div>
+          {managingCards ? <div className={styles.overlay}>Opening card manager…</div> : null}
           {cardsLoading ? (
             <p className={styles.loadingState}>Loading cards…</p>
           ) : cardsError ? (
