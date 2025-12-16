@@ -9,10 +9,11 @@ import {
   orderBy,
   query,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './History.module.css';
-import { db } from '../firebase';
+import { db, functions } from '../firebase';
 import { UserContext } from '../App';
 
 function formatAmount(amount, currency) {
@@ -52,6 +53,9 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dropsById, setDropsById] = useState({});
+  const [cards, setCards] = useState([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
+  const [cardsError, setCardsError] = useState('');
 
   useEffect(() => {
     if (!appUser?.id) {
@@ -145,6 +149,60 @@ export default function History() {
     };
   }, [dropIdsToFetch]);
 
+  useEffect(() => {
+    if (!appUser?.id || !appUser?.stripeCustomerId) {
+      setCards([]);
+      setCardsLoading(false);
+      setCardsError(appUser?.id ? 'No payment method on file yet.' : '');
+      return;
+    }
+    let active = true;
+    const fetchCards = async () => {
+      try {
+        setCardsLoading(true);
+        setCardsError('');
+        const callable = httpsCallable(functions, 'listPaymentMethods');
+        const resp = await callable({});
+        const methods = Array.isArray(resp?.data?.methods) ? resp.data.methods : [];
+        if (!active) return;
+        setCards(methods);
+        setCardsError(methods.length ? '' : 'No cards on file yet.');
+      } catch (err) {
+        console.error('list payment methods error:', err);
+        if (!active) return;
+        setCards([]);
+        setCardsError(err?.message || 'Unable to load cards right now.');
+      } finally {
+        if (active) setCardsLoading(false);
+      }
+    };
+    fetchCards();
+    return () => {
+      active = false;
+    };
+  }, [appUser?.id, appUser?.stripeCustomerId]);
+
+  const handleManageCards = useCallback(async () => {
+    if (!appUser?.stripeCustomerId) {
+      setCardsError('No Stripe customer found for this account yet.');
+      return;
+    }
+    try {
+      const callable = httpsCallable(functions, 'createCustomerPortalSession');
+      const resp = await callable({
+        returnUrl: window.location.origin + '/payment',
+      });
+      if (resp?.data?.url) {
+        window.location.href = resp.data.url;
+      } else {
+        throw new Error('Unable to create portal session.');
+      }
+    } catch (err) {
+      console.error('manage cards error:', err);
+      setCardsError(err?.message || 'Unable to open card management.');
+    }
+  }, [appUser?.stripeCustomerId]);
+
   const content = useMemo(() => {
     if (loading) {
       return <p className={styles.loadingState}>Loading transactions…</p>;
@@ -214,9 +272,40 @@ export default function History() {
       <TopBar variant="back" backLabel="Back" onBack={handleBack} />
       <div className={styles.pageShell}>
         <header className={styles.header}>
-          <h1>Purchase History</h1>
-          <p>Track every collectible you’ve acquired through Razzberry.</p>
+          <h1>Payment</h1>
+          <p>Manage your cards and review your payments.</p>
         </header>
+
+        <section className={styles.cardsSection}>
+          <div className={styles.cardsHeader}>
+            <h2>Cards on file</h2>
+            <button type="button" className={styles.manageButton} onClick={handleManageCards}>
+              Add / Edit Card
+            </button>
+          </div>
+          {cardsLoading ? (
+            <p className={styles.loadingState}>Loading cards…</p>
+          ) : cardsError ? (
+            <p className={styles.errorState}>{cardsError}</p>
+          ) : cards.length === 0 ? (
+            <p className={styles.emptyState}>No cards on file yet.</p>
+          ) : (
+            <div className={styles.cardsList}>
+              {cards.map((card) => (
+                <div key={card.id} className={styles.cardEntry}>
+                  <div>
+                    <div className={styles.cardBrand}>{card.brand?.toUpperCase() || 'CARD'}</div>
+                    <div className={styles.cardMeta}>
+                      **** **** **** {card.last4 || '----'} · Expires {card.expMonth}/{card.expYear}
+                    </div>
+                  </div>
+                  <div className={styles.cardMeta}>Country: {card.country || '—'}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {content}
       </div>
     </div>

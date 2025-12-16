@@ -74,7 +74,7 @@ export default function More() {
 
           <div className={styles.list}>
             <Item icon={FaUserCog} color="#111827" label="Account" onClick={() => navigate('/account')} />
-            <Item icon={FaHistory} color="#0ea5e9" label="Purchase History" onClick={() => navigate('/history')} />
+            <Item icon={FaHistory} color="#0ea5e9" label="Payment" onClick={() => navigate('/payment')} />
             <Item icon={FaPaintBrush} color="#ec4899" label="Become an Artist" onClick={() => navigate('/become-artist')} />
             <Item icon={FaLayerGroup} color="#10b981" label="Create Set" onClick={() => navigate('/create-album')} />
             <Item icon={FaUserPlus} color="#2563eb" label="Create Artist" onClick={() => navigate('/create-artists')} />

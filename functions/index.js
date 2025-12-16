@@ -4,5 +4,13 @@
 import { createStripeCheckoutSession } from './createStripeCheckoutSession.js';
 import { ensureStripeCustomer } from './ensureStripeCustomer.js';
 import { stripeWebhook } from './stripeWebhook.js';
+import { listPaymentMethods } from './listPaymentMethods.js';
+import { createCustomerPortalSession } from './createCustomerPortalSession.js';
 
-export { createStripeCheckoutSession, ensureStripeCustomer, stripeWebhook };
+export {
+  createStripeCheckoutSession,
+  ensureStripeCustomer,
+  stripeWebhook,
+  listPaymentMethods,
+  createCustomerPortalSession,
+};
