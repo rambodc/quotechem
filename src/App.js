@@ -220,6 +220,22 @@ function App() {
   const ensureStripeCustomerPromiseRef = useRef(null);
   const profileUnsubRef = useRef(null);
 
+  const normalizeUsername = (value) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 24);
+
+  const deriveUsername = (data, user) => {
+    const existing = typeof data.username === 'string' && data.username.trim();
+    if (existing) return existing.trim();
+    const emailPart = (user?.email || '').split('@')[0] || '';
+    const candidate = normalizeUsername(emailPart || user?.uid || 'user');
+    if (candidate && candidate.length >= 3) return candidate;
+    return `user_${(user?.uid || '').slice(0, 6) || Math.floor(Math.random() * 9999)}`;
+  };
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setFirebaseUser(u);
@@ -256,8 +272,32 @@ function App() {
 
         profileUnsubRef.current = onSnapshot(
           userRef,
-          (snap) => {
-            const data = snap.exists() ? snap.data() : {};
+          async (snap) => {
+            let data = snap.exists() ? snap.data() || {} : {};
+            const updates = {};
+
+            const ensuredFirst = typeof data.firstName === 'string' ? data.firstName : '';
+            const ensuredLast = typeof data.lastName === 'string' ? data.lastName : '';
+            if (ensuredFirst !== data.firstName) updates.firstName = ensuredFirst;
+            if (ensuredLast !== data.lastName) updates.lastName = ensuredLast;
+
+            if (!data.username) {
+              const generated = deriveUsername(data, u);
+              updates.username = generated;
+              updates.usernameNormalized = normalizeUsername(generated);
+            }
+
+            if (Object.keys(updates).length) {
+              const now = serverTimestamp();
+              updates.updatedAt = now;
+              try {
+                await setDoc(userRef, updates, { merge: true });
+                data = { ...data, ...updates };
+              } catch (writeErr) {
+                console.error('Failed to normalize user profile:', writeErr);
+              }
+            }
+
             setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, ...data });
             setCheckingProfile(false);
           },
