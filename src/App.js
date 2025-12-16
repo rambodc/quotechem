@@ -9,7 +9,7 @@ import {
 } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db, functions } from './firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 // Public pages
