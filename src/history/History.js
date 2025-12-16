@@ -1,6 +1,7 @@
 // src/history/History.js
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import {
   collection,
   doc,
@@ -44,6 +45,8 @@ function formatDate(timestamp) {
 export default function History() {
   const appUser = useContext(UserContext);
   const navigate = useNavigate();
+  const stripe = useStripe();
+  const elements = useElements();
   const handleBack = useCallback(() => {
     if (window.history.length > 2) navigate(-1);
     else navigate('/more');
@@ -56,6 +59,7 @@ export default function History() {
   const [cards, setCards] = useState([]);
   const [cardsLoading, setCardsLoading] = useState(false);
   const [cardsError, setCardsError] = useState('');
+  const [addingCard, setAddingCard] = useState(false);
 
   useEffect(() => {
     if (!appUser?.id) {
@@ -149,38 +153,84 @@ export default function History() {
     };
   }, [dropIdsToFetch]);
 
-  useEffect(() => {
+  const loadCards = useCallback(async () => {
     if (!appUser?.id || !appUser?.stripeCustomerId) {
       setCards([]);
       setCardsLoading(false);
       setCardsError(appUser?.id ? 'No payment method on file yet.' : '');
       return;
     }
-    let active = true;
-    const fetchCards = async () => {
-      try {
-        setCardsLoading(true);
-        setCardsError('');
-        const callable = httpsCallable(functions, 'listPaymentMethods');
-        const resp = await callable({});
-        const methods = Array.isArray(resp?.data?.methods) ? resp.data.methods : [];
-        if (!active) return;
-        setCards(methods);
-        setCardsError(methods.length ? '' : 'No cards on file yet.');
-      } catch (err) {
-        console.error('list payment methods error:', err);
-        if (!active) return;
-        setCards([]);
-        setCardsError(err?.message || 'Unable to load cards right now.');
-      } finally {
-        if (active) setCardsLoading(false);
+    try {
+      setCardsLoading(true);
+      setCardsError('');
+      const callable = httpsCallable(functions, 'listPaymentMethods');
+      const resp = await callable({});
+      const methods = Array.isArray(resp?.data?.methods) ? resp.data.methods : [];
+      setCards(methods);
+      setCardsError(methods.length ? '' : 'No cards on file yet.');
+    } catch (err) {
+      console.error('list payment methods error:', err);
+      setCards([]);
+      setCardsError(err?.message || 'Unable to load cards right now.');
+    } finally {
+      setCardsLoading(false);
+    }
+  }, [appUser?.id, appUser?.stripeCustomerId, functions]);
+
+  useEffect(() => {
+    loadCards();
+  }, [loadCards]);
+
+  const handleAddCard = useCallback(async () => {
+    if (!appUser?.stripeCustomerId) {
+      setCardsError('No Stripe customer found for this account yet.');
+      return;
+    }
+    if (!stripe || !elements) {
+      setCardsError('Stripe is not ready yet.');
+      return;
+    }
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      setCardsError('Unable to load card input.');
+      return;
+    }
+
+    try {
+      setAddingCard(true);
+      setCardsError('');
+      const createIntent = httpsCallable(functions, 'createSetupIntent');
+      const resp = await createIntent({});
+      const clientSecret = resp?.data?.clientSecret;
+      if (!clientSecret) {
+        throw new Error('Unable to start card setup.');
       }
-    };
-    fetchCards();
-    return () => {
-      active = false;
-    };
-  }, [appUser?.id, appUser?.stripeCustomerId]);
+
+      const { error: confirmError, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: { card: cardElement },
+      });
+      if (confirmError) {
+        throw new Error(confirmError.message || 'Unable to save card.');
+      }
+
+      const pmId = setupIntent?.payment_method;
+      if (pmId) {
+        try {
+          const setDefault = httpsCallable(functions, 'setDefaultPaymentMethod');
+          await setDefault({ paymentMethodId: pmId });
+        } catch (defaultErr) {
+          console.warn('set default card error:', defaultErr);
+        }
+      }
+
+      await loadCards();
+    } catch (err) {
+      console.error('add card error:', err);
+      setCardsError(err?.message || 'Unable to add card right now.');
+    } finally {
+      setAddingCard(false);
+    }
+  }, [appUser?.stripeCustomerId, elements, functions, loadCards, stripe]);
 
   const handleManageCards = useCallback(async () => {
     if (!appUser?.stripeCustomerId) {
@@ -279,9 +329,14 @@ export default function History() {
         <section className={styles.cardsSection}>
           <div className={styles.cardsHeader}>
             <h2>Cards on file</h2>
-            <button type="button" className={styles.manageButton} onClick={handleManageCards}>
-              Add / Edit Card
-            </button>
+            <div className={styles.cardActions}>
+              <button type="button" className={styles.manageButton} onClick={handleAddCard} disabled={addingCard}>
+                {addingCard ? 'Saving…' : 'Add Card'}
+              </button>
+            </div>
+          </div>
+          <div className={styles.cardInputShell}>
+            <CardElement />
           </div>
           {cardsLoading ? (
             <p className={styles.loadingState}>Loading cards…</p>
