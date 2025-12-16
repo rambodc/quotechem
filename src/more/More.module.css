@@ -31,18 +31,18 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.98rem;
+  font-size: 0.95rem;
 }
 
 .profileLabel {
   color: #64748b;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.03em;
 }
 
 .profileValue {
   color: #0f172a;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .list {

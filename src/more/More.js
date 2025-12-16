@@ -58,7 +58,7 @@ export default function More() {
               <div className={styles.profileLine}>
                 <span className={styles.profileLabel}>Name</span>
                 <span className={styles.profileValue}>
-                  {(appUser.firstName || '') + ' ' + (appUser.lastName || '')}
+                  {[appUser.firstName, appUser.lastName].filter(Boolean).join(' ') || '—'}
                 </span>
               </div>
               <div className={styles.profileLine}>
