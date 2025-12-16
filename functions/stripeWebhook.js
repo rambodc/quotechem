@@ -42,12 +42,13 @@ export const stripeWebhook = onRequest(
           if (!buyerUid) break;
 
           const amountTotal = typeof session.amount_total === 'number' ? session.amount_total : null;
+          const paymentIntentId = session.payment_intent ? String(session.payment_intent) : '';
           const userRef = db.collection('users').doc(buyerUid);
-          const paymentRefId = session.payment_intent ? String(session.payment_intent) : String(session.id);
+          const paymentRefId = paymentIntentId || String(session.id);
           await userRef.collection('payments').doc(paymentRefId).set(
             {
               stripeSessionId: session.id,
-              paymentIntentId: session.payment_intent || null,
+              paymentIntentId: paymentIntentId || null,
               customerId: session.customer || null,
               dropId: dropId || null,
               currency: session.currency ? session.currency.toUpperCase() : null,
@@ -59,6 +60,30 @@ export const stripeWebhook = onRequest(
             },
             { merge: true }
           );
+
+          // Save card as default for the customer
+          if (paymentIntentId && session.customer) {
+            try {
+              const stripe = getStripe();
+              const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['payment_method'] });
+              const pm = pi.payment_method;
+              if (pm && pm.card) {
+                const pmId = typeof pm === 'string' ? pm : pm.id;
+                const pmObj = typeof pm === 'string' ? null : pm;
+                const paymentMethodId = pmObj?.id || pmId;
+                if (paymentMethodId) {
+                  // Attach to customer if not already
+                  await stripe.paymentMethods.attach(paymentMethodId, { customer: session.customer }).catch(() => null);
+                  // Set as default payment method
+                  await stripe.customers.update(session.customer, {
+                    invoice_settings: { default_payment_method: paymentMethodId },
+                  });
+                }
+              }
+            } catch (cardErr) {
+              logger.warn('[stripeWebhook] failed to attach/set default payment method', cardErr?.message || cardErr);
+            }
+          }
 
           if (dropId) {
             const dropRef = db.collection('drops').doc(dropId);

@@ -1,6 +1,6 @@
 // src/drop/DropDetail.js
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { FiChevronDown, FiUser } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
@@ -17,6 +17,7 @@ const CREATE_CHECKOUT_URL =
 export default function DropDetail() {
   const { dropId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const appUser = useContext(UserContext);
 
   const [drop, setDrop] = useState(null);
@@ -31,8 +32,13 @@ export default function DropDetail() {
   const [artist, setArtist] = useState(null);
   const [artistLoading, setArtistLoading] = useState(false);
   const [artistError, setArtistError] = useState('');
+  const [cameFromCheckout, setCameFromCheckout] = useState(false);
 
   const handleBack = useCallback(() => {
+    if (cameFromCheckout) {
+      navigate('/purchased', { replace: true });
+      return;
+    }
     if (window.history.length > 2) {
       navigate(-1);
       return;
@@ -42,7 +48,7 @@ export default function DropDetail() {
       return;
     }
     navigate('/purchased');
-  }, [navigate, drop?.albumId]);
+  }, [cameFromCheckout, navigate, drop?.albumId]);
 
   useEffect(() => {
     let alive = true;
@@ -70,6 +76,17 @@ export default function DropDetail() {
       alive = false;
     };
   }, [dropId]);
+
+  // If returning from Stripe (status param), clear the param and adjust back target
+  useEffect(() => {
+    const search = new URLSearchParams(location.search);
+    const status = search.get('status');
+    if (status) {
+      setCameFromCheckout(true);
+      // Remove status from URL to avoid re-triggering
+      navigate(`/drop/${dropId}`, { replace: true });
+    }
+  }, [dropId, location.search, navigate]);
 
   useEffect(() => {
     if (!drop?.albumId) {

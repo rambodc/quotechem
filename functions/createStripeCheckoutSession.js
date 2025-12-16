@@ -77,7 +77,8 @@ export const createStripeCheckoutSession = onRequest(
         return;
       }
 
-      const buyerEmail = String(payload.buyerEmail || '').trim();
+      // Always use the email on file; do not accept overrides from the client
+      const buyerEmail = ''; // ignored on purpose
       const providedCustomerId = String(payload.stripeCustomerId || '').trim();
 
       const dropSnap = await db.collection('drops').doc(dropId).get();
@@ -108,7 +109,7 @@ export const createStripeCheckoutSession = onRequest(
 
       const user = userSnap.data() || {};
       const primaryEmail = String(user.email || user.contactEmail || '').trim();
-      const effectiveEmail = buyerEmail || primaryEmail;
+      const effectiveEmail = primaryEmail;
 
       const stripe = getStripe();
       const unitAmount = Math.round(amount * 100);
@@ -171,6 +172,7 @@ export const createStripeCheckoutSession = onRequest(
         payment_method_types: ['card'],
         customer: stripeCustomerId || undefined,
         payment_intent_data: {
+          setup_future_usage: 'off_session',
           metadata: {
             dropId,
             buyerUid,
