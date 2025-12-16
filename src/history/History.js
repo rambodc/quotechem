@@ -183,6 +183,12 @@ export default function History() {
     };
   }, [appUser?.id, appUser?.stripeCustomerId]);
 
+  useEffect(() => {
+    const handleFocus = () => setManagingCards(false);
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   const handleManageCards = useCallback(async () => {
     if (!appUser?.stripeCustomerId) {
       setCardsError('No Stripe customer found for this account yet.');
@@ -286,7 +292,6 @@ export default function History() {
               {managingCards ? 'Opening…' : 'Add / Edit Card'}
             </button>
           </div>
-          {managingCards ? <div className={styles.overlay}>Opening card manager…</div> : null}
           {cardsLoading ? (
             <p className={styles.loadingState}>Loading cards…</p>
           ) : cardsError ? (
@@ -312,6 +317,7 @@ export default function History() {
 
         {content}
       </div>
+      {managingCards ? <div className={styles.overlay}>Opening card manager…</div> : null}
     </div>
   );
 }
