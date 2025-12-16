@@ -281,10 +281,15 @@ function App() {
             if (ensuredFirst !== data.firstName) updates.firstName = ensuredFirst;
             if (ensuredLast !== data.lastName) updates.lastName = ensuredLast;
 
-            if (!data.username) {
+            const existingUsername = typeof data.username === 'string' ? data.username.trim() : '';
+            let finalUsername = existingUsername;
+            if (!existingUsername) {
               const generated = deriveUsername(data, u);
+              finalUsername = generated;
               updates.username = generated;
               updates.usernameNormalized = normalizeUsername(generated);
+            } else if (!data.usernameNormalized) {
+              updates.usernameNormalized = normalizeUsername(existingUsername);
             }
 
             if (Object.keys(updates).length) {
@@ -298,7 +303,18 @@ function App() {
               }
             }
 
-            setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, ...data });
+            const finalData = {
+              ...data,
+              firstName: typeof data.firstName === 'string' ? data.firstName : '',
+              lastName: typeof data.lastName === 'string' ? data.lastName : '',
+              username: finalUsername || existingUsername,
+              usernameNormalized:
+                typeof data.usernameNormalized === 'string'
+                  ? data.usernameNormalized
+                  : normalizeUsername(finalUsername || existingUsername || ''),
+            };
+
+            setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, ...finalData });
             setCheckingProfile(false);
           },
           (err) => {
