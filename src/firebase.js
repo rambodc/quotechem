@@ -39,8 +39,9 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app, 'us-central1');
-// Force the known-good bucket to avoid env drift
-const FORCED_BUCKET = 'razz6-92831.firebasestorage.app';
+// Prefer env-driven bucket; fall back to the dev bucket for safety in this branch
+const FORCED_BUCKET =
+  process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || 'showmaster1-f1a9f.firebasestorage.app';
 export const storage = getStorage(app, `gs://${FORCED_BUCKET}`);
 
 // Tiny debug helper: prints the storage root used at runtime

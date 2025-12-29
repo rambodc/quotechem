@@ -1,14 +1,14 @@
 {
   "projects": {
-    "dev": "razz6-92831",
+    "dev": "showmaster1-f1a9f",
     "prod": "production1-fbd5d",
-    "default": "razz6-92831"
+    "default": "showmaster1-f1a9f"
   },
   "targets": {
-    "razz6-92831": {
+    "showmaster1-f1a9f": {
       "hosting": {
         "web": [
-          "razz6-92831"
+          "showmaster1-f1a9f"
         ]
       }
     },
