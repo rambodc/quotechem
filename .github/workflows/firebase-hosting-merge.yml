@@ -10,6 +10,9 @@ jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     environment: Prod
+    permissions:
+      id-token: write   # required for Workload Identity Federation
+      contents: read    # to checkout code
     steps:
       - uses: actions/checkout@v4
       - name: Authenticate to Google Cloud (WIF)
