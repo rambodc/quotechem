@@ -14,7 +14,7 @@ import { FiDisc } from 'react-icons/fi';
 function Home() {
   const appUser = useContext(UserContext);
 
-  const [albums, setAlbums] = useState([]);
+  const [drops, setDrops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -25,9 +25,8 @@ function Home() {
     return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
   };
 
-  // Fetch latest albums snapshot
   useEffect(() => {
-    const q = query(collection(db, 'sets'), orderBy('updatedAt', 'desc'));
+    const q = query(collection(db, 'drops'), orderBy('updatedAt', 'desc'));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -35,15 +34,15 @@ function Home() {
           const data = docSnap.data() || {};
           return {
             id: docSnap.id,
-            albumId: data.albumId || docSnap.id,
-            title: data.title || 'Untitled Set',
+            dropId: data.dropId || docSnap.id,
+            title: data.title || 'Untitled Drop',
             description: data.description || '',
-            coverUrl: data.coverUrl || '',
-            dropCount: typeof data.dropCount === 'number' ? data.dropCount : 0,
-            artistName: data.artistName || data.artistFullName || '',
+            coverUrl: data.mediaUrl || '',
+            price: data.purchaseNowAmount || null,
+            currency: data.purchaseNowCurrency || 'usd',
           };
         });
-        setAlbums(list);
+        setDrops(list);
         setLoading(false);
         setError('');
 
@@ -61,17 +60,17 @@ function Home() {
 
       },
       (err) => {
-        console.error('albums snapshot error:', err);
-        setAlbums([]);
+        console.error('drops snapshot error:', err);
+        setDrops([]);
         setLoading(false);
-        setError(err?.message || 'Failed to load albums.');
+        setError(err?.message || 'Failed to load drops.');
       }
     );
     return () => unsub();
   }, []);
 
-  const openAlbum = (album) => {
-    const albumId = album.albumId || album.id;
+  const openDrop = (drop) => {
+    const dropId = drop.dropId || drop.id;
 
     try {
       const currentState = window.history.state || {};
@@ -83,7 +82,7 @@ function Home() {
       // ignore if replaceState is blocked
     }
 
-    navigate(`/set/${albumId}`);
+    navigate(`/drop/${dropId}`);
   };
 
   const Dashboard = () => (
@@ -92,39 +91,34 @@ function Home() {
         <p>Loading…</p>
       ) : error ? (
         <p style={{ color: '#b91c1c' }}>{error}</p>
-      ) : albums.length === 0 ? (
-        <div><p>No sets yet.</p></div>
+      ) : drops.length === 0 ? (
+        <div><p>No drops yet.</p></div>
       ) : (
         <div className="card-grid" style={{ paddingTop: 6 }}>
-          {albums.map((album) => (
+          {drops.map((drop) => (
             <div
               className="glass-card"
-              key={album.albumId}
+              key={drop.dropId}
               role="button"
               tabIndex={0}
-              onClick={() => openAlbum(album)}
-              onKeyDown={(e) => (e.key === 'Enter' ? openAlbum(album) : null)}
+              onClick={() => openDrop(drop)}
+              onKeyDown={(e) => (e.key === 'Enter' ? openDrop(drop) : null)}
             >
               <div className="card-image-wrap">
-                {album.coverUrl ? (
-                  <img className="card-image" src={album.coverUrl} alt={album.title || 'Set'} />
+                {drop.coverUrl ? (
+                  <img className="card-image" src={drop.coverUrl} alt={drop.title || 'Drop'} />
                 ) : (
-                  <div className="album-placeholder">No Cover</div>
+                  <div className="album-placeholder">No Media</div>
                 )}
               </div>
               <div className="card-body">
-                {album.artistName ? (
-                  <div className="card-meta">
-                    <FiDisc size={14} />
-                    <span>{album.artistName}</span>
-                  </div>
-                ) : null}
-                <h2>{truncate(album.title || 'Untitled', 32)}</h2>
-                <p>{truncate(album.description || '', 120)}</p>
-                <div className="card-chips">
-                  <span>{album.dropCount === 1 ? '1 drop' : `${album.dropCount} drops`}</span>
+                <div className="card-meta">
+                  <FiDisc size={14} />
+                  <span>{drop.price ? `${drop.price} ${drop.currency?.toUpperCase?.() || ''}` : 'TBD'}</span>
                 </div>
-                <button type="button" className="card-cta">Open Set</button>
+                <h2>{truncate(drop.title || 'Untitled', 32)}</h2>
+                <p>{truncate(drop.description || '', 120)}</p>
+                <button type="button" className="card-cta">View Drop</button>
               </div>
             </div>
           ))}
