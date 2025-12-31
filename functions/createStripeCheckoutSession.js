@@ -2,7 +2,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { STRIPE_SECRET_KEY, getStripe, db, admin } from './stripeClient.js';
 
-// test2
+// test3
 
 function parseBody(body) {
   if (!body) return {};
