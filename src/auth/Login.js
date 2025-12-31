@@ -39,7 +39,7 @@ function Login() {
       }}
     >
       <form className="auth-box" onSubmit={handleLogin}>
-        <h1>Razzberry</h1>
+        <h1>Showmaster</h1>
         <h2>Login</h2>
 
         {error && <p className="error">{error}</p>}

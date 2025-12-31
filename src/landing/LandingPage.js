@@ -8,7 +8,7 @@ function LandingPage() {
   return (
     <div className="auth-container">
       <div className="auth-box">
-        <h1>Welcome to Razzberry</h1>
+        <h1>Welcome to Showmaster</h1>
         <h2>Music. Culture. Identity.</h2>
 
         <p style={{ textAlign: 'center', fontWeight: 300 }}>

@@ -136,7 +136,7 @@ function Signup() {
       }}
     >
       <form className="auth-box" onSubmit={handleSignup}>
-        <h1>Razzberry</h1>
+        <h1>Showmaster</h1>
         <h2>Create Account</h2>
 
         {error && <p className="error">{error}</p>}

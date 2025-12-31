@@ -1,4 +1,4 @@
-// functions/index.js (ESM)
+// functions/index.js (ESM) a
 // Export production functions
 
 import { createStripeCheckoutSession } from './createStripeCheckoutSession.js';

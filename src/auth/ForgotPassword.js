@@ -39,7 +39,7 @@ function ForgotPassword() {
       }}
     >
       <form className="auth-box" onSubmit={handleReset}>
-        <h1>Razzberry</h1>
+        <h1>Showmaster</h1>
         <h2>Reset Password</h2>
 
         {error && <p className="error">{error}</p>}

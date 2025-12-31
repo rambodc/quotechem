@@ -17,7 +17,7 @@ function Chat() {
     return () => window.removeEventListener('resize', update);
   }, []);
   const [messages, setMessages] = useState([
-    { id: 'm1', role: 'assistant', content: "Hi! I'm your Razzberry helper. Ask me anything." },
+    { id: 'm1', role: 'assistant', content: "Hi! I'm your Showmaster helper. Ask me anything." },
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -145,7 +145,7 @@ function Chat() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             onFocus={onFocus}
-            placeholder="Message Razzberry…"
+            placeholder="Message Showmaster…"
             rows={1}
             style={styles.textarea}
           />
