@@ -17,22 +17,11 @@ import LandingPage from './landing/LandingPage';
 import Login from './auth/Login';
 import Signup from './auth/Signup';
 import ForgotPassword from './auth/ForgotPassword';
-import Artists from './artists/Artists';
-import ArtistList from './artists/artistList';
 
 // Protected pages
 import Home from './home/Home';
 import DropDetail from './drop/DropDetail';
-import CreateArtist from './create-artist/create-artist';
 import CreateDrop from './create-drop/CreateDrop';
-import BecomeArtist from './become-artist/BecomeArtist';
-import AlbumList from './albums/AlbumList';
-import AlbumDetail from './albums/AlbumDetail';
-import CreateAlbum from './create-album/CreateAlbum';
-import Payment from './history/History';
-import More from './more/More';
-import Terms from './terms/Terms';
-import Services from './services/Services';
 import Account from './account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
@@ -54,7 +43,6 @@ function AppRoutes({ user }) {
         <Route path="/signin" element={!user ? <Login /> : <Navigate to="/home" />} />
         <Route path="/signup" element={!user ? <Signup /> : <Navigate to="/home" />} />
         <Route path="/forgot" element={<ForgotPassword />} />
-        <Route path="/artist/:artistUid" element={<Artists />} />
 
         {/* Protected */}
         <Route
@@ -62,46 +50,6 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/artists"
-          element={
-            <ProtectedRoute>
-              <ArtistList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/purchased"
-          element={
-            <ProtectedRoute>
-              <AlbumList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/set/:albumId"
-          element={
-            <ProtectedRoute>
-              <AlbumDetail />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/create-artists"
-          element={
-            <ProtectedRoute>
-              <CreateArtist />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/create-album"
-          element={
-            <ProtectedRoute>
-              <CreateAlbum />
             </ProtectedRoute>
           }
         />
@@ -117,7 +65,7 @@ function AppRoutes({ user }) {
           path="/become-artist"
           element={
             <ProtectedRoute>
-              <BecomeArtist />
+              <CreateDrop />
             </ProtectedRoute>
           }
         />
@@ -126,23 +74,6 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <DropDetail />
-            </ProtectedRoute>
-          }
-        />
-        {/* More + subpages */}
-        <Route
-          path="/more"
-          element={
-            <ProtectedRoute>
-              <More />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/payment"
-          element={
-            <ProtectedRoute>
-              <Payment />
             </ProtectedRoute>
           }
         />
@@ -159,22 +90,6 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <EditUsername />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/terms"
-          element={
-            <ProtectedRoute>
-              <Terms />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/services"
-          element={
-            <ProtectedRoute>
-              <Services />
             </ProtectedRoute>
           }
         />
