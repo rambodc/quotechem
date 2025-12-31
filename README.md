@@ -1,4 +1,4 @@
-Your Show App 1 / Festival System idea (what I remember)
+Your Show App 2 / Festival System idea (what I remember)
 
 A professional, enterprise-style platform for festivals, concerts, and large shows
 
