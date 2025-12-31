@@ -6,7 +6,7 @@ import { FiChevronDown, FiUser } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './DropDetail.module.css';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import { getStripeClient } from '../services/stripe';
 import { UserContext } from '../App';
 
@@ -284,16 +284,22 @@ export default function DropDetail() {
         throw new Error('Stripe is not configured.');
       }
 
+      const currentUser = auth.currentUser;
+      const idToken = await currentUser?.getIdToken();
+      if (!idToken) {
+        throw new Error('You need to sign in again to purchase.');
+      }
+
       const response = await fetch(CREATE_CHECKOUT_URL, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
+          authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
           dropId: drop.dropId,
           baseUrl: window.location.origin,
-          buyerUid: appUser.id,
-          buyerEmail: appUser.email || '',
+          buyerEmail: appUser.email || '', // kept for backwards compatibility; server ignores in favor of auth
           stripeCustomerId: appUser.stripeCustomerId || '',
         }),
       });

@@ -64,6 +64,22 @@ export const createStripeCheckoutSession = onRequest(
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     try {
+      // Enforce Firebase Auth: expect Authorization: Bearer <idToken>
+      const authHeader = req.get('Authorization') || '';
+      const match = authHeader.match(/^Bearer (.+)$/i);
+      if (!match) {
+        res.status(401).json({ error: 'unauthenticated' });
+        return;
+      }
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(match[1]);
+      } catch (verifyErr) {
+        logger.warn('[createStripeCheckoutSession] invalid id token', verifyErr?.message || verifyErr);
+        res.status(401).json({ error: 'unauthenticated' });
+        return;
+      }
+
       const payload = parseBody(req.body);
       const dropId = String(payload.dropId || '').trim();
       if (!dropId) {
@@ -71,9 +87,9 @@ export const createStripeCheckoutSession = onRequest(
         return;
       }
 
-      const buyerUid = String(payload.buyerUid || '').trim();
+      const buyerUid = String(decoded.uid || '').trim();
       if (!buyerUid) {
-        res.status(400).json({ error: 'missing_buyer_uid' });
+        res.status(401).json({ error: 'unauthenticated' });
         return;
       }
 
