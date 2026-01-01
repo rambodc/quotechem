@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
+import { FiLock, FiMail, FiLogOut } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import { auth } from '../firebase';
@@ -18,24 +19,41 @@ export default function More() {
   };
 
   const items = [
-    { label: 'Change Password', onClick: () => {} },
-    { label: 'Change Email', onClick: () => {} },
+    { label: 'Change Password', icon: <FiLock />, onClick: () => {} },
+    { label: 'Change Email', icon: <FiMail />, onClick: () => {} },
   ];
 
   return (
-    <div className={layoutStyles.pageShell} style={{ maxWidth: 640 }}>
-      <TopBar backLabel="Back" onBack={() => navigate(-1)} title="More" />
-
-      <div style={{
-        width: '100%',
-        background: '#fff',
-        borderRadius: 16,
-        boxShadow: '0 18px 40px rgba(15,23,42,0.12)',
-        padding: 18,
+    <div
+      className={layoutStyles.pageShell}
+      style={{
+        maxWidth: 520,
+        minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
-      }}>
+      }}
+    >
+      <TopBar
+        variant="back"
+        backLabel="Back"
+        onBack={() => navigate(-1)}
+      />
+
+      <div
+        style={{
+          marginTop: 90,
+          marginBottom: 40,
+          width: '100%',
+          background: '#fff',
+          borderRadius: 18,
+          boxShadow: '0 18px 40px rgba(15,23,42,0.12)',
+          padding: 18,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          alignSelf: 'center',
+        }}
+      >
         {items.map((item) => (
           <button
             key={item.label}
@@ -50,9 +68,13 @@ export default function More() {
               textAlign: 'left',
               fontWeight: 600,
               cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
             }}
           >
-            {item.label}
+            <span style={{ fontSize: 18, color: '#475569' }}>{item.icon}</span>
+            <span>{item.label}</span>
           </button>
         ))}
 
@@ -69,8 +91,13 @@ export default function More() {
             fontWeight: 700,
             cursor: 'pointer',
             boxShadow: '0 12px 30px rgba(239,68,68,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            justifyContent: 'center',
           }}
         >
+          <FiLogOut />
           Logout
         </button>
       </div>
