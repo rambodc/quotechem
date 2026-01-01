@@ -26,6 +26,7 @@ import Account from './account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
 import EditUsername from './account/EditUsername';
+import More from './more/More';
 
 // Route guard
 import ProtectedRoute from './ProtectedRoute';
@@ -82,6 +83,14 @@ function AppRoutes({ user }) {
           element={
             <ProtectedRoute>
               <Account />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/more"
+          element={
+            <ProtectedRoute>
+              <More />
             </ProtectedRoute>
           }
         />
