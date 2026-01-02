@@ -24,15 +24,7 @@ export default function More() {
   ];
 
   return (
-    <div
-      className={layoutStyles.pageShell}
-      style={{
-        maxWidth: 520,
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <div className={layoutStyles.pageShell} style={{ minHeight: '100vh' }}>
       <TopBar
         variant="back"
         backLabel="Back"
@@ -41,65 +33,74 @@ export default function More() {
 
       <div
         style={{
-          marginTop: 90,
-          marginBottom: 40,
-          width: '100%',
-          background: '#fff',
-          borderRadius: 18,
-          boxShadow: '0 18px 40px rgba(15,23,42,0.12)',
-          padding: 18,
+          flex: 1,
           display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          alignSelf: 'center',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '100px 16px 40px',
         }}
       >
-        {items.map((item) => (
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 420,
+            background: '#fff',
+            borderRadius: 18,
+            boxShadow: '0 18px 40px rgba(15,23,42,0.12)',
+            padding: 18,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={item.onClick}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: 12,
+                border: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                textAlign: 'center',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                justifyContent: 'center',
+              }}
+            >
+              <span style={{ fontSize: 18, color: '#475569' }}>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+
           <button
-            key={item.label}
             type="button"
-            onClick={item.onClick}
+            onClick={handleLogout}
             style={{
               width: '100%',
               padding: '14px 16px',
               borderRadius: 12,
-              border: '1px solid #e2e8f0',
-              background: '#f8fafc',
-              textAlign: 'left',
-              fontWeight: 600,
+              border: 'none',
+              background: 'linear-gradient(120deg, #ef4444, #dc2626)',
+              color: '#fff',
+              fontWeight: 700,
               cursor: 'pointer',
+              boxShadow: '0 12px 30px rgba(239,68,68,0.35)',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
+              justifyContent: 'center',
             }}
           >
-            <span style={{ fontSize: 18, color: '#475569' }}>{item.icon}</span>
-            <span>{item.label}</span>
+            <FiLogOut />
+            Logout
           </button>
-        ))}
-
-        <button
-          type="button"
-          onClick={handleLogout}
-          style={{
-            width: '100%',
-            padding: '14px 16px',
-            borderRadius: 12,
-            border: 'none',
-            background: 'linear-gradient(120deg, #ef4444, #dc2626)',
-            color: '#fff',
-            fontWeight: 700,
-            cursor: 'pointer',
-            boxShadow: '0 12px 30px rgba(239,68,68,0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            justifyContent: 'center',
-          }}
-        >
-          <FiLogOut />
-          Logout
-        </button>
+        </div>
       </div>
     </div>
   );
