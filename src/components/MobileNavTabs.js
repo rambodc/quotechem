@@ -1,7 +1,12 @@
 // src/components/MobileNavTabs.js
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FiHome, FiUsers, FiBook, FiMoreHorizontal } from 'react-icons/fi';
+import {
+  FiHome,
+  FiMessageCircle,
+  FiBell,
+  FiMoreHorizontal,
+} from 'react-icons/fi';
 
 export default function MobileNavTabs() {
   const { pathname } = useLocation();
@@ -9,14 +14,13 @@ export default function MobileNavTabs() {
 
   const tabs = [
     { label: 'Home', to: '/home', icon: FiHome },
-    { label: 'Artists', to: '/artists', icon: FiUsers },
-    { label: 'Purchased', to: '/purchased', icon: FiBook },
+    { label: 'Chat', to: '/chat', icon: FiMessageCircle },
+    { label: 'Updates', to: '/updates', icon: FiBell },
     { label: 'More', to: '/more', icon: FiMoreHorizontal },
   ];
 
   const isActive = (to) => {
     if (to === '/home') return pathname === '/home';
-    if (to === '/purchased') return pathname.startsWith('/purchased') || pathname.startsWith('/set');
     return pathname.startsWith(to);
   };
 
