@@ -1,0 +1,138 @@
+.pageShell {
+  margin: 88px auto 120px;
+  width: 100%;
+  max-width: 980px;
+  padding: 0 18px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hero {
+  position: relative;
+  width: 100%;
+  border-radius: 26px;
+  overflow: hidden;
+  background: radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.3), rgba(15, 23, 42, 0.9));
+  min-height: 240px;
+  box-shadow: 0 36px 90px rgba(15, 23, 42, 0.25);
+}
+
+.hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  color: rgba(226, 232, 240, 0.8);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+}
+
+.card {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 26px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.card h1 {
+  margin: 4px 0 0;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  color: #0f172a;
+}
+
+.description {
+  margin: 0;
+  color: #475569;
+  line-height: 1.7;
+  font-size: 1.02rem;
+  white-space: pre-line;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.statusProgress {
+  background: #ecfeff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.statusDone {
+  background: #ecfdf3;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.metaRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.metaItem {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #f8fafc, #ffffff);
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.metaLabel {
+  display: block;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.error {
+  color: #b91c1c;
+  font-weight: 600;
+  padding: 0 6px;
+}

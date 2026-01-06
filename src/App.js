@@ -22,6 +22,8 @@ import ForgotPassword from './auth/ForgotPassword';
 import Home from './home/Home';
 import DropDetail from './drop/DropDetail';
 import CreateDrop from './create-drop/CreateDrop';
+import ShowDetail from './show/ShowDetail';
+import CreateShow from './create-show/CreateShow';
 import Account from './account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
@@ -50,15 +52,23 @@ function AppRoutes({ user }) {
           path="/home"
           element={
             <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/create-drop"
-          element={
-            <ProtectedRoute>
-              <CreateDrop />
+          <Home />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/create-show"
+      element={
+        <ProtectedRoute>
+          <CreateShow />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/create-drop"
+      element={
+        <ProtectedRoute>
+          <CreateDrop />
             </ProtectedRoute>
           }
         />
@@ -68,13 +78,21 @@ function AppRoutes({ user }) {
             <ProtectedRoute>
               <CreateDrop />
             </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/drop/:dropId"
-          element={
-            <ProtectedRoute>
-              <DropDetail />
+      }
+    />
+    <Route
+      path="/show/:showId"
+      element={
+        <ProtectedRoute>
+          <ShowDetail />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/drop/:dropId"
+      element={
+        <ProtectedRoute>
+          <DropDetail />
             </ProtectedRoute>
           }
         />

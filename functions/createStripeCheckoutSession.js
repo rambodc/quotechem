@@ -95,7 +95,7 @@ export const createStripeCheckoutSession = onRequest(
         return;
       }
 
-      // Always use the email on file; do not accept overrides from the client
+      // Always use the email on file; do not accept overrides from the client 22
       const buyerEmail = ''; // ignored on purpose
       const providedCustomerId = String(payload.stripeCustomerId || '').trim();
 
