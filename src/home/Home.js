@@ -150,9 +150,8 @@ function Home() {
     return () => unsubs.forEach((fn) => fn && fn());
   }, [appUser?.id, isPlatformAdmin, shows]);
 
-  // Platform admins: subscribe to all shows
+  // Subscribe to shows (all), then filter based on membership locally
   useEffect(() => {
-    if (!isPlatformAdmin) return undefined;
     const q = query(collection(db, 'shows'), orderBy('updatedAt', 'desc'));
     const unsub = onSnapshot(
       q,
@@ -192,69 +191,7 @@ function Home() {
       }
     );
     return () => unsub();
-  }, [isPlatformAdmin]);
-
-  // Non-admins: subscribe only to allowed show IDs
-  useEffect(() => {
-    if (isPlatformAdmin) return undefined;
-    if (!appUser?.id) {
-      setShows([]);
-      return undefined;
-    }
-
-    const allowedIds = Array.from(new Set([
-      ...memberShowIdsByUid,
-      ...memberShowIdsByEmail,
-      ...memberShowIdsByDoc,
-    ]));
-
-    if (allowedIds.length === 0) {
-      setShows([]);
-      setLoading(false);
-      return undefined;
-    }
-
-    setLoading(true);
-    const unsubs = [];
-    const current = new Map();
-
-    allowedIds.forEach((showId) => {
-      const ref = doc(db, 'shows', showId);
-      const unsub = onSnapshot(
-        ref,
-        (snap) => {
-          if (snap.exists()) {
-            const data = snap.data() || {};
-            current.set(showId, {
-              id: showId,
-              showId,
-              name: data.name || 'Untitled Show',
-              description: data.description || '',
-              photoUrl: data.photoUrl || '',
-              startDate: data.startDate || '',
-              endDate: data.endDate || '',
-              status: data.status || 'in_progress',
-            });
-          } else {
-            current.delete(showId);
-          }
-          setShows(Array.from(current.values()));
-          setLoading(false);
-          setError('');
-        },
-        (err) => {
-          console.error('show doc snapshot error:', err);
-          current.delete(showId);
-          setShows(Array.from(current.values()));
-          setLoading(false);
-          setError(err?.message || 'Failed to load shows.');
-        }
-      );
-      unsubs.push(unsub);
-    });
-
-    return () => unsubs.forEach((fn) => fn && fn());
-  }, [appUser?.id, isPlatformAdmin, memberShowIdsByDoc, memberShowIdsByEmail, memberShowIdsByUid]);
+  }, []);
 
   const openShow = (show) => {
     const showId = show.showId || show.id;
