@@ -20,6 +20,11 @@ export default function CreateShow() {
 
   const appUser = useContext(UserContext);
   const { isPlatformAdmin, loading: platformLoading } = usePlatformAdmin(appUser?.id);
+  useEffect(() => {
+    if (!platformLoading && !isPlatformAdmin) {
+      navigate('/home', { replace: true });
+    }
+  }, [isPlatformAdmin, navigate, platformLoading]);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -122,6 +127,15 @@ export default function CreateShow() {
       <TopBar variant="back" backLabel="Back" onBack={handleBack} title="Create Show" />
 
       <div className={styles.page}>
+        {!platformLoading && !isPlatformAdmin ? (
+          <div className={styles.card}>
+            <p className={styles.error}>You do not have permission to create shows.</p>
+            <button type="button" className={styles.primary} onClick={handleBack}>
+              Go Back
+            </button>
+          </div>
+        ) : null}
+
         {!platformLoading && !isPlatformAdmin ? (
           <div className={styles.card}>
             <p className={styles.error}>You do not have permission to create shows.</p>

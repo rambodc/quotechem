@@ -15,7 +15,8 @@ function Home() {
   const appUser = useContext(UserContext);
 
   const [shows, setShows] = useState([]);
-  const [memberShowIds, setMemberShowIds] = useState([]);
+  const [memberShowIdsByUid, setMemberShowIdsByUid] = useState([]);
+  const [memberShowIdsByEmail, setMemberShowIdsByEmail] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [membershipLoading, setMembershipLoading] = useState(true);
@@ -45,37 +46,74 @@ function Home() {
 
   const statusLabel = (value) => (value === 'completed' ? 'Completed' : 'In Progress');
 
-  // Listen for shows where the user is a member (for non-platform admins)
+  // Listen for shows where the user is a member (for non-platform admins), by uid and email for resilience
   useEffect(() => {
-    if (!appUser?.id) {
-      setMemberShowIds([]);
-      setMembershipLoading(false);
-      return undefined;
+    const unsubs = [];
+    let listenersActive = 0;
+
+    const done = () => {
+      listenersActive -= 1;
+      if (listenersActive <= 0) setMembershipLoading(false);
+    };
+
+    setMembershipLoading(true);
+    setMemberShowIdsByUid([]);
+    setMemberShowIdsByEmail([]);
+
+    if (appUser?.id) {
+      listenersActive += 1;
+      const membersQ = query(
+        collectionGroup(db, 'members'),
+        where('uid', '==', appUser.id)
+      );
+      unsubs.push(onSnapshot(
+        membersQ,
+        (snap) => {
+          const ids = snap.docs
+            .map((docSnap) => docSnap.ref.parent?.parent?.id)
+            .filter(Boolean);
+          setMemberShowIdsByUid(ids);
+          done();
+        },
+        (err) => {
+          console.error('membership snapshot error (uid):', err);
+          setMemberShowIdsByUid([]);
+          done();
+        }
+      ));
     }
 
-    const membersQ = query(
-      collectionGroup(db, 'members'),
-      where('uid', '==', appUser.id)
-    );
+    if (appUser?.email) {
+      listenersActive += 1;
+      const emailNormalized = (appUser.email || '').trim().toLowerCase();
+      const membersEmailQ = query(
+        collectionGroup(db, 'members'),
+        where('email', '==', emailNormalized)
+      );
+      unsubs.push(onSnapshot(
+        membersEmailQ,
+        (snap) => {
+          const ids = snap.docs
+            .map((docSnap) => docSnap.ref.parent?.parent?.id)
+            .filter(Boolean);
+          setMemberShowIdsByEmail(ids);
+          done();
+        },
+        (err) => {
+          console.error('membership snapshot error (email):', err);
+          setMemberShowIdsByEmail([]);
+          done();
+        }
+      ));
+    }
 
-    const unsub = onSnapshot(
-      membersQ,
-      (snap) => {
-        const ids = snap.docs
-          .map((docSnap) => docSnap.ref.parent?.parent?.id)
-          .filter(Boolean);
-        setMemberShowIds(ids);
-        setMembershipLoading(false);
-      },
-      (err) => {
-        console.error('membership snapshot error:', err);
-        setMemberShowIds([]);
-        setMembershipLoading(false);
-      }
-    );
+    // If no listeners, mark done
+    if (listenersActive === 0) {
+      setMembershipLoading(false);
+    }
 
-    return () => unsub();
-  }, [appUser?.id]);
+    return () => unsubs.forEach((fn) => fn && fn());
+  }, [appUser?.email, appUser?.id]);
 
   useEffect(() => {
     const q = query(collection(db, 'shows'), orderBy('updatedAt', 'desc'));
@@ -138,8 +176,9 @@ function Home() {
   const filteredShows = useMemo(() => {
     if (isPlatformAdmin) return shows;
     if (!appUser?.id) return [];
-    return shows.filter((show) => memberShowIds.includes(show.id));
-  }, [appUser?.id, isPlatformAdmin, memberShowIds, shows]);
+    const allowedIds = new Set([...memberShowIdsByUid, ...memberShowIdsByEmail]);
+    return shows.filter((show) => allowedIds.has(show.id));
+  }, [appUser?.id, isPlatformAdmin, memberShowIdsByEmail, memberShowIdsByUid, shows]);
 
   const Dashboard = () => (
     <>
