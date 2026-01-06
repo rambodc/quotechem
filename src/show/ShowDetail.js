@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { FiCalendar, FiFlag } from 'react-icons/fi';
+import { collection, doc, getDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { FiCalendar, FiFlag, FiBriefcase } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import styles from './ShowDetail.module.css';
 import { db } from '../firebase';
@@ -29,6 +29,9 @@ export default function ShowDetail() {
   const [show, setShow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [jobs, setJobs] = useState([]);
+  const [jobsError, setJobsError] = useState('');
+  const [jobsLoading, setJobsLoading] = useState(true);
 
   const handleBack = useCallback(() => {
     if (window.history.length > 2) navigate(-1);
@@ -59,6 +62,46 @@ export default function ShowDetail() {
       alive = false;
     };
   }, [showId]);
+
+  useEffect(() => {
+    const jobsCol = collection(db, 'shows', showId, 'jobs');
+    const q = query(jobsCol, orderBy('updatedAt', 'desc'));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((docSnap) => {
+          const data = docSnap.data() || {};
+          return {
+            id: docSnap.id,
+            jobId: data.jobId || docSnap.id,
+            title: data.title || 'Untitled Job',
+            category: data.category || '',
+            workstream: data.workstream || '',
+            status: data.status || 'draft',
+            visibility: data.visibility || 'restricted',
+            rfqDueAt: data?.rfq?.dueAt || '',
+            eventStart: data?.rfq?.eventDates?.startAt || '',
+            eventEnd: data?.rfq?.eventDates?.endAt || '',
+          };
+        });
+        setJobs(list);
+        setJobsLoading(false);
+        setJobsError('');
+      },
+      (err) => {
+        console.error('jobs snapshot error:', err);
+        setJobs([]);
+        setJobsLoading(false);
+        setJobsError(err?.message || 'Failed to load jobs.');
+      }
+    );
+    return () => unsub();
+  }, [showId]);
+
+  const openJob = (job) => {
+    const jobId = job.jobId || job.id;
+    navigate(`/show/${showId}/job/${jobId}`);
+  };
 
   if (loading) return null;
 
@@ -114,6 +157,65 @@ export default function ShowDetail() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.eyebrow}>Jobs</p>
+              <h2 className={styles.sectionTitle}>Work requests for this show</h2>
+            </div>
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => navigate(`/show/${showId}/create-job`)}
+            >
+              Create Job
+            </button>
+          </div>
+
+          <div className={styles.jobList}>
+            {jobsLoading ? (
+              <p className={styles.muted}>Loading jobs…</p>
+            ) : jobsError ? (
+              <p className={styles.error}>{jobsError}</p>
+            ) : jobs.length === 0 ? (
+              <p className={styles.muted}>No jobs yet. Create one to kick off hiring.</p>
+            ) : (
+              jobs.map((job) => (
+                <button
+                  key={job.jobId}
+                  type="button"
+                  className={styles.jobCard}
+                  onClick={() => openJob(job)}
+                >
+                  <div className={styles.jobIcon}>
+                    <FiBriefcase size={16} />
+                  </div>
+                  <div className={styles.jobBody}>
+                    <div className={styles.jobMeta}>
+                      <span className={`${styles.statusPill} ${styles[`jobStatus_${job.status}`]}`}>
+                        {job.status}
+                      </span>
+                      <span className={styles.jobVisibility}>{job.visibility}</span>
+                    </div>
+                    <h3>{job.title}</h3>
+                    <p className={styles.jobText}>
+                      {job.category || job.workstream
+                        ? [job.category, job.workstream].filter(Boolean).join(' · ')
+                        : 'General'}
+                    </p>
+                    <div className={styles.jobDates}>
+                      {job.eventStart || job.eventEnd ? (
+                        <span>{formatDateRange(job.eventStart, job.eventEnd)}</span>
+                      ) : (
+                        <span>Event dates TBD</span>
+                      )}
+                      {job.rfqDueAt ? <span className={styles.jobDue}>RFQ due {formatDate(job.rfqDueAt)}</span> : null}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
       ) : null}

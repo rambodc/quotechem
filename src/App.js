@@ -24,6 +24,8 @@ import DropDetail from './drop/DropDetail';
 import CreateDrop from './create-drop/CreateDrop';
 import ShowDetail from './show/ShowDetail';
 import CreateShow from './create-show/CreateShow';
+import CreateJob from './job/CreateJob';
+import JobDetail from './job/JobDetail';
 import Account from './account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
@@ -65,6 +67,14 @@ function AppRoutes({ user }) {
       }
     />
     <Route
+      path="/show/:showId/create-job"
+      element={
+        <ProtectedRoute>
+          <CreateJob />
+        </ProtectedRoute>
+      }
+    />
+    <Route
       path="/create-drop"
       element={
         <ProtectedRoute>
@@ -85,6 +95,14 @@ function AppRoutes({ user }) {
       element={
         <ProtectedRoute>
           <ShowDetail />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/show/:showId/job/:jobId"
+      element={
+        <ProtectedRoute>
+          <JobDetail />
         </ProtectedRoute>
       }
     />
