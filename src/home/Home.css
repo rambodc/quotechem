@@ -1,11 +1,11 @@
 /* src/home/Home.css — styles specific to the Home page */
 
-.home-content { flex: 1; padding: 0.5rem; max-width: 1200px; margin: 64px auto 0; text-align: center; }
-.home-header { margin: 8px 4px 18px; padding: 14px 12px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 14px 28px rgba(15,23,42,0.06); }
+.home-content { flex: 1; padding: 0.5rem; max-width: 1200px; margin: 64px auto 0; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.home-header { width: 100%; max-width: 500px; margin: 8px auto 18px; padding: 14px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 14px 28px rgba(15,23,42,0.06); }
 .home-header h1 { margin: 2px 0 6px; text-align: left; }
 .eyebrow { margin: 0; text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.78rem; font-weight: 700; color: #2563eb; text-align: left; }
 .subtext { margin: 0; color: #475569; text-align: left; }
-.create-show-btn { padding: 12px 14px; border-radius: 14px; border: none; background: linear-gradient(120deg, #2563eb, #7c3aed); color: #fff; font-weight: 700; cursor: pointer; box-shadow: 0 14px 30px rgba(37,99,235,0.28); min-width: 140px; }
+.create-show-btn { padding: 12px 14px; border-radius: 14px; border: none; background: linear-gradient(120deg, #2563eb, #7c3aed); color: #fff; font-weight: 700; cursor: pointer; box-shadow: 0 14px 30px rgba(37,99,235,0.28); min-width: 140px; align-self: flex-end; }
 .empty-state { margin: 24px auto; padding: 24px; max-width: 520px; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 14px 28px rgba(15,23,42,0.06); display: flex; flex-direction: column; gap: 12px; align-items: center; }
 
 /* Grid + Card (Home listing) */
