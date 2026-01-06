@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
@@ -6,6 +6,8 @@ import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './CreateShow.module.css';
 import { db, storage } from '../firebase';
+import { UserContext } from '../App';
+import { usePlatformAdmin } from '../services/roles';
 
 const statusOptions = [
   { value: 'in_progress', label: 'In Progress' },
@@ -15,6 +17,9 @@ const statusOptions = [
 export default function CreateShow() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+
+  const appUser = useContext(UserContext);
+  const { isPlatformAdmin, loading: platformLoading } = usePlatformAdmin(appUser?.id);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -48,6 +53,11 @@ export default function CreateShow() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!isPlatformAdmin) {
+      setError('You do not have permission to create shows.');
+      return;
+    }
 
     const trimmedName = name.trim();
     const trimmedDescription = description.trim();
@@ -112,6 +122,15 @@ export default function CreateShow() {
       <TopBar variant="back" backLabel="Back" onBack={handleBack} title="Create Show" />
 
       <div className={styles.page}>
+        {!platformLoading && !isPlatformAdmin ? (
+          <div className={styles.card}>
+            <p className={styles.error}>You do not have permission to create shows.</p>
+            <button type="button" className={styles.primary} onClick={handleBack}>
+              Go Back
+            </button>
+          </div>
+        ) : null}
+
         <div className={styles.header}>
           <div>
             <p className={styles.eyebrow}>New Show</p>

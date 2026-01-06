@@ -1,20 +1,26 @@
 // src/Home.js
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { FiCalendar, FiFlag } from 'react-icons/fi';
 import { db } from '../firebase';
+import { UserContext } from '../App';
 import TopBar from '../components/TopBar';
 import MobileNavTabs from '../components/MobileNavTabs';
 import layoutStyles from '../styles/layout.module.css';
 import './Home.css';
+import { usePlatformAdmin } from '../services/roles';
 
 function Home() {
+  const appUser = useContext(UserContext);
+
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const navigate = useNavigate();
+
+  const { isPlatformAdmin } = usePlatformAdmin(appUser?.id);
 
   const truncate = (text, maxLength) => {
     if (!text) return '';
@@ -169,9 +175,11 @@ function Home() {
               Create shows with schedules, visuals, and status tags. Everything stays in one place.
             </p>
           </div>
-          <button className="create-show-btn" type="button" onClick={() => navigate('/create-show')}>
-            Create Show
-          </button>
+          {isPlatformAdmin ? (
+            <button className="create-show-btn" type="button" onClick={() => navigate('/create-show')}>
+              Create Show
+            </button>
+          ) : null}
         </div>
 
         <Dashboard />

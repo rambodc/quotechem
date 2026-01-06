@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, doc, getDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { FiCalendar, FiFlag, FiBriefcase } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import styles from './ShowDetail.module.css';
 import { db } from '../firebase';
+import { UserContext } from '../App';
+import { canManageShowJobs, usePlatformAdmin, useShowMembership } from '../services/roles';
 
 const formatDate = (value) => {
   if (!value) return '';
@@ -25,6 +27,7 @@ const statusLabel = (value) => (value === 'completed' ? 'Completed' : 'In Progre
 export default function ShowDetail() {
   const { showId } = useParams();
   const navigate = useNavigate();
+  const appUser = useContext(UserContext);
 
   const [show, setShow] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +35,10 @@ export default function ShowDetail() {
   const [jobs, setJobs] = useState([]);
   const [jobsError, setJobsError] = useState('');
   const [jobsLoading, setJobsLoading] = useState(true);
+
+  const { isPlatformAdmin, loading: platformLoading } = usePlatformAdmin(appUser?.id);
+  const { role: showRole, loading: membershipLoading } = useShowMembership(showId, appUser?.id);
+  const canManageJobs = canManageShowJobs({ isPlatformAdmin, memberRole: showRole });
 
   const handleBack = useCallback(() => {
     if (window.history.length > 2) navigate(-1);
@@ -164,13 +171,15 @@ export default function ShowDetail() {
               <p className={styles.eyebrow}>Jobs</p>
               <h2 className={styles.sectionTitle}>Work requests for this show</h2>
             </div>
-            <button
-              type="button"
-              className={styles.secondary}
-              onClick={() => navigate(`/show/${showId}/create-job`)}
-            >
-              Create Job
-            </button>
+            {!platformLoading && !membershipLoading && canManageJobs ? (
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={() => navigate(`/show/${showId}/create-job`)}
+              >
+                Create Job
+              </button>
+            ) : null}
           </div>
 
           <div className={styles.jobList}>

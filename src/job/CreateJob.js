@@ -1,10 +1,12 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useContext, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './CreateJob.module.css';
 import { db } from '../firebase';
+import { UserContext } from '../App';
+import { canManageShowJobs, usePlatformAdmin, useShowMembership } from '../services/roles';
 
 const statusOptions = ['draft', 'bidding', 'awarded', 'active', 'closeout', 'closed'];
 const visibilityOptions = ['restricted', 'show'];
@@ -12,6 +14,11 @@ const visibilityOptions = ['restricted', 'show'];
 export default function CreateJob() {
   const { showId } = useParams();
   const navigate = useNavigate();
+
+  const appUser = useContext(UserContext);
+  const { isPlatformAdmin, loading: platformLoading } = usePlatformAdmin(appUser?.id);
+  const { role: showRole, loading: membershipLoading } = useShowMembership(showId, appUser?.id);
+  const canManage = canManageShowJobs({ isPlatformAdmin, memberRole: showRole });
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -33,6 +40,11 @@ export default function CreateJob() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!canManage) {
+      setError('You do not have permission to create jobs for this show.');
+      return;
+    }
 
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return setError('Job title is required.');
@@ -71,6 +83,15 @@ export default function CreateJob() {
     <div className={layoutStyles.pageShell}>
       <TopBar variant="back" backLabel="Back" onBack={handleBack} title="Create Job" />
       <div className={styles.page}>
+        {!platformLoading && !membershipLoading && !canManage ? (
+          <div className={styles.card}>
+            <p className={styles.error}>You do not have permission to create jobs for this show.</p>
+            <button type="button" className={styles.primary} onClick={handleBack}>
+              Go Back
+            </button>
+          </div>
+        ) : null}
+
         <div className={styles.header}>
           <div>
             <p className={styles.eyebrow}>New Job</p>
