@@ -1,12 +1,12 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { collection, doc, getDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, orderBy, query, setDoc, serverTimestamp } from 'firebase/firestore';
 import { FiCalendar, FiFlag, FiBriefcase } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import styles from './ShowDetail.module.css';
 import { db } from '../firebase';
 import { UserContext } from '../App';
-import { canManageShowJobs, usePlatformAdmin, useShowMembership } from '../services/roles';
+import { findUserByEmail, useRoleFlags } from '../services/roles';
 
 const formatDate = (value) => {
   if (!value) return '';
@@ -36,11 +36,10 @@ export default function ShowDetail() {
   const [jobsError, setJobsError] = useState('');
   const [jobsLoading, setJobsLoading] = useState(true);
 
-  const { isPlatformAdmin, loading: platformLoading } = usePlatformAdmin(appUser?.id);
-  const { role: showRole, loading: membershipLoading } = useShowMembership(showId, appUser?.id);
-  const canManageJobs = canManageShowJobs({ isPlatformAdmin, memberRole: showRole });
+  const { canManageJobs, canAddMembers, canEditShowMeta, canDeleteShow, loading: roleLoading } =
+    useRoleFlags({ uid: appUser?.id, showId });
 
-  const [memberUid, setMemberUid] = useState('');
+  const [memberEmail, setMemberEmail] = useState('');
   const [memberRole, setMemberRole] = useState('show_admin');
   const [memberError, setMemberError] = useState('');
   const [memberSuccess, setMemberSuccess] = useState('');
@@ -121,26 +120,34 @@ export default function ShowDetail() {
     setMemberError('');
     setMemberSuccess('');
 
-    if (!isPlatformAdmin) {
-      setMemberError('Only platform admins can add show members.');
+    if (!canAddMembers) {
+      setMemberError('You do not have permission to add show members.');
       return;
     }
-    if (!memberUid.trim()) {
-      setMemberError('Enter a user UID to add.');
+    if (!memberEmail.trim()) {
+      setMemberError('Enter an email to add.');
       return;
     }
 
     setMemberSaving(true);
     try {
-      const memberRef = doc(db, 'shows', showId, 'members', memberUid.trim());
-      await memberRef.set({
-        uid: memberUid.trim(),
+      const user = await findUserByEmail(memberEmail);
+      if (!user?.uid) {
+        setMemberError('No user found with that email.');
+        setMemberSaving(false);
+        return;
+      }
+
+      const memberRef = doc(db, 'shows', showId, 'members', user.uid);
+      await setDoc(memberRef, {
+        uid: user.uid,
         role: memberRole,
         addedBy: appUser?.id || null,
-        addedAt: new Date(),
+        addedAt: serverTimestamp(),
+        email: (user.email || memberEmail).toLowerCase(),
       });
       setMemberSuccess('Member added.');
-      setMemberUid('');
+      setMemberEmail('');
     } catch (err) {
       console.error('Failed to add member:', err);
       setMemberError(err?.message || 'Unable to add member.');
@@ -205,18 +212,18 @@ export default function ShowDetail() {
             </div>
           </div>
 
-          {isPlatformAdmin ? (
+          {canAddMembers ? (
             <div className={styles.card}>
               <p className={styles.eyebrow}>Show access</p>
               <h2 className={styles.sectionTitle}>Add a show admin/editor/viewer</h2>
               <form className={styles.memberForm} onSubmit={addShowMember}>
                 <label className={styles.label}>
-                  User UID
+                  User email
                   <input
                     type="text"
-                    value={memberUid}
-                    onChange={(e) => setMemberUid(e.target.value)}
-                    placeholder="Firebase UID"
+                    value={memberEmail}
+                    onChange={(e) => setMemberEmail(e.target.value)}
+                    placeholder="user@example.com"
                   />
                 </label>
                 <label className={styles.label}>
@@ -236,12 +243,34 @@ export default function ShowDetail() {
             </div>
           ) : null}
 
+          {canEditShowMeta || canDeleteShow ? (
+            <div className={styles.adminRow}>
+              <span className={styles.eyebrow}>Admin actions</span>
+              <div className={styles.adminActions}>
+                {canEditShowMeta ? (
+                  <button type="button" className={styles.secondary} onClick={() => navigate(`/create-show?edit=${showId}`)}>
+                    Edit Show
+                  </button>
+                ) : null}
+                {canDeleteShow ? (
+                  <button
+                    type="button"
+                    className={`${styles.secondary} ${styles.danger}`}
+                    onClick={() => alert('Delete show not yet implemented.')}
+                  >
+                    Delete Show
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className={styles.sectionHeader}>
             <div>
               <p className={styles.eyebrow}>Jobs</p>
               <h2 className={styles.sectionTitle}>Work requests for this show</h2>
             </div>
-            {!platformLoading && !membershipLoading && canManageJobs ? (
+            {!roleLoading && canManageJobs ? (
               <button
                 type="button"
                 className={styles.secondary}
