@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { FiLock, FiMail, FiLogOut } from 'react-icons/fi';
+import { FiLock, FiMail, FiLogOut, FiUser, FiHash } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import { auth } from '../firebase';
+import { UserContext } from '../App';
 
 export default function More() {
   const navigate = useNavigate();
+  const appUser = useContext(UserContext);
 
   const handleLogout = async () => {
     try {
@@ -53,6 +55,58 @@ export default function More() {
             gap: 12,
           }}
         >
+          <div
+            style={{
+              padding: '14px 16px',
+              borderRadius: 14,
+              border: '1px solid #e2e8f0',
+              background: 'linear-gradient(135deg, #f8fafc, #ffffff)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              boxShadow: '0 12px 28px rgba(15,23,42,0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  background: '#e0f2fe',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#0369a1',
+                  fontSize: 18,
+                  fontWeight: 700,
+                }}
+              >
+                <FiUser />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                  {`${appUser?.firstName || ''} ${appUser?.lastName || ''}`.trim() || 'Unnamed User'}
+                </span>
+                <span style={{ color: '#475569', fontSize: 13 }}>{appUser?.email || 'No email'}</span>
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr',
+                alignItems: 'center',
+                gap: 8,
+                paddingTop: 4,
+                color: '#475569',
+                fontSize: 13,
+                wordBreak: 'break-all',
+              }}
+            >
+              <FiHash />
+              <span>{appUser?.id || 'No UID'}</span>
+            </div>
+          </div>
+
           {items.map((item) => (
             <button
               key={item.label}
