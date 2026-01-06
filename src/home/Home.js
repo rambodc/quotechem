@@ -1,6 +1,6 @@
 // src/Home.js
 import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot, orderBy, query, collectionGroup, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, collectionGroup, where, doc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { FiCalendar, FiFlag } from 'react-icons/fi';
 import { db } from '../firebase';
@@ -17,6 +17,7 @@ function Home() {
   const [shows, setShows] = useState([]);
   const [memberShowIdsByUid, setMemberShowIdsByUid] = useState([]);
   const [memberShowIdsByEmail, setMemberShowIdsByEmail] = useState([]);
+  const [memberShowIdsByDoc, setMemberShowIdsByDoc] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [membershipLoading, setMembershipLoading] = useState(true);
@@ -115,7 +116,43 @@ function Home() {
     return () => unsubs.forEach((fn) => fn && fn());
   }, [appUser?.email, appUser?.id]);
 
+  // Fallback: check direct membership doc per show (matches doc id to uid), useful if old member docs lack uid/email fields.
   useEffect(() => {
+    if (isPlatformAdmin) {
+      setMemberShowIdsByDoc([]);
+      return undefined;
+    }
+    if (!appUser?.id || shows.length === 0) {
+      setMemberShowIdsByDoc([]);
+      return undefined;
+    }
+
+    const unsubs = [];
+    const updateSet = (showId, exists) => {
+      setMemberShowIdsByDoc((prev) => {
+        const next = new Set(prev);
+        if (exists) next.add(showId);
+        else next.delete(showId);
+        return Array.from(next);
+      });
+    };
+
+    shows.forEach((show) => {
+      const ref = doc(db, 'shows', show.id, 'members', appUser.id);
+      const unsub = onSnapshot(
+        ref,
+        (snap) => updateSet(show.id, snap.exists()),
+        () => updateSet(show.id, false)
+      );
+      unsubs.push(unsub);
+    });
+
+    return () => unsubs.forEach((fn) => fn && fn());
+  }, [appUser?.id, isPlatformAdmin, shows]);
+
+  // Platform admins: subscribe to all shows
+  useEffect(() => {
+    if (!isPlatformAdmin) return undefined;
     const q = query(collection(db, 'shows'), orderBy('updatedAt', 'desc'));
     const unsub = onSnapshot(
       q,
@@ -155,7 +192,69 @@ function Home() {
       }
     );
     return () => unsub();
-  }, []);
+  }, [isPlatformAdmin]);
+
+  // Non-admins: subscribe only to allowed show IDs
+  useEffect(() => {
+    if (isPlatformAdmin) return undefined;
+    if (!appUser?.id) {
+      setShows([]);
+      return undefined;
+    }
+
+    const allowedIds = Array.from(new Set([
+      ...memberShowIdsByUid,
+      ...memberShowIdsByEmail,
+      ...memberShowIdsByDoc,
+    ]));
+
+    if (allowedIds.length === 0) {
+      setShows([]);
+      setLoading(false);
+      return undefined;
+    }
+
+    setLoading(true);
+    const unsubs = [];
+    const current = new Map();
+
+    allowedIds.forEach((showId) => {
+      const ref = doc(db, 'shows', showId);
+      const unsub = onSnapshot(
+        ref,
+        (snap) => {
+          if (snap.exists()) {
+            const data = snap.data() || {};
+            current.set(showId, {
+              id: showId,
+              showId,
+              name: data.name || 'Untitled Show',
+              description: data.description || '',
+              photoUrl: data.photoUrl || '',
+              startDate: data.startDate || '',
+              endDate: data.endDate || '',
+              status: data.status || 'in_progress',
+            });
+          } else {
+            current.delete(showId);
+          }
+          setShows(Array.from(current.values()));
+          setLoading(false);
+          setError('');
+        },
+        (err) => {
+          console.error('show doc snapshot error:', err);
+          current.delete(showId);
+          setShows(Array.from(current.values()));
+          setLoading(false);
+          setError(err?.message || 'Failed to load shows.');
+        }
+      );
+      unsubs.push(unsub);
+    });
+
+    return () => unsubs.forEach((fn) => fn && fn());
+  }, [appUser?.id, isPlatformAdmin, memberShowIdsByDoc, memberShowIdsByEmail, memberShowIdsByUid]);
 
   const openShow = (show) => {
     const showId = show.showId || show.id;
@@ -176,9 +275,13 @@ function Home() {
   const filteredShows = useMemo(() => {
     if (isPlatformAdmin) return shows;
     if (!appUser?.id) return [];
-    const allowedIds = new Set([...memberShowIdsByUid, ...memberShowIdsByEmail]);
+    const allowedIds = new Set([
+      ...memberShowIdsByUid,
+      ...memberShowIdsByEmail,
+      ...memberShowIdsByDoc,
+    ]);
     return shows.filter((show) => allowedIds.has(show.id));
-  }, [appUser?.id, isPlatformAdmin, memberShowIdsByEmail, memberShowIdsByUid, shows]);
+  }, [appUser?.id, isPlatformAdmin, memberShowIdsByDoc, memberShowIdsByEmail, memberShowIdsByUid, shows]);
 
   const Dashboard = () => (
     <>

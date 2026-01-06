@@ -20,8 +20,6 @@ import ForgotPassword from './auth/ForgotPassword';
 
 // Protected pages
 import Home from './home/Home';
-import DropDetail from './drop/DropDetail';
-import CreateDrop from './create-drop/CreateDrop';
 import ShowDetail from './show/ShowDetail';
 import CreateShow from './create-show/CreateShow';
 import CreateJob from './job/CreateJob';
@@ -31,6 +29,8 @@ import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
 import EditUsername from './account/EditUsername';
 import More from './more/More';
+import Profile from './profile/Profile';
+import Updates from './updates/Updates';
 
 // Route guard
 import ProtectedRoute from './ProtectedRoute';
@@ -54,63 +54,55 @@ function AppRoutes({ user }) {
           path="/home"
           element={
             <ProtectedRoute>
-          <Home />
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/create-show"
-      element={
-        <ProtectedRoute>
-          <CreateShow />
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/show/:showId/create-job"
-      element={
-        <ProtectedRoute>
-          <CreateJob />
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/create-drop"
-      element={
-        <ProtectedRoute>
-          <CreateDrop />
+              <Home />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/become-artist"
+          path="/create-show"
           element={
             <ProtectedRoute>
-              <CreateDrop />
+              <CreateShow />
             </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/show/:showId"
-      element={
-        <ProtectedRoute>
-          <ShowDetail />
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/show/:showId/job/:jobId"
-      element={
-        <ProtectedRoute>
-          <JobDetail />
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/drop/:dropId"
-      element={
-        <ProtectedRoute>
-          <DropDetail />
+          }
+        />
+        <Route
+          path="/show/:showId/create-job"
+          element={
+            <ProtectedRoute>
+              <CreateJob />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/show/:showId"
+          element={
+            <ProtectedRoute>
+              <ShowDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/show/:showId/job/:jobId"
+          element={
+            <ProtectedRoute>
+              <JobDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/updates"
+          element={
+            <ProtectedRoute>
+              <Updates />
             </ProtectedRoute>
           }
         />

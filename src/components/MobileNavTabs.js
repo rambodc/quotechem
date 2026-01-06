@@ -1,12 +1,7 @@
 // src/components/MobileNavTabs.js
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import {
-  FiHome,
-  FiMessageCircle,
-  FiBell,
-  FiMoreHorizontal,
-} from 'react-icons/fi';
+import { FiHome, FiUser, FiBell, FiMoreHorizontal } from 'react-icons/fi';
 
 export default function MobileNavTabs() {
   const { pathname } = useLocation();
@@ -14,7 +9,7 @@ export default function MobileNavTabs() {
 
   const tabs = [
     { label: 'Home', to: '/home', icon: FiHome },
-    { label: 'Chat', to: '/chat', icon: FiMessageCircle },
+    { label: 'Profile', to: '/profile', icon: FiUser },
     { label: 'Updates', to: '/updates', icon: FiBell },
     { label: 'More', to: '/more', icon: FiMoreHorizontal },
   ];
