@@ -40,6 +40,12 @@ export default function ShowDetail() {
   const { role: showRole, loading: membershipLoading } = useShowMembership(showId, appUser?.id);
   const canManageJobs = canManageShowJobs({ isPlatformAdmin, memberRole: showRole });
 
+  const [memberUid, setMemberUid] = useState('');
+  const [memberRole, setMemberRole] = useState('show_admin');
+  const [memberError, setMemberError] = useState('');
+  const [memberSuccess, setMemberSuccess] = useState('');
+  const [memberSaving, setMemberSaving] = useState(false);
+
   const handleBack = useCallback(() => {
     if (window.history.length > 2) navigate(-1);
     else navigate('/home');
@@ -110,6 +116,39 @@ export default function ShowDetail() {
     navigate(`/show/${showId}/job/${jobId}`);
   };
 
+  const addShowMember = async (e) => {
+    e.preventDefault();
+    setMemberError('');
+    setMemberSuccess('');
+
+    if (!isPlatformAdmin) {
+      setMemberError('Only platform admins can add show members.');
+      return;
+    }
+    if (!memberUid.trim()) {
+      setMemberError('Enter a user UID to add.');
+      return;
+    }
+
+    setMemberSaving(true);
+    try {
+      const memberRef = doc(db, 'shows', showId, 'members', memberUid.trim());
+      await memberRef.set({
+        uid: memberUid.trim(),
+        role: memberRole,
+        addedBy: appUser?.id || null,
+        addedAt: new Date(),
+      });
+      setMemberSuccess('Member added.');
+      setMemberUid('');
+    } catch (err) {
+      console.error('Failed to add member:', err);
+      setMemberError(err?.message || 'Unable to add member.');
+    } finally {
+      setMemberSaving(false);
+    }
+  };
+
   if (loading) return null;
 
   return (
@@ -165,6 +204,37 @@ export default function ShowDetail() {
               </div>
             </div>
           </div>
+
+          {isPlatformAdmin ? (
+            <div className={styles.card}>
+              <p className={styles.eyebrow}>Show access</p>
+              <h2 className={styles.sectionTitle}>Add a show admin/editor/viewer</h2>
+              <form className={styles.memberForm} onSubmit={addShowMember}>
+                <label className={styles.label}>
+                  User UID
+                  <input
+                    type="text"
+                    value={memberUid}
+                    onChange={(e) => setMemberUid(e.target.value)}
+                    placeholder="Firebase UID"
+                  />
+                </label>
+                <label className={styles.label}>
+                  Role
+                  <select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                    <option value="show_admin">Show Admin</option>
+                    <option value="show_editor">Show Editor</option>
+                    <option value="show_viewer">Show Viewer</option>
+                  </select>
+                </label>
+                {memberError ? <p className={styles.error}>{memberError}</p> : null}
+                {memberSuccess ? <p className={styles.success}>{memberSuccess}</p> : null}
+                <button type="submit" className={styles.primary} disabled={memberSaving}>
+                  {memberSaving ? 'Saving…' : 'Add Member'}
+                </button>
+              </form>
+            </div>
+          ) : null}
 
           <div className={styles.sectionHeader}>
             <div>

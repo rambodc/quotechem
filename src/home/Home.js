@@ -1,6 +1,6 @@
 // src/Home.js
-import React, { useContext, useEffect, useState } from 'react';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
+import { collection, onSnapshot, orderBy, query, collectionGroup, where } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { FiCalendar, FiFlag } from 'react-icons/fi';
 import { db } from '../firebase';
@@ -15,8 +15,10 @@ function Home() {
   const appUser = useContext(UserContext);
 
   const [shows, setShows] = useState([]);
+  const [memberShowIds, setMemberShowIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [membershipLoading, setMembershipLoading] = useState(true);
 
   const navigate = useNavigate();
 
@@ -42,6 +44,38 @@ function Home() {
   };
 
   const statusLabel = (value) => (value === 'completed' ? 'Completed' : 'In Progress');
+
+  // Listen for shows where the user is a member (for non-platform admins)
+  useEffect(() => {
+    if (!appUser?.id) {
+      setMemberShowIds([]);
+      setMembershipLoading(false);
+      return undefined;
+    }
+
+    const membersQ = query(
+      collectionGroup(db, 'members'),
+      where('uid', '==', appUser.id)
+    );
+
+    const unsub = onSnapshot(
+      membersQ,
+      (snap) => {
+        const ids = snap.docs
+          .map((docSnap) => docSnap.ref.parent?.parent?.id)
+          .filter(Boolean);
+        setMemberShowIds(ids);
+        setMembershipLoading(false);
+      },
+      (err) => {
+        console.error('membership snapshot error:', err);
+        setMemberShowIds([]);
+        setMembershipLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, [appUser?.id]);
 
   useEffect(() => {
     const q = query(collection(db, 'shows'), orderBy('updatedAt', 'desc'));
@@ -101,22 +135,34 @@ function Home() {
     navigate(`/show/${showId}`);
   };
 
+  const filteredShows = useMemo(() => {
+    if (isPlatformAdmin) return shows;
+    if (!appUser?.id) return [];
+    return shows.filter((show) => memberShowIds.includes(show.id));
+  }, [appUser?.id, isPlatformAdmin, memberShowIds, shows]);
+
   const Dashboard = () => (
     <>
       {loading ? (
         <p>Loading…</p>
       ) : error ? (
         <p style={{ color: '#b91c1c' }}>{error}</p>
-      ) : shows.length === 0 ? (
+      ) : membershipLoading && !isPlatformAdmin ? (
+        <p>Loading access…</p>
+      ) : filteredShows.length === 0 ? (
         <div className="empty-state">
           <p>No shows yet.</p>
-          <button type="button" className="create-show-btn" onClick={() => navigate('/create-show')}>
-            Create your first show
-          </button>
+          {isPlatformAdmin ? (
+            <button type="button" className="create-show-btn" onClick={() => navigate('/create-show')}>
+              Create your first show
+            </button>
+          ) : (
+            <p className="muted">Ask a platform admin to add you to a show.</p>
+          )}
         </div>
       ) : (
         <div className="card-grid" style={{ paddingTop: 6 }}>
-          {shows.map((show) => (
+          {filteredShows.map((show) => (
             <div
               className="glass-card"
               key={show.showId}

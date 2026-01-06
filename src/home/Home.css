@@ -27,3 +27,4 @@
 .card-meta.status-completed { background: #ecfdf3; color: #166534; border: 1px solid #bbf7d0; }
 .show-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .show-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: #f1f5f9; border: 1px solid #e2e8f0; font-weight: 600; color: #0f172a; }
+.muted { color: #475569; }
