@@ -40,7 +40,7 @@ export default function ShowDetail() {
     useRoleFlags({ uid: appUser?.id, showId });
 
   const [memberEmail, setMemberEmail] = useState('');
-  const [memberRole, setMemberRole] = useState('show_admin');
+  const [memberRole] = useState('show_admin');
   const [memberError, setMemberError] = useState('');
   const [memberSuccess, setMemberSuccess] = useState('');
   const [memberSaving, setMemberSaving] = useState(false);
@@ -161,6 +161,7 @@ export default function ShowDetail() {
   return (
     <div className={styles.pageShell}>
       <TopBar variant="back" backLabel="Back" onBack={handleBack} />
+      <h1 className={styles.pageHeading}>Show</h1>
 
       {error ? <p className={styles.error}>{error}</p> : null}
 
@@ -226,14 +227,7 @@ export default function ShowDetail() {
                     placeholder="user@example.com"
                   />
                 </label>
-                <label className={styles.label}>
-                  Role
-                  <select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-                    <option value="show_admin">Show Admin</option>
-                    <option value="show_editor">Show Editor</option>
-                    <option value="show_viewer">Show Viewer</option>
-                  </select>
-                </label>
+                <p className={styles.muted}>Role: Show Admin</p>
                 {memberError ? <p className={styles.error}>{memberError}</p> : null}
                 {memberSuccess ? <p className={styles.success}>{memberSuccess}</p> : null}
                 <button type="submit" className={styles.primary} disabled={memberSaving}>

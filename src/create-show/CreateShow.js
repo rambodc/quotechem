@@ -127,6 +127,7 @@ export default function CreateShow() {
       <TopBar variant="back" backLabel="Back" onBack={handleBack} title="Create Show" />
 
       <div className={styles.page}>
+        <h1 className={styles.pageHeading}>Create Show</h1>
         {!platformLoading && !isPlatformAdmin ? (
           <div className={styles.card}>
             <p className={styles.error}>You do not have permission to create shows.</p>

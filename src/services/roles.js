@@ -90,10 +90,10 @@ export function useRoleFlags({ uid, showId }) {
   const { role: showRole, loading: membershipLoading } = useShowMembership(showId, uid);
 
   const flags = useMemo(() => {
-    const canManageJobs = canManageShowJobs({ isPlatformAdmin, memberRole: showRole });
-    const canEditShowMeta = isPlatformAdmin || showRole === ROLE.SHOW_OWNER;
-    const canDeleteShow = isPlatformAdmin || showRole === ROLE.SHOW_OWNER;
-    const canAddMembers = isPlatformAdmin || showRole === ROLE.SHOW_OWNER;
+    const canManageJobs = isPlatformAdmin || showRole === ROLE.SHOW_ADMIN;
+    const canEditShowMeta = isPlatformAdmin || showRole === ROLE.SHOW_ADMIN;
+    const canDeleteShow = isPlatformAdmin || showRole === ROLE.SHOW_ADMIN;
+    const canAddMembers = isPlatformAdmin || showRole === ROLE.SHOW_ADMIN;
     return {
       isPlatformAdmin,
       showRole,

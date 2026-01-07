@@ -23,6 +23,7 @@ export default function Updates() {
           gap: 12,
         }}
       >
+        <h1 style={{ textAlign: 'center', margin: '0 0 10px', fontSize: 26 }}>Updates</h1>
         {updates.map((item) => (
           <div
             key={item.id}

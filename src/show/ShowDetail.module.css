@@ -8,6 +8,12 @@
   gap: 18px;
 }
 
+.pageHeading {
+  text-align: center;
+  font-size: 26px;
+  margin: 0;
+}
+
 .content {
   display: flex;
   flex-direction: column;

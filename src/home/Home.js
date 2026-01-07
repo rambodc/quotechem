@@ -292,6 +292,7 @@ function Home() {
       </TopBar>
 
       <div className="home-content">
+        <h1 className="page-title">Home</h1>
         <div className="home-header">
           <div>
             <p className="eyebrow">Shows</p>

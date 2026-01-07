@@ -55,6 +55,7 @@ export default function More() {
             gap: 12,
           }}
         >
+          <h1 style={{ textAlign: 'center', margin: '0 0 6px', fontSize: 24 }}>More</h1>
           <div
             style={{
               padding: '14px 16px',

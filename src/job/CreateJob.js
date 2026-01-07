@@ -83,6 +83,7 @@ export default function CreateJob() {
     <div className={layoutStyles.pageShell}>
       <TopBar variant="back" backLabel="Back" onBack={handleBack} title="Create Job" />
       <div className={styles.page}>
+        <h1 className={styles.pageHeading}>Create Job</h1>
         {!platformLoading && !membershipLoading && !canManage ? (
           <div className={styles.card}>
             <p className={styles.error}>You do not have permission to create jobs for this show.</p>
