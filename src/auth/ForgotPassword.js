@@ -4,63 +4,50 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import './Auth.css';
 
-function ForgotPassword() {
-  const isPortrait = typeof window !== 'undefined'
-    ? window.matchMedia('(orientation: portrait)').matches
-    : false;
-  const bgUrl = `${process.env.PUBLIC_URL}/assets/${isPortrait ? 'auth-portrait.png' : 'auth-landscape.png'}`;
-
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+export default function ForgotPassword() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
 
-  const handleReset = async (e) => {
-    e.preventDefault();
+  const onSubmit = async (event) => {
+    event.preventDefault();
     setError('');
-    setMessage('');
+    setStatus('');
 
     try {
-      await sendPasswordResetEmail(auth, email);
-      setMessage('Password reset email sent. Check your inbox.');
+      await sendPasswordResetEmail(auth, email.trim());
+      setStatus('Password reset email sent.');
     } catch (err) {
-      setError(err.message);
+      setError(err?.message || 'Unable to send reset link right now.');
     }
   };
 
   return (
-    <div
-      className="auth-container"
-      style={{
-        backgroundImage: `url(${bgUrl})`,
-        backgroundPosition: 'center',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat',
-      }}
-    >
-      <form className="auth-box" onSubmit={handleReset}>
-        <h1>Razzberry</h1>
-        <h2>Reset Password</h2>
+    <div className="auth-page">
+      <form className="auth-card" onSubmit={onSubmit}>
+        <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
+        <h1>Reset password</h1>
 
-        {error && <p className="error">{error}</p>}
-        {message && <p style={{ color: 'green', textAlign: 'center' }}>{message}</p>}
+        {error ? <p className="auth-error">{error}</p> : null}
+        {status ? <p className="auth-success">{status}</p> : null}
 
+        <label htmlFor="reset-email">Email</label>
         <input
+          id="reset-email"
           type="email"
-          placeholder="Enter your email address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
           required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
         />
 
-        <button type="submit">Send Reset Link</button>
+        <button type="submit">Send reset link</button>
 
-        <p className="link" onClick={() => navigate('/signin')}>
-          Back to Login
+        <p className="auth-link" onClick={() => navigate('/signin')}>
+          Back to sign in
         </p>
       </form>
     </div>
   );
 }
-
-export default ForgotPassword;

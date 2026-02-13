@@ -1,210 +1,30 @@
-// src/App.js
-import React, { useEffect, useState, useRef, createContext } from 'react';
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-} from 'react-router-dom';
+import React, { createContext, useEffect, useMemo, useRef, useState } from 'react';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-
-// Public pages
-import LandingPage from './landing/LandingPage';
-import Login from './auth/Login';
-import Signup from './auth/Signup';
-import ForgotPassword from './auth/ForgotPassword';
-import Artists from './artists/Artists';
-import ArtistList from './artists/artistList';
-
-// Protected pages
+import AppShell from './layout/AppShell';
 import Home from './home/Home';
-import DropDetail from './drop/DropDetail';
-import CreateArtist from './create-artist/create-artist';
-import CreateDrop from './create-drop/CreateDrop';
-import BecomeArtist from './become-artist/BecomeArtist';
-import AlbumList from './albums/AlbumList';
-import AlbumDetail from './albums/AlbumDetail';
-import CreateAlbum from './create-album/CreateAlbum';
 import More from './more/More';
-import Terms from './terms/Terms';
-import Services from './services/Services';
-import Account from './account';
+import Account from './account/Account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
 import EditUsername from './account/EditUsername';
+import Login from './auth/Login';
+import Signup from './auth/Signup';
+import ForgotPassword from './auth/ForgotPassword';
+import LandingPage from './landing/LandingPage';
 
-// Route guard
-import ProtectedRoute from './ProtectedRoute';
-
-// App-wide user context (used by Home, etc.)
 export const UserContext = createContext(null);
 
-function AppRoutes({ user }) {
-  return (
-    <>
-      <ScrollRestoration />
-      <Routes>
-        {/* Public */}
-        <Route path="/" element={user ? <Navigate to="/home" /> : <LandingPage />} />
-        <Route path="/signin" element={!user ? <Login /> : <Navigate to="/home" />} />
-        <Route path="/signup" element={!user ? <Signup /> : <Navigate to="/home" />} />
-        <Route path="/forgot" element={<ForgotPassword />} />
-        <Route path="/artist/:artistUid" element={<Artists />} />
-
-        {/* Protected */}
-        <Route
-          path="/home"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/artists"
-          element={
-            <ProtectedRoute>
-              <ArtistList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/purchased"
-          element={
-            <ProtectedRoute>
-              <AlbumList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/set/:albumId"
-          element={
-            <ProtectedRoute>
-              <AlbumDetail />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/create-artists"
-          element={
-            <ProtectedRoute>
-              <CreateArtist />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/create-album"
-          element={
-            <ProtectedRoute>
-              <CreateAlbum />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/create-drop"
-          element={
-            <ProtectedRoute>
-              <CreateDrop />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/become-artist"
-          element={
-            <ProtectedRoute>
-              <BecomeArtist />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/drop/:dropId"
-          element={
-            <ProtectedRoute>
-              <DropDetail />
-            </ProtectedRoute>
-          }
-        />
-        {/* More + subpages */}
-        <Route
-          path="/more"
-          element={
-            <ProtectedRoute>
-              <More />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/account"
-          element={
-            <ProtectedRoute>
-              <Account />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/username"
-          element={
-            <ProtectedRoute>
-              <EditUsername />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/terms"
-          element={
-            <ProtectedRoute>
-              <Terms />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/services"
-          element={
-            <ProtectedRoute>
-              <Services />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/account/email"
-          element={
-            <ProtectedRoute>
-              <ChangeEmail />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/account/password"
-          element={
-            <ProtectedRoute>
-              <ChangePassword />
-            </ProtectedRoute>
-          }
-        />
-        {/* Catch-all */}
-        <Route path="*" element={<Navigate to={user ? '/home' : '/'} />} />
-      </Routes>
-    </>
-  );
-}
-
-function ScrollRestoration() {
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  }, [pathname]);
-
-  return null;
+function ProtectedRoute({ user, checking, children }) {
+  if (checking) return null;
+  return user ? children : <Navigate to="/signin" replace />;
 }
 
 function App() {
-  const [firebaseUser, setFirebaseUser] = useState(null);      // raw Firebase Auth user
-  const [appUser, setAppUser] = useState(null);                // canonical /users/{uid} doc
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [appUser, setAppUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [checkingProfile, setCheckingProfile] = useState(true);
   const profileUnsubRef = useRef(null);
@@ -217,12 +37,12 @@ function App() {
       .slice(0, 24);
 
   const deriveUsername = (data, user) => {
-    const existing = typeof data.username === 'string' && data.username.trim();
-    if (existing) return existing.trim();
+    const existing = typeof data.username === 'string' ? data.username.trim() : '';
+    if (existing) return existing;
     const emailPart = (user?.email || '').split('@')[0] || '';
     const candidate = normalizeUsername(emailPart || user?.uid || 'user');
-    if (candidate && candidate.length >= 3) return candidate;
-    return `user_${(user?.uid || '').slice(0, 6) || Math.floor(Math.random() * 9999)}`;
+    if (candidate.length >= 3) return candidate;
+    return `user_${(user?.uid || '').slice(0, 6) || '000001'}`;
   };
 
   useEffect(() => {
@@ -243,77 +63,65 @@ function App() {
 
       try {
         const userRef = doc(db, 'users', u.uid);
-        let userSnap = await getDoc(userRef);
+        const snap = await getDoc(userRef);
 
-        if (!userSnap.exists()) {
+        if (!snap.exists()) {
           const now = serverTimestamp();
-          await setDoc(userRef, {
-            uid: u.uid,
-            email: u.email ?? null,
-            firstName: '',
-            lastName: '',
-            primaryAuthUid: u.uid,
-            createdAt: now,
-            updatedAt: now,
-          }, { merge: true });
-          userSnap = await getDoc(userRef);
+          const generatedUsername = deriveUsername({}, u);
+          await setDoc(
+            userRef,
+            {
+              uid: u.uid,
+              email: u.email ?? null,
+              firstName: '',
+              lastName: '',
+              username: generatedUsername,
+              usernameNormalized: normalizeUsername(generatedUsername),
+              primaryAuthUid: u.uid,
+              createdAt: now,
+              updatedAt: now,
+            },
+            { merge: true }
+          );
         }
 
         profileUnsubRef.current = onSnapshot(
           userRef,
-          async (snap) => {
-            let data = snap.exists() ? snap.data() || {} : {};
+          async (profileSnap) => {
+            let data = profileSnap.exists() ? profileSnap.data() || {} : {};
             const updates = {};
 
-            const ensuredFirst = typeof data.firstName === 'string' ? data.firstName : '';
-            const ensuredLast = typeof data.lastName === 'string' ? data.lastName : '';
-            if (ensuredFirst !== data.firstName) updates.firstName = ensuredFirst;
-            if (ensuredLast !== data.lastName) updates.lastName = ensuredLast;
-
-            const existingUsername = typeof data.username === 'string' ? data.username.trim() : '';
-            let finalUsername = existingUsername;
-            if (!existingUsername) {
-              const generated = deriveUsername(data, u);
-              finalUsername = generated;
-              updates.username = generated;
-              updates.usernameNormalized = normalizeUsername(generated);
-            } else if (!data.usernameNormalized) {
-              updates.usernameNormalized = normalizeUsername(existingUsername);
+            const finalUsername = deriveUsername(data, u);
+            if (!data.username) updates.username = finalUsername;
+            if (!data.usernameNormalized) {
+              updates.usernameNormalized = normalizeUsername(finalUsername);
             }
-
             if (Object.keys(updates).length) {
-              const now = serverTimestamp();
-              updates.updatedAt = now;
-              try {
-                await setDoc(userRef, updates, { merge: true });
-                data = { ...data, ...updates };
-              } catch (writeErr) {
-                console.error('Failed to normalize user profile:', writeErr);
-              }
+              updates.updatedAt = serverTimestamp();
+              await setDoc(userRef, updates, { merge: true });
+              data = { ...data, ...updates };
             }
 
-            const finalData = {
-              ...data,
+            setAppUser({
+              id: u.uid,
+              firebaseUid: u.uid,
+              email: u.email ?? null,
               firstName: typeof data.firstName === 'string' ? data.firstName : '',
               lastName: typeof data.lastName === 'string' ? data.lastName : '',
-              username: finalUsername || existingUsername,
+              username: typeof data.username === 'string' ? data.username : finalUsername,
               usernameNormalized:
                 typeof data.usernameNormalized === 'string'
                   ? data.usernameNormalized
-                  : normalizeUsername(finalUsername || existingUsername || ''),
-            };
-
-            setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, ...finalData });
+                  : normalizeUsername(finalUsername),
+            });
             setCheckingProfile(false);
           },
-          (err) => {
-            console.error('Failed to load app user profile:', err);
+          () => {
             setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null });
             setCheckingProfile(false);
           }
         );
-      } catch (err) {
-        console.error('Failed to load app user profile:', err);
+      } catch {
         setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null });
         setCheckingProfile(false);
       }
@@ -325,12 +133,37 @@ function App() {
     };
   }, []);
 
-  if (checkingAuth || checkingProfile) return null; // could render a loader if you prefer
+  const checking = checkingAuth || checkingProfile;
+  const contextValue = useMemo(() => appUser, [appUser]);
 
   return (
     <Router>
-      <UserContext.Provider value={appUser}>
-        <AppRoutes user={firebaseUser} />
+      <UserContext.Provider value={contextValue}>
+        <Routes>
+          <Route path="/" element={firebaseUser ? <Navigate to="/home" replace /> : <LandingPage />} />
+          <Route path="/signin" element={!firebaseUser ? <Login /> : <Navigate to="/home" replace />} />
+          <Route path="/signup" element={!firebaseUser ? <Signup /> : <Navigate to="/home" replace />} />
+          <Route path="/forgot" element={!firebaseUser ? <ForgotPassword /> : <Navigate to="/home" replace />} />
+
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checking}>
+                <AppShell user={contextValue} />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="home" element={<Home />} />
+            <Route path="more" element={<More />} />
+            <Route path="account" element={<Account />} />
+            <Route path="account/email" element={<ChangeEmail />} />
+            <Route path="account/password" element={<ChangePassword />} />
+            <Route path="account/username" element={<EditUsername />} />
+            <Route path="username" element={<Navigate to="/account/username" replace />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to={firebaseUser ? '/home' : '/signin'} replace />} />
+        </Routes>
       </UserContext.Provider>
     </Router>
   );

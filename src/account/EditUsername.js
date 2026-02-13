@@ -1,180 +1,139 @@
-// src/account/EditUsername.js
 import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { doc, getDoc, serverTimestamp, getDocs, query, where, collection, limit, setDoc } from 'firebase/firestore';
-import TopBar from '../components/TopBar';
-import layoutStyles from '../styles/layout.module.css';
-import styles from './EditUsername.module.css';
-import { db } from '../firebase';
+import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../App';
+import { db } from '../firebase';
+import './EditUsername.css';
+
+function normalizeUsername(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 24);
+}
 
 export default function EditUsername() {
   const navigate = useNavigate();
-  const location = useLocation();
   const appUser = useContext(UserContext);
-  const fromSignup = location.state?.fromSignup;
 
   const [username, setUsername] = useState('');
-  const [initialNormalized, setInitialNormalized] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
 
-  const normalizeUsername = (value) => {
-    return value
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, '')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 24);
-  };
-
-  const minLengthMet = useMemo(() => normalizeUsername(username).length >= 3, [username]);
+  const normalized = useMemo(() => normalizeUsername(username.trim()), [username]);
+  const valid = normalized.length >= 3;
 
   useEffect(() => {
-    if (!appUser?.id) return;
     let active = true;
-    setLoading(true);
-    setError('');
 
-    (async () => {
+    const load = async () => {
+      if (!appUser?.id) {
+        if (active) setLoading(false);
+        return;
+      }
+
       try {
         const snap = await getDoc(doc(db, 'users', appUser.id));
         if (!active) return;
-        if (snap.exists()) {
-          const data = snap.data() || {};
-          const currentUsername = data.username || '';
-          setUsername(currentUsername || '');
-          setInitialNormalized(data.usernameNormalized || '');
-        } else {
-          setUsername('');
-          setInitialNormalized('');
-        }
+        setUsername((snap.data()?.username || '').trim());
       } catch (err) {
         if (!active) return;
-        setError(err?.message || 'Unable to load your profile.');
+        setError(err?.message || 'Failed to load username.');
       } finally {
         if (active) setLoading(false);
       }
-    })();
+    };
 
+    load();
     return () => {
       active = false;
     };
   }, [appUser?.id]);
 
-  const handleSave = async () => {
+  const save = async () => {
     if (!appUser?.id) {
-      setError('You need to sign in to update your username.');
-      return;
-    }
-    const trimmed = username.trim();
-    const normalized = normalizeUsername(trimmed);
-    if (normalized.length < 3) {
-      setError('Username must be at least 3 characters (letters, numbers, underscores).');
+      setError('You must be signed in.');
       return;
     }
 
-    setSaving(true);
+    if (!valid) {
+      setError('Username must be at least 3 characters.');
+      return;
+    }
+
     setError('');
     setStatus('');
+    setSaving(true);
 
     try {
-      const now = serverTimestamp();
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('usernameNormalized', '==', normalized), limit(1));
-      const existing = await getDocs(q);
-      const conflict = existing.docs.find((docSnap) => docSnap.id !== appUser.id);
+      const duplicateQuery = query(
+        collection(db, 'users'),
+        where('usernameNormalized', '==', normalized),
+        limit(1)
+      );
+      const duplicateSnap = await getDocs(duplicateQuery);
+      const conflict = duplicateSnap.docs.some((item) => item.id !== appUser.id);
       if (conflict) {
-        throw new Error('That username is already taken.');
+        throw new Error('Username is already taken.');
       }
 
       await setDoc(
         doc(db, 'users', appUser.id),
         {
-          username: trimmed,
+          username: username.trim(),
           usernameNormalized: normalized,
-          updatedAt: now,
+          updatedAt: serverTimestamp(),
         },
         { merge: true }
       );
 
-      setInitialNormalized(normalized);
-      setStatus('Saved!');
-      navigate('/more', { replace: true });
+      setStatus('Username updated.');
+      setTimeout(() => navigate('/account'), 400);
     } catch (err) {
-      console.error('save username error:', err);
       setError(err?.message || 'Unable to save username right now.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleCancel = () => {
-    if (fromSignup) {
-      navigate('/more', { replace: true });
-      return;
-    }
-    if (window.history.length > 2) {
-      navigate(-1);
-    } else {
-      navigate('/home');
-    }
-  };
-
-  const topBarVariant = fromSignup ? undefined : 'back';
-
   return (
-    <div className={layoutStyles.homeContainer} style={{ paddingBottom: 0 }}>
-      <TopBar variant={topBarVariant} hideLeft={fromSignup} backLabel="Back" onBack={fromSignup ? undefined : handleCancel} />
+    <section className="username-page">
+      <header>
+        <h2>Edit Username</h2>
+        <p>Allowed characters: letters, numbers, and underscores.</p>
+      </header>
 
-      <div className={styles.pageShell}>
-        <div className={styles.card}>
-          <div className={styles.header}>
-            <h1>{fromSignup ? 'Choose your username' : 'Edit username'}</h1>
-            <p>Pick a handle other collectors will see. You can use letters, numbers, and underscores.</p>
-          </div>
+      <div className="username-card">
+        {loading ? <p>Loading...</p> : null}
+        {error ? <p className="username-error">{error}</p> : null}
+        {status ? <p className="username-success">{status}</p> : null}
 
-          {error ? <div className={styles.error}>{error}</div> : null}
-          {status ? <div className={styles.success}>{status}</div> : null}
+        {!loading ? (
+          <>
+            <label htmlFor="username">Username</label>
+            <input
+              id="username"
+              value={username}
+              maxLength={24}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="your_name"
+            />
+            <small>{valid ? `Saved value: ${normalized}` : 'Minimum 3 valid characters required.'}</small>
 
-          {loading ? (
-            <p className={styles.statusText}>Loading…</p>
-          ) : (
-            <>
-              <label className={styles.label} htmlFor="username-input">
-                Username
-              </label>
-              <input
-                id="username-input"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="your_handle"
-                autoComplete="username"
-                maxLength={24}
-              />
-              <div className={styles.helper}>
-                {minLengthMet ? 'Looks good.' : 'Must be at least 3 characters.'}
-              </div>
-
-              <div className={styles.actions}>
-                <button type="button" className={styles.secondary} onClick={handleCancel}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className={styles.primary}
-                  onClick={handleSave}
-                  disabled={saving || !minLengthMet}
-                >
-                  {saving ? 'Saving…' : 'Save username'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+            <div className="username-actions">
+              <button type="button" className="secondary" onClick={() => navigate('/account')}>
+                Cancel
+              </button>
+              <button type="button" className="primary" disabled={saving || !valid} onClick={save}>
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
-    </div>
+    </section>
   );
 }

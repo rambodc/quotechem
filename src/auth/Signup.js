@@ -1,123 +1,94 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDocs, query, where, collection, limit } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import './Auth.css';
 
-// Using Firebase Auth UID as the canonical user document ID.
+function normalizeUsername(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 24);
+}
 
-function Signup() {
-  const isPortrait = typeof window !== 'undefined'
-    ? window.matchMedia('(orientation: portrait)').matches
-    : false;
-  const bgUrl = `${process.env.PUBLIC_URL}/assets/${isPortrait ? 'auth-portrait.png' : 'auth-landscape.png'}`;
-
-  const [firstName, setFirstName] = useState('');
-  const [lastName,  setLastName]  = useState('');
-  const [email,     setEmail]     = useState('');
-  const [password,  setPassword]  = useState('');
-  const [error,     setError]     = useState('');
-  const [loading,   setLoading]   = useState(false);
-
+export default function Signup() {
   const navigate = useNavigate();
 
-  const normalizeUsername = (value) => {
-    return value
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, '')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 24);
-  };
-
-  const buildBaseUsername = () => {
-    const baseFromName = normalizeUsername(`${firstName.trim()}${lastName.trim()}` || '');
-    if (baseFromName.length >= 3) return baseFromName;
-    const emailPrefix = normalizeUsername(email.split('@')[0] || '');
-    if (emailPrefix.length >= 3) return emailPrefix;
-    return `user${Math.floor(Math.random() * 9000) + 1000}`;
-  };
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const findAvailableUsername = async (base) => {
-    let attempt = 0;
-    let candidate = base || 'user';
+    let current = base;
+    let count = 0;
 
-    while (attempt < 20) {
-      const normalized = normalizeUsername(candidate);
+    while (count < 20) {
+      const normalized = normalizeUsername(current);
       if (normalized.length >= 3) {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('usernameNormalized', '==', normalized), limit(1));
-        const snap = await getDocs(q);
-        if (snap.empty) {
-          return { username: candidate, normalized };
-        }
+        const snap = await getDocs(
+          query(collection(db, 'users'), where('usernameNormalized', '==', normalized), limit(1))
+        );
+        if (snap.empty) return { username: current, usernameNormalized: normalized };
       }
-      candidate = `${base}${Math.floor(Math.random() * 9000) + 1000}`;
-      attempt += 1;
+      current = `${base}${Math.floor(Math.random() * 9000) + 1000}`;
+      count += 1;
     }
-    throw new Error('Unable to generate a username right now. Please try again.');
+
+    throw new Error('Unable to reserve username right now.');
   };
 
-  const handleSignup = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError('');
     setLoading(true);
 
     let createdUser = null;
 
     try {
-      const trimmedFirst = firstName.trim();
-      const trimmedLast = lastName.trim();
-      if (!trimmedFirst || !trimmedLast) {
-        throw new Error('Please enter your first and last name.');
-      }
+      const cleanedFirst = firstName.trim();
+      const cleanedLast = lastName.trim();
+      if (!cleanedFirst || !cleanedLast) throw new Error('First and last name are required.');
 
-      // 1) Create Firebase Auth user
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const user = cred.user;
-      createdUser = user;
+      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      createdUser = credential.user;
 
-      // 2) Build profile doc and reserve an auto-generated username atomically
-      const now = serverTimestamp();
-      const profileDocBase = {
-        uid: user.uid,
-        firstName: trimmedFirst,
-        lastName: trimmedLast,
-        email: user.email || email,
-        photoURL: user.photoURL || '',
-        identities: [
-          { provider: 'password', subject: user.uid }
-        ],
-        primaryAuthUid: user.uid,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const baseUsername = buildBaseUsername();
-      const { username: autoUsername, normalized } = await findAvailableUsername(baseUsername);
+      const base =
+        normalizeUsername(`${cleanedFirst}${cleanedLast}`) ||
+        normalizeUsername(email.split('@')[0] || '') ||
+        'user1000';
+      const usernameData = await findAvailableUsername(base);
 
       await setDoc(
-        doc(db, 'users', user.uid),
+        doc(db, 'users', createdUser.uid),
         {
-          ...profileDocBase,
-          username: autoUsername,
-          usernameNormalized: normalized,
+          uid: createdUser.uid,
+          email: createdUser.email,
+          firstName: cleanedFirst,
+          lastName: cleanedLast,
+          username: usernameData.username,
+          usernameNormalized: usernameData.usernameNormalized,
+          primaryAuthUid: createdUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         },
         { merge: true }
       );
 
-      // 3) Send verification email
-      await sendEmailVerification(user);
-
-      navigate('/username', { state: { fromSignup: true } });
+      await sendEmailVerification(createdUser);
+      navigate('/home', { replace: true });
     } catch (err) {
-      console.error(err);
-      setError(err.message || 'Signup failed');
+      setError(err?.message || 'Unable to create account.');
+
       if (createdUser?.uid) {
         try {
           await createdUser.delete();
         } catch {
-          // Best-effort cleanup only
+          // Best effort cleanup only.
         }
       }
     } finally {
@@ -126,71 +97,61 @@ function Signup() {
   };
 
   return (
-    <div
-      className="auth-container"
-      style={{
-        backgroundImage: `url(${bgUrl})`,
-        backgroundPosition: 'center',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat',
-      }}
-    >
-      <form className="auth-box" onSubmit={handleSignup}>
-        <h1>Razzberry</h1>
-        <h2>Create Account</h2>
+    <div className="auth-page">
+      <form className="auth-card" onSubmit={handleSubmit}>
+        <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
+        <h1>Create account</h1>
 
-        {error && <p className="error">{error}</p>}
+        {error ? <p className="auth-error">{error}</p> : null}
 
+        <label htmlFor="first-name">First name</label>
         <input
+          id="first-name"
           type="text"
-          placeholder="First Name"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-          required
           autoComplete="given-name"
-          name="firstName"
+          required
+          value={firstName}
+          onChange={(event) => setFirstName(event.target.value)}
         />
 
+        <label htmlFor="last-name">Last name</label>
         <input
+          id="last-name"
           type="text"
-          placeholder="Last Name"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-          required
           autoComplete="family-name"
-          name="lastName"
+          required
+          value={lastName}
+          onChange={(event) => setLastName(event.target.value)}
         />
 
+        <label htmlFor="signup-email">Email</label>
         <input
+          id="signup-email"
           type="email"
-          placeholder="Email address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
           autoComplete="email"
-          name="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
         />
 
+        <label htmlFor="signup-password">Password</label>
         <input
+          id="signup-password"
           type="password"
-          placeholder="Create Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
           autoComplete="new-password"
-          name="newPassword"
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
         />
 
         <button type="submit" disabled={loading}>
-          {loading ? 'Creating…' : 'Sign Up'}
+          {loading ? 'Creating...' : 'Create account'}
         </button>
 
-        <p className="link" onClick={() => navigate('/signin')}>
-          Already have an account? Log in
+        <p className="auth-link" onClick={() => navigate('/signin')}>
+          Already have an account
         </p>
       </form>
     </div>
   );
 }
-
-export default Signup;

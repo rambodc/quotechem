@@ -1,21 +1,92 @@
-// src/ChangePassword.js
-import React, { useCallback } from 'react';
-import TopBar from '../components/TopBar';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import layoutStyles from '../styles/layout.module.css';
+import { updatePassword } from 'firebase/auth';
+import { auth } from '../firebase';
+import './CredentialPage.css';
 
 export default function ChangePassword() {
   const navigate = useNavigate();
-  const handleBack = useCallback(() => {
-    if (window.history.length > 2) navigate(-1); else navigate('/home');
-  }, [navigate]);
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+    setStatus('');
+
+    if (!auth.currentUser) {
+      setError('No authenticated user found.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (password !== confirm) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updatePassword(auth.currentUser, password);
+      setStatus('Password updated successfully.');
+      setPassword('');
+      setConfirm('');
+    } catch (err) {
+      setError(err?.message || 'Unable to update password right now.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className={layoutStyles.detailPage}>
-      <TopBar variant="back" backLabel="Back" onBack={handleBack} />
-      <div style={{ maxWidth: 800, width: '100%', margin: '80px auto', padding: '0 16px' }}>
-        <h1>Change Password</h1>
-        <p style={{ color: '#4b5563' }}>This page will let you update your password. Coming soon.</p>
-      </div>
-    </div>
+    <section className="credential-page">
+      <header>
+        <h2>Change Password</h2>
+        <p>Choose a strong password with 8+ characters.</p>
+      </header>
+
+      <form className="credential-form" onSubmit={handleSubmit}>
+        {error ? <p className="credential-error">{error}</p> : null}
+        {status ? <p className="credential-success">{status}</p> : null}
+
+        <label htmlFor="new-password">New password</label>
+        <input
+          id="new-password"
+          type="password"
+          autoComplete="new-password"
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="********"
+        />
+
+        <label htmlFor="confirm-password">Confirm password</label>
+        <input
+          id="confirm-password"
+          type="password"
+          autoComplete="new-password"
+          required
+          value={confirm}
+          onChange={(event) => setConfirm(event.target.value)}
+          placeholder="********"
+        />
+
+        <div className="credential-actions">
+          <button type="button" className="secondary" onClick={() => navigate('/account')}>
+            Back
+          </button>
+          <button type="submit" className="primary" disabled={saving}>
+            {saving ? 'Saving...' : 'Update password'}
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }

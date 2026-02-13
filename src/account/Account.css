@@ -1,0 +1,45 @@
+.account-page {
+  max-width: 760px;
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+}
+
+.account-page h2 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.account-page p {
+  margin: 6px 0 0;
+  color: #475569;
+}
+
+.account-list {
+  display: grid;
+  gap: 10px;
+}
+
+.account-action {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.account-action-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.account-action:hover {
+  border-color: #7dd3fc;
+}

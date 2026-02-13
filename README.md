@@ -1,6 +1,9 @@
-# quotechem production setup
+# quotechem production app
 
-This repository is configured as production-only for now.
+This repository now contains a cleaned production starter focused on:
+- `Home`: ChatGPT-style assistant workspace UI
+- `More`: account entry point + logout
+- `Account`: change email, change password, edit username
 
 ## Branch and deploy behavior
 
@@ -35,3 +38,8 @@ Add these in GitHub repo settings (Environment `Prod` or repository-level):
 ## Local env
 
 Use `env.example` as reference for `.env.local` values.
+
+## ChatGPT backend plan
+
+Implementation plan is documented in:
+- `src/docs/CHATGPT_IMPLEMENTATION_PLAN.md`

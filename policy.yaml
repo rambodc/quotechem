@@ -1,0 +1,4 @@
+name: projects/quotechemfb/policies/iam.allowedPolicyMemberDomains
+spec:
+  rules:
+  - allowAll: true

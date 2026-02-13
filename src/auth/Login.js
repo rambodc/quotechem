@@ -7,80 +7,72 @@ import './Auth.css';
 function mapLoginError(err) {
   const code = err?.code || '';
   if (code === 'auth/invalid-credential') return 'Invalid email or password.';
-  if (code === 'auth/user-disabled') return 'This account is disabled. Contact support.';
-  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again in a few minutes.';
-  if (code === 'auth/network-request-failed') return 'Network error. Check internet and retry.';
+  if (code === 'auth/user-disabled') return 'This account is disabled.';
+  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again later.';
   return err?.message || 'Unable to sign in right now.';
 }
 
-function Login() {
-  const isPortrait = typeof window !== 'undefined'
-    ? window.matchMedia('(orientation: portrait)').matches
-    : false;
-  const bgUrl = `${process.env.PUBLIC_URL}/assets/${isPortrait ? 'auth-portrait.png' : 'auth-landscape.png'}`;
-
+export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const navigate = useNavigate();
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate('/home'); // ✅ redirect to home
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      navigate('/home', { replace: true });
     } catch (err) {
       setError(mapLoginError(err));
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div
-      className="auth-container"
-      style={{
-        backgroundImage: `url(${bgUrl})`,
-        backgroundPosition: 'center',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat',
-      }}
-    >
-      <form className="auth-box" onSubmit={handleLogin}>
-        <h1>Razzberry</h1>
-        <h2>Login</h2>
+    <div className="auth-page">
+      <form className="auth-card" onSubmit={handleSubmit}>
+        <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
+        <h1>Sign in</h1>
 
-        {error && <p className="error">{error}</p>}
+        {error ? <p className="auth-error">{error}</p> : null}
 
+        <label htmlFor="login-email">Email</label>
         <input
+          id="login-email"
           type="email"
-          placeholder="Email address"
+          autoComplete="email"
+          required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
+          onChange={(event) => setEmail(event.target.value)}
         />
 
+        <label htmlFor="login-password">Password</label>
         <input
+          id="login-password"
           type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
           required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
         />
 
-        <button type="submit">Login</button>
+        <button type="submit" disabled={loading}>
+          {loading ? 'Signing in...' : 'Sign in'}
+        </button>
 
-        <p className="link" onClick={() => navigate('/forgot')}>
-          Forgot Password?
+        <p className="auth-link" onClick={() => navigate('/forgot')}>
+          Forgot password
         </p>
-
-        <p className="link" onClick={() => navigate('/signup')}>
-          Create Account
+        <p className="auth-link" onClick={() => navigate('/signup')}>
+          Create account
         </p>
       </form>
     </div>
   );
 }
-
-export default Login;

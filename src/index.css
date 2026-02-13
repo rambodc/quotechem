@@ -1,94 +1,28 @@
-/* index.css */
-
-/* GLOBAL DESIGN SYSTEM */
 :root {
-  --font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
-  --font-weight-thin: 300;
-  --font-weight-light: 300;
-  --font-weight-normal: 200;
-  --font-weight-bold: 200;
-
-  --text-color: #111;
-  --bg-color: #f2f2f2;
-  --primary-color: #007aff;
-  --primary-hover: #005fd1;
-  --error-color: #e63946;
-  --input-border: #ddd;
-  --box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
-  --border-radius: 16px;
-
-  /* Focus ring */
-  --ring: 0 0 0 3px rgba(0,122,255,0.25);
+  --font-family: "Inter", "Segoe UI", sans-serif;
 }
 
-/* BASE RESET + GLOBAL STYLES */
 * {
-  margin: 0;
-  padding: 0;
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
+  margin: 0;
   min-height: 100%;
-  height: 100%;
 }
 
 body {
   font-family: var(--font-family);
-  font-weight: var(--font-weight-light);
-  background: var(--bg-color);
-  color: var(--text-color);
-  line-height: 1.5;
+  color: #0f172a;
+  background: #f8fafc;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-weight: var(--font-weight-bold);
-}
-
-input, button, textarea {
-  font-family: var(--font-family);
-  color: var(--text-color);
-}
-
-/* Better default focus ring */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-  border-radius: 10px;
-}
-
-/* Inputs / textareas smoother borders */
-input, textarea {
-  border: 1px solid var(--input-border);
-  border-radius: 10px;
-}
-
-input:focus,
-textarea:focus {
-  border-color: var(--primary-color);
-}
-
-/* Nice <kbd> styling for chat hints */
-kbd {
-  display: inline-block;
-  padding: 2px 6px;
-  border: 1px solid #d1d5db;
-  border-bottom-width: 3px;
-  border-radius: 6px;
-  background: #f9fafb;
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 600;
-  color: #374151;
-  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.05);
-}
-
-/* Utility: hide scrollbars on touch when needed (optional) */
-.scroll-smooth {
-  scroll-behavior: smooth;
+button,
+input,
+textarea {
+  font: inherit;
 }
