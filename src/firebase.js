@@ -6,8 +6,7 @@ import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage, ref } from 'firebase/storage';
 
-// Prefer env-driven config so we can point the app at any project
-// In CI, these are injected per-branch from GitHub Environment secrets.
+// Prefer env-driven config so CI/CD and local environments stay explicit.
 const required = [
   'REACT_APP_FIREBASE_API_KEY',
   'REACT_APP_FIREBASE_AUTH_DOMAIN',
@@ -19,8 +18,7 @@ const required = [
 
 required.forEach((k) => {
   if (!process.env[k]) {
-    // Fail fast in development builds so we never accidentally point to prod defaults
-    // For production builds via CI, these are required and come from secrets
+    // For production builds via CI, these should come from environment secrets.
     console.warn(`Missing env var ${k}. Did you configure GitHub Environment secrets?`);
   }
 });
@@ -39,8 +37,9 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app, 'us-central1');
-// Force the known-good bucket to avoid env drift
-const FORCED_BUCKET = 'razz6-92831.firebasestorage.app';
+// Prefer env-driven bucket; if missing, use the production project bucket.
+const FORCED_BUCKET =
+  process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || 'quotechemfb.firebasestorage.app';
 export const storage = getStorage(app, `gs://${FORCED_BUCKET}`);
 
 // Tiny debug helper: prints the storage root used at runtime
