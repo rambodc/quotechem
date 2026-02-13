@@ -8,13 +8,6 @@
     ],
     "rewrites": [
       {
-        "source": "/api/createStripeCheckoutSession",
-        "function": {
-          "functionId": "createStripeCheckoutSession",
-          "region": "us-central1"
-        }
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }

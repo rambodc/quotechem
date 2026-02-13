@@ -4,6 +4,15 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import './Auth.css';
 
+function mapLoginError(err) {
+  const code = err?.code || '';
+  if (code === 'auth/invalid-credential') return 'Invalid email or password.';
+  if (code === 'auth/user-disabled') return 'This account is disabled. Contact support.';
+  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again in a few minutes.';
+  if (code === 'auth/network-request-failed') return 'Network error. Check internet and retry.';
+  return err?.message || 'Unable to sign in right now.';
+}
+
 function Login() {
   const isPortrait = typeof window !== 'undefined'
     ? window.matchMedia('(orientation: portrait)').matches
@@ -24,7 +33,7 @@ function Login() {
       await signInWithEmailAndPassword(auth, email, password);
       navigate('/home'); // ✅ redirect to home
     } catch (err) {
-      setError(err.message);
+      setError(mapLoginError(err));
     }
   };
 

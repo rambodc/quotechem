@@ -1,23 +1,19 @@
 // src/drop/DropDetail.js
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { FiChevronDown, FiUser } from 'react-icons/fi';
 import TopBar from '../components/TopBar';
 import layoutStyles from '../styles/layout.module.css';
 import styles from './DropDetail.module.css';
 import { db } from '../firebase';
-import { getStripeClient } from '../services/stripe';
 import { UserContext } from '../App';
 
 const SUPPORTED_PURCHASE_CURRENCIES = ['USD', 'CAD'];
-const CREATE_CHECKOUT_URL =
-  process.env.REACT_APP_CREATE_STRIPE_SESSION_URL || '/api/createStripeCheckoutSession';
 
 export default function DropDetail() {
   const { dropId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
   const appUser = useContext(UserContext);
 
   const [drop, setDrop] = useState(null);
@@ -32,13 +28,8 @@ export default function DropDetail() {
   const [artist, setArtist] = useState(null);
   const [artistLoading, setArtistLoading] = useState(false);
   const [artistError, setArtistError] = useState('');
-  const [cameFromCheckout, setCameFromCheckout] = useState(false);
 
   const handleBack = useCallback(() => {
-    if (cameFromCheckout) {
-      navigate('/purchased', { replace: true });
-      return;
-    }
     if (window.history.length > 2) {
       navigate(-1);
       return;
@@ -48,7 +39,7 @@ export default function DropDetail() {
       return;
     }
     navigate('/purchased');
-  }, [cameFromCheckout, navigate, drop?.albumId]);
+  }, [navigate, drop?.albumId]);
 
   useEffect(() => {
     let alive = true;
@@ -76,17 +67,6 @@ export default function DropDetail() {
       alive = false;
     };
   }, [dropId]);
-
-  // If returning from Stripe (status param), clear the param and adjust back target
-  useEffect(() => {
-    const search = new URLSearchParams(location.search);
-    const status = search.get('status');
-    if (status) {
-      setCameFromCheckout(true);
-      // Remove status from URL to avoid re-triggering
-      navigate(`/drop/${dropId}`, { replace: true });
-    }
-  }, [dropId, location.search, navigate]);
 
   useEffect(() => {
     if (!drop?.albumId) {
@@ -261,65 +241,6 @@ export default function DropDetail() {
   const hasMoreDetails = detailRows.length > 0;
   const toggleLabel = showDetails ? 'Hide Details' : 'More Info';
 
-  const handlePurchaseClick = useCallback(async () => {
-    if (!drop?.dropId) return;
-    if (!appUser?.id) {
-      setCheckoutError('You need an account to purchase this drop.');
-      return;
-    }
-    if (purchasedByUid) {
-      setCheckoutError(
-        purchasedByUid === appUser.id
-          ? 'You already own this collectible.'
-          : 'This collectible has already been claimed by another collector.'
-      );
-      return;
-    }
-    try {
-      setCheckoutBusy(true);
-      setCheckoutError('');
-
-      const stripe = await getStripeClient();
-      if (!stripe) {
-        throw new Error('Stripe is not configured.');
-      }
-
-      const response = await fetch(CREATE_CHECKOUT_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          dropId: drop.dropId,
-          baseUrl: window.location.origin,
-          buyerUid: appUser.id,
-          buyerEmail: appUser.email || '',
-          stripeCustomerId: appUser.stripeCustomerId || '',
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.id) {
-        throw new Error(data?.error || 'Failed to start checkout.');
-      }
-
-      if (data.url) {
-        window.location.href = data.url;
-        return;
-      }
-
-      const { error: stripeError } = await stripe.redirectToCheckout({ sessionId: data.id });
-      if (stripeError) {
-        throw new Error(stripeError.message || 'Checkout redirect failed.');
-      }
-    } catch (err) {
-      console.error(err);
-      setCheckoutError(err?.message || 'Unable to launch checkout.');
-    } finally {
-      setCheckoutBusy(false);
-    }
-  }, [appUser?.email, appUser?.id, appUser?.stripeCustomerId, drop?.dropId, purchasedByUid]);
-
   const handleFastPurchase = useCallback(async () => {
     if (!drop?.dropId) return;
     if (!appUser?.id) {
@@ -438,21 +359,21 @@ export default function DropDetail() {
               {showPurchaseButton && (
                 <div className={styles.purchaseCard}>
                   <div className={styles.purchaseCopy}>
-                    <h2>Purchase Now</h2>
-                    <p>Own this collectible instantly. Payments will be enabled soon.</p>
+                    <h2>Claim Collectible</h2>
+                    <p>Stripe was removed from this starter app. Use direct claim for testing.</p>
                   </div>
                   <button
                     type="button"
                     className={styles.purchaseButton}
-                    onClick={handlePurchaseClick}
+                    onClick={handleFastPurchase}
                     disabled={checkoutBusy}
                   >
-                    {checkoutBusy ? 'Redirecting…' : `Purchase Now · ${formattedPurchaseAmount}`}
+                    {checkoutBusy ? 'Processing…' : `Claim Now · ${formattedPurchaseAmount}`}
                   </button>
                 </div>
               )}
 
-              {!isSoldOut && (
+              {!isSoldOut && !showPurchaseButton && (
                 <button
                   type="button"
                   className={styles.fastPurchaseButton}

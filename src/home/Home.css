@@ -8,6 +8,68 @@
   text-align: center;
 }
 
+.diag-card {
+  width: min(960px, 100%);
+  margin: 0 auto 18px;
+  text-align: left;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid #cbd5e1;
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.diag-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.diag-header h3 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.diag-copy {
+  margin: 8px 0 0;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.diag-button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(120deg, #0ea5e9, #2563eb);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.diag-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.diag-error {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.diag-result {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* Grid + Card (Home listing) */
 .card-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); justify-items: center; }
 .glass-card { width: 100%; max-width: 500px; display: flex; gap: 16px; align-items: stretch; padding: 16px; border-radius: 20px; background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border: 1px solid #e2e8f0; box-shadow: 0 12px 30px rgba(15,23,42,0.08); cursor: pointer; transition: transform .14s ease, box-shadow .14s ease; }

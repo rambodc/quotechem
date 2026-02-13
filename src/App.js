@@ -8,9 +8,8 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth, db, functions } from './firebase';
+import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 
 // Public pages
 import LandingPage from './landing/LandingPage';
@@ -29,7 +28,6 @@ import BecomeArtist from './become-artist/BecomeArtist';
 import AlbumList from './albums/AlbumList';
 import AlbumDetail from './albums/AlbumDetail';
 import CreateAlbum from './create-album/CreateAlbum';
-import Payment from './history/History';
 import More from './more/More';
 import Terms from './terms/Terms';
 import Services from './services/Services';
@@ -139,14 +137,6 @@ function AppRoutes({ user }) {
           }
         />
         <Route
-          path="/payment"
-          element={
-            <ProtectedRoute>
-              <Payment />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/account"
           element={
             <ProtectedRoute>
@@ -217,7 +207,6 @@ function App() {
   const [appUser, setAppUser] = useState(null);                // canonical /users/{uid} doc
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [checkingProfile, setCheckingProfile] = useState(true);
-  const ensureStripeCustomerPromiseRef = useRef(null);
   const profileUnsubRef = useRef(null);
 
   const normalizeUsername = (value) =>
@@ -335,35 +324,6 @@ function App() {
       unsub();
     };
   }, []);
-
-  useEffect(() => {
-    if (!appUser?.id) return;
-    if (appUser?.stripeCustomerId) return;
-
-    if (ensureStripeCustomerPromiseRef.current) return;
-
-    const ensureCallable = httpsCallable(functions, 'ensureStripeCustomer');
-    const payload = {
-      email: appUser.email || '',
-      name: `${appUser.firstName || ''} ${appUser.lastName || ''}`.trim(),
-    };
-
-    ensureStripeCustomerPromiseRef.current = ensureCallable(payload)
-      .then((result) => {
-        const stripeCustomerId = result?.data?.stripeCustomerId;
-        if (stripeCustomerId) {
-          setAppUser((prev) =>
-            prev ? { ...prev, stripeCustomerId } : prev
-          );
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to ensure Stripe customer:', err);
-      })
-      .finally(() => {
-        ensureStripeCustomerPromiseRef.current = null;
-      });
-  }, [appUser, setAppUser]);
 
   if (checkingAuth || checkingProfile) return null; // could render a loader if you prefer
 

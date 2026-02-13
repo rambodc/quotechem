@@ -1,9 +1,10 @@
 // src/Home.js
 import React, { useContext, useEffect, useState } from 'react';
-import { db } from '../firebase';
+import { db, functions } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../App';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import TopBar from '../components/TopBar';
 import MobileNavTabs from '../components/MobileNavTabs';
 import layoutStyles from '../styles/layout.module.css';
@@ -17,6 +18,9 @@ function Home() {
   const [albums, setAlbums] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagError, setDiagError] = useState('');
+  const [diagResult, setDiagResult] = useState(null);
 
   const navigate = useNavigate();
 
@@ -86,6 +90,30 @@ function Home() {
     navigate(`/set/${albumId}`);
   };
 
+  const runDiagnostics = async () => {
+    if (diagLoading) return;
+    setDiagLoading(true);
+    setDiagError('');
+    setDiagResult(null);
+
+    try {
+      const callable = httpsCallable(functions, 'runStartupDiagnostics');
+      const response = await callable({
+        client: {
+          buildTag: UI_BUILD_TAG,
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+          currentPath: typeof window !== 'undefined' ? window.location.pathname : '/home',
+        },
+      });
+      setDiagResult(response?.data || null);
+    } catch (err) {
+      console.error('runStartupDiagnostics failed:', err);
+      setDiagError(err?.message || 'Diagnostics failed.');
+    } finally {
+      setDiagLoading(false);
+    }
+  };
+
   const Dashboard = () => (
     <>
       {loading ? (
@@ -142,6 +170,21 @@ function Home() {
 
       {/* Page content */}
       <div className="home-content">
+        <section className="diag-card">
+          <div className="diag-header">
+            <h3>System Diagnostics</h3>
+            <button type="button" className="diag-button" onClick={runDiagnostics} disabled={diagLoading}>
+              {diagLoading ? 'Running…' : 'Run Diagnostics'}
+            </button>
+          </div>
+          <p className="diag-copy">
+            Confirms authenticated access to Firestore, Storage, Functions/Auth, and App Check token visibility.
+          </p>
+          {diagError ? <p className="diag-error">{diagError}</p> : null}
+          {diagResult ? (
+            <pre className="diag-result">{JSON.stringify(diagResult, null, 2)}</pre>
+          ) : null}
+        </section>
         <Dashboard />
       </div>
 

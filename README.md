@@ -16,7 +16,8 @@ This repository is configured as production-only for now.
 
 Add these in GitHub repo settings (Environment `Prod` or repository-level):
 
-- `FIREBASE_SERVICE_ACCOUNT_QUOTECHEMFB` (JSON service account key)
+- `GCP_WIF_PROVIDER`
+- `GCP_SERVICE_ACCOUNT_EMAIL`
 - `FIREBASE_API_KEY`
 - `FIREBASE_APP_ID`
 - `FIREBASE_AUTH_DOMAIN`
@@ -24,7 +25,7 @@ Add these in GitHub repo settings (Environment `Prod` or repository-level):
 - `FIREBASE_MESSAGING_SENDER_ID`
 - `FIREBASE_PROJECT_ID`
 - `FIREBASE_STORAGE_BUCKET`
-- `STRIPE_PUBLISHABLE_KEY`
+- `REACT_APP_APPCHECK_SITE_KEY`
 
 ## Workflows
 
