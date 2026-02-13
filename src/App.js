@@ -5,27 +5,12 @@ import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/fires
 import { auth, db } from './firebase';
 import AppShell from './layout/AppShell';
 import Home from './home/Home';
-import More from './more/More';
-import Account from './account/Account';
-import ChangeEmail from './account/ChangeEmail';
-import ChangePassword from './account/ChangePassword';
-import EditUsername from './account/EditUsername';
-import Login from './auth/Login';
-import Signup from './auth/Signup';
-import ForgotPassword from './auth/ForgotPassword';
 
 export const UserContext = createContext(null);
-
-function ProtectedRoute({ user, checking, children }) {
-  if (checking) return null;
-  return user ? children : <Navigate to="/signin" replace />;
-}
 
 function App() {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [appUser, setAppUser] = useState(null);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-  const [checkingProfile, setCheckingProfile] = useState(true);
   const profileUnsubRef = useRef(null);
 
   const normalizeUsername = (value) =>
@@ -47,7 +32,6 @@ function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setFirebaseUser(u);
-      setCheckingAuth(false);
 
       if (profileUnsubRef.current) {
         profileUnsubRef.current();
@@ -56,7 +40,6 @@ function App() {
 
       if (!u) {
         setAppUser(null);
-        setCheckingProfile(false);
         return;
       }
 
@@ -84,45 +67,25 @@ function App() {
           );
         }
 
-        profileUnsubRef.current = onSnapshot(
-          userRef,
-          async (profileSnap) => {
-            let data = profileSnap.exists() ? profileSnap.data() || {} : {};
-            const updates = {};
+        profileUnsubRef.current = onSnapshot(userRef, (profileSnap) => {
+          const data = profileSnap.exists() ? profileSnap.data() || {} : {};
+          const finalUsername = deriveUsername(data, u);
 
-            const finalUsername = deriveUsername(data, u);
-            if (!data.username) updates.username = finalUsername;
-            if (!data.usernameNormalized) {
-              updates.usernameNormalized = normalizeUsername(finalUsername);
-            }
-            if (Object.keys(updates).length) {
-              updates.updatedAt = serverTimestamp();
-              await setDoc(userRef, updates, { merge: true });
-              data = { ...data, ...updates };
-            }
-
-            setAppUser({
-              id: u.uid,
-              firebaseUid: u.uid,
-              email: u.email ?? null,
-              firstName: typeof data.firstName === 'string' ? data.firstName : '',
-              lastName: typeof data.lastName === 'string' ? data.lastName : '',
-              username: typeof data.username === 'string' ? data.username : finalUsername,
-              usernameNormalized:
-                typeof data.usernameNormalized === 'string'
-                  ? data.usernameNormalized
-                  : normalizeUsername(finalUsername),
-            });
-            setCheckingProfile(false);
-          },
-          () => {
-            setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null });
-            setCheckingProfile(false);
-          }
-        );
+          setAppUser({
+            id: u.uid,
+            firebaseUid: u.uid,
+            email: u.email ?? null,
+            firstName: typeof data.firstName === 'string' ? data.firstName : '',
+            lastName: typeof data.lastName === 'string' ? data.lastName : '',
+            username: typeof data.username === 'string' ? data.username : finalUsername,
+            usernameNormalized:
+              typeof data.usernameNormalized === 'string'
+                ? data.usernameNormalized
+                : normalizeUsername(finalUsername),
+          });
+        });
       } catch {
         setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null });
-        setCheckingProfile(false);
       }
     });
 
@@ -132,56 +95,17 @@ function App() {
     };
   }, []);
 
-  const checking = checkingAuth || checkingProfile;
   const contextValue = useMemo(() => appUser, [appUser]);
 
   return (
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={<AppShell user={contextValue} />}>
+          <Route path="/" element={<AppShell user={firebaseUser ? contextValue : null} />}>
             <Route index element={<Navigate to="/home" replace />} />
             <Route path="home" element={<Home />} />
-            <Route path="more" element={<More />} />
-            <Route
-              path="account"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checking}>
-                  <Account />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account/email"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checking}>
-                  <ChangeEmail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account/password"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checking}>
-                  <ChangePassword />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account/username"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checking}>
-                  <EditUsername />
-                </ProtectedRoute>
-              }
-            />
           </Route>
-
-          <Route path="/signin" element={!firebaseUser ? <Login /> : <Navigate to="/more" replace />} />
-          <Route path="/signup" element={!firebaseUser ? <Signup /> : <Navigate to="/more" replace />} />
-          <Route path="/forgot" element={!firebaseUser ? <ForgotPassword /> : <Navigate to="/more" replace />} />
-
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </UserContext.Provider>
     </Router>

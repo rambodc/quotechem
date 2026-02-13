@@ -38,8 +38,28 @@ function normalizeMessage(message) {
     id: message.id || `msg-${Date.now()}-${Math.random()}`,
     role: message.role || 'assistant',
     content: message.content || '',
-    quickReplies: Array.isArray(message.quickReplies) ? message.quickReplies : [],
   };
+}
+
+function extractEmail(text) {
+  const match = String(text || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0].toLowerCase() : '';
+}
+
+function extractOtp(text) {
+  const match = String(text || '').match(/\b(\d{6})\b/);
+  return match ? match[1] : '';
+}
+
+function parseTestCommand(text) {
+  const normalized = String(text || '').trim();
+  const basic = normalized.match(/^\/test\s+basic\s+(.+)$/i);
+  if (basic) return { template: 'basic', email: extractEmail(basic[1]) };
+
+  const quoteStatus = normalized.match(/^\/test\s+quote_status\s+(.+)$/i);
+  if (quoteStatus) return { template: 'quote_status', email: extractEmail(quoteStatus[1]) };
+
+  return null;
 }
 
 export default function Home() {
@@ -51,60 +71,56 @@ export default function Home() {
   const [sessionRestored, setSessionRestored] = useState(false);
 
   const [profile, setProfile] = useState({});
-  const [intakeMissingFields, setIntakeMissingFields] = useState([]);
   const [authMissingFields, setAuthMissingFields] = useState([]);
   const [authReady, setAuthReady] = useState(false);
 
-  const [contactName, setContactName] = useState('');
-  const [email, setEmail] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [sendingCode, setSendingCode] = useState(false);
-  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState('');
   const [codeSent, setCodeSent] = useState(false);
-  const [authStatus, setAuthStatus] = useState('');
-
-  const [testEmail, setTestEmail] = useState('');
-  const [testEmailStatus, setTestEmailStatus] = useState('');
 
   const messageCount = useMemo(() => messages.length, [messages.length]);
+
+  const appendMessage = (message) => {
+    setMessages((prev) => [...prev, normalizeMessage(message)]);
+  };
+
+  const bootSession = async (keepExisting = true) => {
+    const existing =
+      keepExisting && typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_SESSION_KEY) : '';
+
+    const data = await postJson('createPublicSession', {
+      sessionId: existing || undefined,
+      metadata: {
+        locale: typeof navigator !== 'undefined' ? navigator.language : '',
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        referrer: typeof document !== 'undefined' ? document.referrer : '',
+      },
+    });
+
+    setSessionId(data.sessionId);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(LOCAL_SESSION_KEY, data.sessionId);
+    }
+
+    const session = data.session || {};
+    const restoredMessages = Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [];
+    setMessages(restoredMessages);
+    setSessionRestored(Boolean(existing) && restoredMessages.length > 0);
+
+    setProfile(session.profile || {});
+    setAuthMissingFields(session.authMissingFields || []);
+    setAuthReady(Boolean(session.authReady));
+
+    const emailFromSession = session.profile?.email || '';
+    setPendingEmail(emailFromSession);
+    setCodeSent(false);
+  };
 
   useEffect(() => {
     let active = true;
 
     const init = async () => {
       try {
-        const existing = typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_SESSION_KEY) : '';
-
-        const data = await postJson('createPublicSession', {
-          sessionId: existing || undefined,
-          metadata: {
-            locale: typeof navigator !== 'undefined' ? navigator.language : '',
-            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-            referrer: typeof document !== 'undefined' ? document.referrer : '',
-          },
-        });
-
-        if (!active) return;
-
-        setSessionId(data.sessionId);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(LOCAL_SESSION_KEY, data.sessionId);
-        }
-
-        const session = data.session || {};
-        const restoredMessages = Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [];
-
-        if (restoredMessages.length > 0) {
-          setMessages(restoredMessages);
-          setSessionRestored(Boolean(existing));
-        }
-
-        setProfile(session.profile || {});
-        setContactName(session.profile?.contactName || '');
-        setEmail(session.profile?.email || '');
-        setIntakeMissingFields(session.intakeMissingFields || []);
-        setAuthMissingFields(session.authMissingFields || []);
-        setAuthReady(Boolean(session.authReady));
+        await bootSession(true);
       } catch (err) {
         if (!active) return;
         setError(err?.message || 'Unable to initialize session.');
@@ -117,8 +133,85 @@ export default function Home() {
     };
   }, []);
 
-  const appendMessage = (message) => {
-    setMessages((prev) => [...prev, normalizeMessage(message)]);
+  const sendLoginCodeByChat = async (email, fallbackName = '') => {
+    if (!sessionId || !email) return;
+
+    const data = await postJson('sendLoginCode', {
+      sessionId,
+      email,
+      contactName: fallbackName,
+    });
+
+    if (data.codeSent) {
+      setPendingEmail(email);
+      setCodeSent(true);
+      appendMessage({
+        role: 'assistant',
+        content: `Verification code sent to ${email}. Reply with the 6-digit code to sign in.`,
+      });
+    }
+  };
+
+  const verifyCodeByChat = async (code) => {
+    if (!sessionId || !pendingEmail || !code) return;
+
+    const data = await postJson('verifyLoginCode', {
+      sessionId,
+      email: pendingEmail,
+      code,
+    });
+
+    if (!data.customToken) throw new Error('Missing auth token in response.');
+
+    await signInWithCustomToken(auth, data.customToken);
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(LOCAL_SESSION_KEY);
+    }
+
+    appendMessage({
+      role: 'assistant',
+      content: 'Signed in successfully. Your session data was migrated to your account.',
+    });
+
+    await bootSession(false);
+  };
+
+  const handleChatCommand = async (value) => {
+    const testCommand = parseTestCommand(value);
+    if (testCommand) {
+      if (!testCommand.email) {
+        appendMessage({ role: 'assistant', content: 'Invalid test command. Use /test basic you@company.com' });
+        return true;
+      }
+
+      const data = await postJson('sendTestEmail', {
+        email: testCommand.email,
+        template: testCommand.template,
+      });
+
+      appendMessage({
+        role: 'assistant',
+        content: data.sent
+          ? `Test email (${data.template}) sent to ${testCommand.email}.`
+          : 'Test email request completed with no send.',
+      });
+      return true;
+    }
+
+    const otp = extractOtp(value);
+    if (codeSent && otp) {
+      await verifyCodeByChat(otp);
+      return true;
+    }
+
+    const email = extractEmail(value);
+    if (authReady && email && !codeSent) {
+      await sendLoginCodeByChat(email, profile.contactName || '');
+      return true;
+    }
+
+    return false;
   };
 
   const sendMessage = async (input) => {
@@ -126,128 +219,38 @@ export default function Home() {
     if (!value || !sessionId || loading) return;
 
     setError('');
-    setAuthStatus('');
-
     appendMessage({ role: 'user', content: value });
     setDraft('');
     setLoading(true);
 
     try {
+      const handled = await handleChatCommand(value);
+      if (handled) return;
+
       const data = await postJson('chatPublicAssistant', { sessionId, message: value });
 
       appendMessage({
         role: 'assistant',
         content: data.assistant?.reply || 'Please continue with your quote details.',
-        quickReplies: data.assistant?.quickReplies || [],
       });
 
       setProfile(data.profile || {});
-      setContactName((prev) => prev || data.profile?.contactName || '');
-      setEmail((prev) => prev || data.profile?.email || '');
-      setIntakeMissingFields(data.intakeMissingFields || []);
       setAuthMissingFields(data.authMissingFields || []);
       setAuthReady(Boolean(data.authReady));
+
+      const profileEmail = data.profile?.email || '';
+      if (profileEmail && authReady && !codeSent) {
+        appendMessage({
+          role: 'assistant',
+          content:
+            'If you want to authenticate now, send your email in chat and I will send a 6-digit verification code.',
+        });
+      }
     } catch (err) {
       setError(err?.message || 'Failed to send message.');
       appendMessage({ role: 'assistant', content: 'Temporary error. Please retry.' });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const sendCode = async () => {
-    if (!sessionId || !email || sendingCode) return;
-
-    setSendingCode(true);
-    setError('');
-    setAuthStatus('');
-
-    try {
-      const data = await postJson('sendLoginCode', {
-        sessionId,
-        email,
-        contactName,
-      });
-
-      setCodeSent(Boolean(data.codeSent));
-      setAuthStatus('Code sent to your email. Enter the 6-digit code below.');
-    } catch (err) {
-      setError(err?.message || 'Unable to send code.');
-    } finally {
-      setSendingCode(false);
-    }
-  };
-
-  const verifyCode = async () => {
-    if (!sessionId || !email || !otpCode || verifyingCode) return;
-
-    setVerifyingCode(true);
-    setError('');
-    setAuthStatus('');
-
-    try {
-      const data = await postJson('verifyLoginCode', {
-        sessionId,
-        email,
-        code: otpCode,
-      });
-
-      if (!data.customToken) {
-        throw new Error('Missing auth token in response.');
-      }
-
-      await signInWithCustomToken(auth, data.customToken);
-
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(LOCAL_SESSION_KEY);
-      }
-
-      setAuthStatus('Authenticated. Your session data was migrated to your user account.');
-      const fresh = await postJson('createPublicSession', {
-        metadata: {
-          locale: typeof navigator !== 'undefined' ? navigator.language : '',
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-          referrer: typeof document !== 'undefined' ? document.referrer : '',
-        },
-      });
-
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(LOCAL_SESSION_KEY, fresh.sessionId);
-      }
-
-      setSessionId(fresh.sessionId);
-      setMessages([]);
-      setProfile({});
-      setIntakeMissingFields(fresh.session?.intakeMissingFields || []);
-      setAuthMissingFields(fresh.session?.authMissingFields || []);
-      setOtpCode('');
-      setCodeSent(false);
-      setAuthReady(false);
-    } catch (err) {
-      setError(err?.message || 'Unable to verify code.');
-    } finally {
-      setVerifyingCode(false);
-    }
-  };
-
-  const sendTemplateTest = async (template) => {
-    if (!testEmail) {
-      setError('Enter test email first.');
-      return;
-    }
-
-    setError('');
-    setTestEmailStatus('Sending test email...');
-
-    try {
-      const data = await postJson('sendTestEmail', {
-        email: testEmail,
-        template,
-      });
-      setTestEmailStatus(data.sent ? `Sent ${data.template} test email.` : 'Email was not sent.');
-    } catch (err) {
-      setError(err?.message || 'Failed to send test email.');
-      setTestEmailStatus('');
     }
   };
 
@@ -259,15 +262,6 @@ export default function Home() {
         {messages.map((message) => (
           <article key={message.id} className={`chat-message ${message.role === 'user' ? 'user' : 'assistant'}`}>
             {message.content ? <p>{message.content}</p> : null}
-            {message.role === 'assistant' && message.quickReplies.length > 0 ? (
-              <div className="quick-replies">
-                {message.quickReplies.map((reply) => (
-                  <button key={`${message.id}-${reply}`} type="button" onClick={() => sendMessage(reply)}>
-                    {reply}
-                  </button>
-                ))}
-              </div>
-            ) : null}
           </article>
         ))}
 
@@ -275,7 +269,6 @@ export default function Home() {
       </div>
 
       {error ? <p className="chat-error">{error}</p> : null}
-      {authStatus ? <p className="chat-success">{authStatus}</p> : null}
 
       <form
         className="chat-composer"
@@ -292,74 +285,12 @@ export default function Home() {
           disabled={!sessionId || loading}
         />
         <div className="composer-actions">
-          <span>{sessionId ? `${messageCount} msgs` : 'no session'}</span>
+          <span>{sessionId ? `${messageCount}` : ''}</span>
           <button type="submit" disabled={!sessionId || loading || !draft.trim()}>
             Send
           </button>
         </div>
       </form>
-
-      <section className="intake-card">
-        <div className="intake-row">
-          <strong>Missing intake fields:</strong>
-          <span>{intakeMissingFields.length ? intakeMissingFields.join(', ') : 'none'}</span>
-        </div>
-      </section>
-
-      <section className="auth-card">
-        <h3>Passwordless Sign-in</h3>
-        <p>Authenticate after quote intake with a 6-digit email code.</p>
-
-        <div className="auth-grid">
-          <input
-            type="text"
-            placeholder="Name"
-            value={contactName}
-            onChange={(event) => setContactName(event.target.value)}
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </div>
-
-        <div className="auth-actions">
-          <button type="button" onClick={sendCode} disabled={!authReady || !email || sendingCode}>
-            {sendingCode ? 'Sending...' : 'Send Code'}
-          </button>
-          <input
-            type="text"
-            maxLength={6}
-            placeholder="6-digit code"
-            value={otpCode}
-            onChange={(event) => setOtpCode(event.target.value)}
-          />
-          <button type="button" onClick={verifyCode} disabled={!codeSent || otpCode.length !== 6 || verifyingCode}>
-            {verifyingCode ? 'Verifying...' : 'Verify & Sign In'}
-          </button>
-        </div>
-
-        {!authReady ? <p className="auth-note">Still needed for auth: {authMissingFields.join(', ') || 'continue chat'}</p> : null}
-      </section>
-
-      <section className="email-lab-card">
-        <h3>Email Test Lab</h3>
-        <div className="auth-grid">
-          <input
-            type="email"
-            placeholder="test@company.com"
-            value={testEmail}
-            onChange={(event) => setTestEmail(event.target.value)}
-          />
-        </div>
-        <div className="email-lab-actions">
-          <button type="button" onClick={() => sendTemplateTest('basic')}>Send Basic</button>
-          <button type="button" onClick={() => sendTemplateTest('quote_status')}>Send Quote Status</button>
-        </div>
-        {testEmailStatus ? <p className="auth-note">{testEmailStatus}</p> : null}
-      </section>
     </section>
   );
 }

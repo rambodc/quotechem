@@ -1,26 +1,23 @@
 # quotechem production app
 
-QuoteChem is now structured around:
-- public session-first chat intake on `Home`
-- passwordless 6-digit email authentication after intake fields are collected
-- session-to-user migration after code verification
-- email testing tools in `More`
+QuoteChem now runs as a chat-only application.
 
-## Public Flow
+## Product behavior
+- no separate sign-in/sign-up pages
+- no form-based auth UI
+- all interaction is through chat messages on `/home`
+- passwordless authentication is triggered and completed through chat
 
-1. User starts anonymous chat session.
-2. AI collects intake fields:
-- chemical name
-- company
-- destination
-- quantity + unit
-3. Once enough data is collected, user can request a 6-digit login code by email.
-4. User enters code; app signs in with Firebase custom token (no password).
-5. Session profile/messages are copied to user data and temp session is deleted.
+## Chat-only auth flow
+1. User chats anonymously in a temporary session.
+2. AI collects required intake fields.
+3. User sends email in chat when auth is ready.
+4. Backend sends 6-digit code by email.
+5. User replies with code in chat.
+6. Backend verifies code, returns custom token, frontend signs in.
+7. Session data migrates into user data and temp session is removed.
 
 ## Functions
-
-Implemented HTTP functions:
 - `createPublicSession`
 - `chatPublicAssistant`
 - `sendLoginCode`
@@ -28,9 +25,11 @@ Implemented HTTP functions:
 - `sendTestEmail`
 - `submitQuoteLead`
 
-## Required Functions Secrets
+## Chat test commands
+- `/test basic you@company.com`
+- `/test quote_status you@company.com`
 
-Set these with Firebase secrets:
+## Required Functions Secrets
 - `OPENAI_API_KEY`
 - `SENDGRID_API_KEY`
 - `QUOTECHEM_FROM_EMAIL`
@@ -39,13 +38,11 @@ Set these with Firebase secrets:
 Optional non-secret env:
 - `OPENAI_MODEL` (default `gpt-4o-mini`)
 
-## Frontend Env
-
-- `REACT_APP_QUOTECHEM_API_BASE` (recommended)
+## Frontend env
+- `REACT_APP_QUOTECHEM_API_BASE`
 - `REACT_APP_FIREBASE_PROJECT_ID` (fallback)
 
 ## Deploy (functions only)
-
 ```bash
 firebase deploy --project quotechemfb --only functions
 ```
