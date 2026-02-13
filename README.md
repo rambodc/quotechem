@@ -1,63 +1,51 @@
 # quotechem production app
 
-This repository now contains a cleaned production starter focused on:
-- `Home`: public QuoteChem chat intake experience
-- `More`: product info plus optional account entry
-- `Account`: signed-in credential management pages
+QuoteChem is now structured around:
+- public session-first chat intake on `Home`
+- passwordless 6-digit email authentication after intake fields are collected
+- session-to-user migration after code verification
+- email testing tools in `More`
 
-## Branch and deploy behavior
+## Public Flow
 
-- `production`: deploys Firebase Hosting to `quotechemfb`
-- `dev`: currently not used for deploys
+1. User starts anonymous chat session.
+2. AI collects intake fields:
+- chemical name
+- company
+- destination
+- quantity + unit
+3. Once enough data is collected, user can request a 6-digit login code by email.
+4. User enters code; app signs in with Firebase custom token (no password).
+5. Session profile/messages are copied to user data and temp session is deleted.
 
-## Firebase project mapping
+## Functions
 
-`.firebaserc` maps both default and prod to:
-- `quotechemfb`
-
-## Required GitHub secrets
-
-Add these in GitHub repo settings (Environment `Prod` or repository-level):
-
-- `GCP_WIF_PROVIDER`
-- `GCP_SERVICE_ACCOUNT_EMAIL`
-- `FIREBASE_API_KEY`
-- `FIREBASE_APP_ID`
-- `FIREBASE_AUTH_DOMAIN`
-- `FIREBASE_MEASUREMENT_ID` (optional)
-- `FIREBASE_MESSAGING_SENDER_ID`
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_STORAGE_BUCKET`
-- `REACT_APP_APPCHECK_SITE_KEY`
-
-## Workflows
-
-- `.github/workflows/firebase-hosting-merge.yml`: deploy on push to `production`
-- `.github/workflows/firebase-hosting-pull-request.yml`: PR preview deploys to `quotechemfb`
-
-## Local env
-
-Use `env.example` as reference for `.env.local` values.
-
-## Public Chat Backend
-
-Implemented endpoints:
+Implemented HTTP functions:
 - `createPublicSession`
 - `chatPublicAssistant`
+- `sendLoginCode`
+- `verifyLoginCode`
+- `sendTestEmail`
 - `submitQuoteLead`
 
-Detailed architecture:
-- `src/docs/QUOTECHEM_AI_ARCHITECTURE.md`
+## Required Functions Secrets
 
-Functions secrets to set:
+Set these with Firebase secrets:
 - `OPENAI_API_KEY`
 - `SENDGRID_API_KEY`
-- `QUOTECHEM_SALES_EMAIL`
 - `QUOTECHEM_FROM_EMAIL`
+- `QUOTECHEM_SALES_EMAIL`
 
-Functions non-secret env:
-- `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
+Optional non-secret env:
+- `OPENAI_MODEL` (default `gpt-4o-mini`)
 
-Frontend env:
-- `REACT_APP_QUOTECHEM_API_BASE` (recommended, full functions base URL)
-- `REACT_APP_FIREBASE_PROJECT_ID` (fallback for endpoint auto-build)
+## Frontend Env
+
+- `REACT_APP_QUOTECHEM_API_BASE` (recommended)
+- `REACT_APP_FIREBASE_PROJECT_ID` (fallback)
+
+## Deploy (functions only)
+
+```bash
+firebase deploy --project quotechemfb --only functions
+```

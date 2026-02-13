@@ -1,14 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { signInWithCustomToken } from 'firebase/auth';
+import { auth } from '../firebase';
 import './Home.css';
 
 const LOCAL_SESSION_KEY = 'quotechem_public_session_id';
-
-const suggestedPrompts = [
-  'I need Sodium Benzoate for beverage production.',
-  'Can you quote 2 metric tons of Citric Acid to California?',
-  'What details do you need to provide shipping pricing?',
-  'We need fast delivery for Caustic Soda. What should I share?',
-];
 
 function endpointBase() {
   const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE;
@@ -38,35 +33,48 @@ async function postJson(path, payload) {
   return data;
 }
 
+function normalizeMessage(message) {
+  return {
+    id: message.id || `msg-${Date.now()}-${Math.random()}`,
+    role: message.role || 'assistant',
+    content: message.content || '',
+    quickReplies: Array.isArray(message.quickReplies) ? message.quickReplies : [],
+  };
+}
+
 export default function Home() {
   const [sessionId, setSessionId] = useState('');
-  const [messages, setMessages] = useState([
-    {
-      id: 'intro',
-      role: 'assistant',
-      content:
-        'Welcome to QuoteChem. Tell me the chemical you need, quantity, destination, and timeline so I can prepare your quote intake.',
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [profile, setProfile] = useState({});
-  const [missingFields, setMissingFields] = useState([]);
-  const [leadEmail, setLeadEmail] = useState('');
-  const [leadSubmitting, setLeadSubmitting] = useState(false);
-  const [leadStatus, setLeadStatus] = useState('');
   const [sessionRestored, setSessionRestored] = useState(false);
 
-  const chatCount = useMemo(() => messages.length, [messages.length]);
-  const leadReady = useMemo(() => missingFields.length === 0 && chatCount > 1, [missingFields.length, chatCount]);
+  const [profile, setProfile] = useState({});
+  const [intakeMissingFields, setIntakeMissingFields] = useState([]);
+  const [authMissingFields, setAuthMissingFields] = useState([]);
+  const [authReady, setAuthReady] = useState(false);
+
+  const [contactName, setContactName] = useState('');
+  const [email, setEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [authStatus, setAuthStatus] = useState('');
+
+  const [testEmail, setTestEmail] = useState('');
+  const [testEmailStatus, setTestEmailStatus] = useState('');
+
+  const messageCount = useMemo(() => messages.length, [messages.length]);
 
   useEffect(() => {
     let active = true;
 
-    const initSession = async () => {
+    const init = async () => {
       try {
         const existing = typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_SESSION_KEY) : '';
+
         const data = await postJson('createPublicSession', {
           sessionId: existing || undefined,
           metadata: {
@@ -77,131 +85,197 @@ export default function Home() {
         });
 
         if (!active) return;
+
         setSessionId(data.sessionId);
-        setProfile(data.session?.profile || {});
-        setLeadEmail(data.session?.profile?.email || '');
-        setMissingFields(data.session?.missingFields || []);
-        if (Array.isArray(data.session?.messages) && data.session.messages.length > 0) {
-          setMessages(data.session.messages.map((message) => ({
-            id: message.id || `${message.role}-${Date.now()}-${Math.random()}`,
-            role: message.role || 'assistant',
-            content: message.content || '',
-          })));
-          setSessionRestored(Boolean(existing));
-        }
         if (typeof window !== 'undefined') {
           window.localStorage.setItem(LOCAL_SESSION_KEY, data.sessionId);
         }
+
+        const session = data.session || {};
+        const restoredMessages = Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [];
+
+        if (restoredMessages.length > 0) {
+          setMessages(restoredMessages);
+          setSessionRestored(Boolean(existing));
+        }
+
+        setProfile(session.profile || {});
+        setContactName(session.profile?.contactName || '');
+        setEmail(session.profile?.email || '');
+        setIntakeMissingFields(session.intakeMissingFields || []);
+        setAuthMissingFields(session.authMissingFields || []);
+        setAuthReady(Boolean(session.authReady));
       } catch (err) {
         if (!active) return;
-        setError(err?.message || 'Unable to initialize chat session.');
+        setError(err?.message || 'Unable to initialize session.');
       }
     };
 
-    initSession();
+    init();
     return () => {
       active = false;
     };
   }, []);
+
+  const appendMessage = (message) => {
+    setMessages((prev) => [...prev, normalizeMessage(message)]);
+  };
 
   const sendMessage = async (input) => {
     const value = input.trim();
     if (!value || !sessionId || loading) return;
 
     setError('');
-    setLeadStatus('');
+    setAuthStatus('');
 
-    const userMessage = { id: `u-${Date.now()}`, role: 'user', content: value };
-    setMessages((prev) => [...prev, userMessage]);
+    appendMessage({ role: 'user', content: value });
     setDraft('');
     setLoading(true);
 
     try {
-      const data = await postJson('chatPublicAssistant', {
-        sessionId,
-        message: value,
+      const data = await postJson('chatPublicAssistant', { sessionId, message: value });
+
+      appendMessage({
+        role: 'assistant',
+        content: data.assistant?.reply || 'Please continue with your quote details.',
+        quickReplies: data.assistant?.quickReplies || [],
       });
 
       setProfile(data.profile || {});
-      setMissingFields(data.assistant?.missingFields || []);
-      if (data.profile?.email) setLeadEmail(data.profile.email);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: data.assistant?.reply || 'I can help with that. Please share the remaining quote details.',
-        },
-      ]);
+      setContactName((prev) => prev || data.profile?.contactName || '');
+      setEmail((prev) => prev || data.profile?.email || '');
+      setIntakeMissingFields(data.intakeMissingFields || []);
+      setAuthMissingFields(data.authMissingFields || []);
+      setAuthReady(Boolean(data.authReady));
     } catch (err) {
-      setError(err?.message || 'Unable to process message right now.');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `a-err-${Date.now()}`,
-          role: 'assistant',
-          content: 'I hit a temporary issue. Please retry in a moment.',
-        },
-      ]);
+      setError(err?.message || 'Failed to send message.');
+      appendMessage({ role: 'assistant', content: 'Temporary error. Please retry.' });
     } finally {
       setLoading(false);
     }
   };
 
-  const submitLead = async () => {
-    if (!sessionId || !leadEmail || leadSubmitting) return;
+  const sendCode = async () => {
+    if (!sessionId || !email || sendingCode) return;
 
-    setLeadSubmitting(true);
-    setLeadStatus('');
+    setSendingCode(true);
     setError('');
+    setAuthStatus('');
 
     try {
-      const data = await postJson('submitQuoteLead', {
+      const data = await postJson('sendLoginCode', {
         sessionId,
-        email: leadEmail,
-        contactName: profile.contactName || '',
-        companyName: profile.companyName || '',
-        phone: profile.phone || '',
+        email,
+        contactName,
       });
-      setLeadStatus(data.emailed ? 'Quote request sent. Our team will contact you.' : 'Lead saved. Email delivery is not configured yet.');
+
+      setCodeSent(Boolean(data.codeSent));
+      setAuthStatus('Code sent to your email. Enter the 6-digit code below.');
     } catch (err) {
-      setError(err?.message || 'Unable to submit quote request.');
+      setError(err?.message || 'Unable to send code.');
     } finally {
-      setLeadSubmitting(false);
+      setSendingCode(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    if (!sessionId || !email || !otpCode || verifyingCode) return;
+
+    setVerifyingCode(true);
+    setError('');
+    setAuthStatus('');
+
+    try {
+      const data = await postJson('verifyLoginCode', {
+        sessionId,
+        email,
+        code: otpCode,
+      });
+
+      if (!data.customToken) {
+        throw new Error('Missing auth token in response.');
+      }
+
+      await signInWithCustomToken(auth, data.customToken);
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(LOCAL_SESSION_KEY);
+      }
+
+      setAuthStatus('Authenticated. Your session data was migrated to your user account.');
+      const fresh = await postJson('createPublicSession', {
+        metadata: {
+          locale: typeof navigator !== 'undefined' ? navigator.language : '',
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          referrer: typeof document !== 'undefined' ? document.referrer : '',
+        },
+      });
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(LOCAL_SESSION_KEY, fresh.sessionId);
+      }
+
+      setSessionId(fresh.sessionId);
+      setMessages([]);
+      setProfile({});
+      setIntakeMissingFields(fresh.session?.intakeMissingFields || []);
+      setAuthMissingFields(fresh.session?.authMissingFields || []);
+      setOtpCode('');
+      setCodeSent(false);
+      setAuthReady(false);
+    } catch (err) {
+      setError(err?.message || 'Unable to verify code.');
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  const sendTemplateTest = async (template) => {
+    if (!testEmail) {
+      setError('Enter test email first.');
+      return;
+    }
+
+    setError('');
+    setTestEmailStatus('Sending test email...');
+
+    try {
+      const data = await postJson('sendTestEmail', {
+        email: testEmail,
+        template,
+      });
+      setTestEmailStatus(data.sent ? `Sent ${data.template} test email.` : 'Email was not sent.');
+    } catch (err) {
+      setError(err?.message || 'Failed to send test email.');
+      setTestEmailStatus('');
     }
   };
 
   return (
     <section className="chat-page">
-      <header className="chat-header">
-        <div>
-          <h2>QuoteChem Assistant</h2>
-          <p>Public quote intake for chemical sourcing and shipping.</p>
-        </div>
-        <span className="chat-count">{chatCount} messages</span>
-      </header>
-
-      <div className="chat-suggestions" aria-label="Quick prompts">
-        {suggestedPrompts.map((prompt) => (
-          <button key={prompt} type="button" className="suggestion-pill" onClick={() => sendMessage(prompt)}>
-            {prompt}
-          </button>
-        ))}
-      </div>
-
       <div className="chat-thread" role="log" aria-live="polite">
-        {sessionRestored ? <p className="session-note">Previous session restored on this device.</p> : null}
+        {sessionRestored ? <p className="session-note">Session restored</p> : null}
+
         {messages.map((message) => (
           <article key={message.id} className={`chat-message ${message.role === 'user' ? 'user' : 'assistant'}`}>
-            <span className="chat-role">{message.role === 'user' ? 'You' : 'QuoteChem AI'}</span>
-            <p>{message.content}</p>
+            {message.content ? <p>{message.content}</p> : null}
+            {message.role === 'assistant' && message.quickReplies.length > 0 ? (
+              <div className="quick-replies">
+                {message.quickReplies.map((reply) => (
+                  <button key={`${message.id}-${reply}`} type="button" onClick={() => sendMessage(reply)}>
+                    {reply}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </article>
         ))}
-        {loading ? <p className="chat-loading">QuoteChem AI is thinking...</p> : null}
+
+        {loading ? <p className="chat-loading">...</p> : null}
       </div>
 
       {error ? <p className="chat-error">{error}</p> : null}
+      {authStatus ? <p className="chat-success">{authStatus}</p> : null}
 
       <form
         className="chat-composer"
@@ -213,51 +287,78 @@ export default function Home() {
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Share chemical name, quantity, destination, and timeline..."
+          placeholder=""
           rows={2}
           disabled={!sessionId || loading}
         />
         <div className="composer-actions">
-          <span>{sessionId ? `Session ${sessionId.slice(0, 8)}...` : 'Initializing session...'}</span>
+          <span>{sessionId ? `${messageCount} msgs` : 'no session'}</span>
           <button type="submit" disabled={!sessionId || loading || !draft.trim()}>
             Send
           </button>
         </div>
       </form>
 
-      <section className="lead-card">
-        <h3>Request Quote Follow-up</h3>
-        <p>Enter your email so our team can send formal quote details.</p>
-        {missingFields.length > 0 ? (
-          <p className="lead-missing">Still needed: {missingFields.join(', ')}</p>
-        ) : (
-          <p className="lead-ready">Required info captured. Submit your contact email.</p>
-        )}
-        <div className="lead-row">
+      <section className="intake-card">
+        <div className="intake-row">
+          <strong>Missing intake fields:</strong>
+          <span>{intakeMissingFields.length ? intakeMissingFields.join(', ') : 'none'}</span>
+        </div>
+      </section>
+
+      <section className="auth-card">
+        <h3>Passwordless Sign-in</h3>
+        <p>Authenticate after quote intake with a 6-digit email code.</p>
+
+        <div className="auth-grid">
+          <input
+            type="text"
+            placeholder="Name"
+            value={contactName}
+            onChange={(event) => setContactName(event.target.value)}
+          />
           <input
             type="email"
-            placeholder="you@company.com"
-            value={leadEmail}
-            onChange={(event) => setLeadEmail(event.target.value)}
+            placeholder="Email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
           />
-          <button type="button" onClick={submitLead} disabled={leadSubmitting || !leadEmail || !leadReady}>
-            {leadSubmitting ? 'Submitting...' : 'Submit Lead'}
+        </div>
+
+        <div className="auth-actions">
+          <button type="button" onClick={sendCode} disabled={!authReady || !email || sendingCode}>
+            {sendingCode ? 'Sending...' : 'Send Code'}
+          </button>
+          <input
+            type="text"
+            maxLength={6}
+            placeholder="6-digit code"
+            value={otpCode}
+            onChange={(event) => setOtpCode(event.target.value)}
+          />
+          <button type="button" onClick={verifyCode} disabled={!codeSent || otpCode.length !== 6 || verifyingCode}>
+            {verifyingCode ? 'Verifying...' : 'Verify & Sign In'}
           </button>
         </div>
-        {Object.keys(profile).length > 0 ? (
-          <div className="profile-snapshot">
-            <strong>Captured details</strong>
-            <ul>
-              {Object.entries(profile).map(([key, value]) => (
-                <li key={key}>
-                  <span>{key}</span>
-                  <span>{String(value)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {leadStatus ? <p className="lead-status">{leadStatus}</p> : null}
+
+        {!authReady ? <p className="auth-note">Still needed for auth: {authMissingFields.join(', ') || 'continue chat'}</p> : null}
+      </section>
+
+      <section className="email-lab-card">
+        <h3>Email Test Lab</h3>
+        <div className="auth-grid">
+          <input
+            type="email"
+            placeholder="test@company.com"
+            value={testEmail}
+            onChange={(event) => setTestEmail(event.target.value)}
+          />
+        </div>
+        <div className="email-lab-actions">
+          <button type="button" onClick={() => sendTemplateTest('basic')}>Send Basic</button>
+          <button type="button" onClick={() => sendTemplateTest('quote_status')}>Send Quote Status</button>
+        </div>
+        {testEmailStatus ? <p className="auth-note">{testEmailStatus}</p> : null}
       </section>
     </section>
   );
