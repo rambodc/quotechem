@@ -5,12 +5,23 @@ import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/fires
 import { auth, db } from './firebase';
 import AppShell from './layout/AppShell';
 import Home from './home/Home';
+import More from './more/More';
+import Account from './account/Account';
+import ChangeEmail from './account/ChangeEmail';
+import ChangePassword from './account/ChangePassword';
+import EditUsername from './account/EditUsername';
 
 export const UserContext = createContext(null);
+
+function ProtectedRoute({ user, checking, children }) {
+  if (checking) return null;
+  return user ? children : <Navigate to="/home" replace />;
+}
 
 function App() {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [appUser, setAppUser] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const profileUnsubRef = useRef(null);
 
   const normalizeUsername = (value) =>
@@ -32,6 +43,7 @@ function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setFirebaseUser(u);
+      setCheckingAuth(false);
 
       if (profileUnsubRef.current) {
         profileUnsubRef.current();
@@ -104,6 +116,46 @@ function App() {
           <Route path="/" element={<AppShell user={firebaseUser ? contextValue : null} />}>
             <Route index element={<Navigate to="/home" replace />} />
             <Route path="home" element={<Home />} />
+            <Route
+              path="more"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                  <More />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                  <Account />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account/email"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                  <ChangeEmail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account/password"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                  <ChangePassword />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account/username"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                  <EditUsername />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>

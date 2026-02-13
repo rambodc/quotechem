@@ -3,7 +3,7 @@ import { signInWithCustomToken } from 'firebase/auth';
 import { auth } from '../firebase';
 import './Home.css';
 
-const LOCAL_SESSION_KEY = 'quotechem_public_session_id';
+const LOCAL_SESSION_KEY = 'quotechem_session_id';
 
 function endpointBase() {
   const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE;
@@ -71,9 +71,7 @@ export default function Home() {
   const [sessionRestored, setSessionRestored] = useState(false);
 
   const [profile, setProfile] = useState({});
-  const [authMissingFields, setAuthMissingFields] = useState([]);
   const [authReady, setAuthReady] = useState(false);
-
   const [pendingEmail, setPendingEmail] = useState('');
   const [codeSent, setCodeSent] = useState(false);
 
@@ -97,17 +95,18 @@ export default function Home() {
     });
 
     setSessionId(data.sessionId);
+
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(LOCAL_SESSION_KEY, data.sessionId);
     }
 
     const session = data.session || {};
-    const restoredMessages = Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [];
-    setMessages(restoredMessages);
-    setSessionRestored(Boolean(existing) && restoredMessages.length > 0);
+    const restored = Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [];
+
+    setMessages(restored);
+    setSessionRestored(Boolean(existing) && restored.length > 0);
 
     setProfile(session.profile || {});
-    setAuthMissingFields(session.authMissingFields || []);
     setAuthReady(Boolean(session.authReady));
 
     const emailFromSession = session.profile?.email || '';
@@ -133,28 +132,21 @@ export default function Home() {
     };
   }, []);
 
-  const sendLoginCodeByChat = async (email, fallbackName = '') => {
-    if (!sessionId || !email) return;
-
+  const sendLoginCodeByChat = async (email) => {
     const data = await postJson('sendLoginCode', {
       sessionId,
       email,
-      contactName: fallbackName,
+      contactName: profile.contactName || '',
     });
 
     if (data.codeSent) {
       setPendingEmail(email);
       setCodeSent(true);
-      appendMessage({
-        role: 'assistant',
-        content: `Verification code sent to ${email}. Reply with the 6-digit code to sign in.`,
-      });
+      appendMessage({ role: 'assistant', content: `Code sent to ${email}. Reply with the 6-digit code.` });
     }
   };
 
   const verifyCodeByChat = async (code) => {
-    if (!sessionId || !pendingEmail || !code) return;
-
     const data = await postJson('verifyLoginCode', {
       sessionId,
       email: pendingEmail,
@@ -165,23 +157,18 @@ export default function Home() {
 
     await signInWithCustomToken(auth, data.customToken);
 
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(LOCAL_SESSION_KEY);
-    }
+    appendMessage({ role: 'assistant', content: 'Authenticated successfully.' });
 
-    appendMessage({
-      role: 'assistant',
-      content: 'Signed in successfully. Your session data was migrated to your account.',
-    });
-
-    await bootSession(false);
+    setCodeSent(false);
+    setPendingEmail('');
+    setAuthReady(false);
   };
 
-  const handleChatCommand = async (value) => {
+  const handleCommand = async (value) => {
     const testCommand = parseTestCommand(value);
     if (testCommand) {
       if (!testCommand.email) {
-        appendMessage({ role: 'assistant', content: 'Invalid test command. Use /test basic you@company.com' });
+        appendMessage({ role: 'assistant', content: 'Invalid test command.' });
         return true;
       }
 
@@ -192,9 +179,7 @@ export default function Home() {
 
       appendMessage({
         role: 'assistant',
-        content: data.sent
-          ? `Test email (${data.template}) sent to ${testCommand.email}.`
-          : 'Test email request completed with no send.',
+        content: data.sent ? `Test email (${data.template}) sent.` : 'Test email request completed.',
       });
       return true;
     }
@@ -207,7 +192,7 @@ export default function Home() {
 
     const email = extractEmail(value);
     if (authReady && email && !codeSent) {
-      await sendLoginCodeByChat(email, profile.contactName || '');
+      await sendLoginCodeByChat(email);
       return true;
     }
 
@@ -224,27 +209,17 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const handled = await handleChatCommand(value);
+      const handled = await handleCommand(value);
       if (handled) return;
 
       const data = await postJson('chatPublicAssistant', { sessionId, message: value });
 
-      appendMessage({
-        role: 'assistant',
-        content: data.assistant?.reply || 'Please continue with your quote details.',
-      });
-
+      appendMessage({ role: 'assistant', content: data.assistant?.reply || 'Continue.' });
       setProfile(data.profile || {});
-      setAuthMissingFields(data.authMissingFields || []);
       setAuthReady(Boolean(data.authReady));
 
-      const profileEmail = data.profile?.email || '';
-      if (profileEmail && authReady && !codeSent) {
-        appendMessage({
-          role: 'assistant',
-          content:
-            'If you want to authenticate now, send your email in chat and I will send a 6-digit verification code.',
-        });
+      if (Boolean(data.authReady) && !codeSent) {
+        appendMessage({ role: 'assistant', content: 'Send your email in chat to receive a 6-digit sign-in code.' });
       }
     } catch (err) {
       setError(err?.message || 'Failed to send message.');

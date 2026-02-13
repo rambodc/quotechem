@@ -1,21 +1,17 @@
 # quotechem production app
 
-QuoteChem now runs as a chat-only application.
+QuoteChem uses:
+- public session-first chat on `Home`
+- chat-only passwordless sign-in (6-digit email code)
+- authenticated routes (`More`, `Account`) after chat sign-in
 
-## Product behavior
-- no separate sign-in/sign-up pages
-- no form-based auth UI
-- all interaction is through chat messages on `/home`
-- passwordless authentication is triggered and completed through chat
-
-## Chat-only auth flow
-1. User chats anonymously in a temporary session.
-2. AI collects required intake fields.
-3. User sends email in chat when auth is ready.
-4. Backend sends 6-digit code by email.
-5. User replies with code in chat.
-6. Backend verifies code, returns custom token, frontend signs in.
-7. Session data migrates into user data and temp session is removed.
+## Chat-only auth behavior
+- user chats as guest session
+- once intake is sufficient, user sends email in chat
+- backend sends OTP to email
+- user sends OTP in chat
+- backend returns Firebase custom token
+- frontend signs in with custom token
 
 ## Functions
 - `createPublicSession`
@@ -25,7 +21,7 @@ QuoteChem now runs as a chat-only application.
 - `sendTestEmail`
 - `submitQuoteLead`
 
-## Chat test commands
+## Chat commands
 - `/test basic you@company.com`
 - `/test quote_status you@company.com`
 
@@ -35,14 +31,11 @@ QuoteChem now runs as a chat-only application.
 - `QUOTECHEM_FROM_EMAIL`
 - `QUOTECHEM_SALES_EMAIL`
 
-Optional non-secret env:
-- `OPENAI_MODEL` (default `gpt-4o-mini`)
-
 ## Frontend env
 - `REACT_APP_QUOTECHEM_API_BASE`
 - `REACT_APP_FIREBASE_PROJECT_ID` (fallback)
 
-## Deploy (functions only)
+## Deploy functions only
 ```bash
 firebase deploy --project quotechemfb --only functions
 ```

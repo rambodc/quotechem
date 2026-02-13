@@ -12,20 +12,8 @@ const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
 const QUOTECHEM_SALES_EMAIL = defineSecret('QUOTECHEM_SALES_EMAIL');
 const QUOTECHEM_FROM_EMAIL = defineSecret('QUOTECHEM_FROM_EMAIL');
 
-const REQUIRED_PROFILE_FIELDS = [
-  'chemicalName',
-  'companyName',
-  'destinationCountry',
-  'quantity',
-  'quantityUnit',
-];
-
-const AUTH_REQUIRED_FIELDS = [
-  'chemicalName',
-  'companyName',
-  'destinationCountry',
-  'quantity',
-];
+const REQUIRED_PROFILE_FIELDS = ['chemicalName', 'companyName', 'destinationCountry', 'quantity', 'quantityUnit'];
+const AUTH_REQUIRED_FIELDS = ['chemicalName', 'companyName', 'destinationCountry', 'quantity'];
 
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
@@ -82,15 +70,41 @@ function normalizeSessionId(value) {
   return v.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
 }
 
+function hashOtp(code) {
+  return createHash('sha256').update(code).digest('hex');
+}
+
+function generateOtp() {
+  return String(randomInt(0, 1000000)).padStart(6, '0');
+}
+
+function missingFields(profile, requiredFields) {
+  return requiredFields.filter((field) => !asString(profile[field]));
+}
+
+function buildQuickReplies(missing) {
+  const map = {
+    chemicalName: 'Chemical: Citric Acid',
+    companyName: 'Company: ACME Labs',
+    destinationCountry: 'Destination: United States',
+    quantity: 'Quantity: 2',
+    quantityUnit: 'Unit: metric tons',
+  };
+
+  return missing
+    .slice(0, 3)
+    .map((field) => map[field])
+    .filter(Boolean);
+}
+
 function buildSystemPrompt() {
   return [
     'You are QuoteChem, an industrial chemical sourcing assistant.',
-    'Collect intake data in short steps: chemical name, company, location, quantity, unit, timeline, shipping mode.',
-    'Use plain concise language and ask only one or two follow-up questions at a time.',
-    'Never claim final prices. Explain that final quote is provided after verification.',
-    'Return strict JSON only with keys: assistant_reply, extracted, missing_fields, confidence.',
-    'extracted allowed keys: chemicalName, companyName, destinationCountry, destinationPostalCode, quantity, quantityUnit, shippingMode, timeline, puritySpec, packagingType, notes, contactName, email.',
-    'missing_fields should include unresolved intake fields only.',
+    'Collect intake info briefly: chemical name, company, destination country, quantity and unit.',
+    'Ask one short follow-up at a time if info is missing.',
+    'Do not provide final pricing commitments.',
+    'Return strict JSON only with keys: assistant_reply, extracted, confidence.',
+    'extracted keys allowed: chemicalName, companyName, destinationCountry, quantity, quantityUnit, timeline, shippingMode, contactName, email, notes.',
   ].join(' ');
 }
 
@@ -101,9 +115,8 @@ async function callOpenAI({ userMessage, history, profile }) {
   if (!apiKey) {
     return {
       assistant_reply:
-        'Please share the chemical, your company, destination country, and quantity so I can prepare intake details.',
+        'Please share chemical name, company, destination country, quantity, and quantity unit so I can prepare your quote intake.',
       extracted: {},
-      missing_fields: REQUIRED_PROFILE_FIELDS,
       confidence: 0.2,
       model: 'fallback-no-openai-key',
     };
@@ -156,45 +169,18 @@ async function callOpenAI({ userMessage, history, profile }) {
   } catch {
     parsed = {
       assistant_reply:
-        'Please share the chemical, your company, destination country, and quantity so I can continue.',
+        'Please share chemical name, company, destination country, quantity, and quantity unit so I can continue.',
       extracted: {},
-      missing_fields: REQUIRED_PROFILE_FIELDS,
       confidence: 0.3,
     };
   }
 
   return {
-    assistant_reply: asString(parsed.assistant_reply) || 'Please share the next intake detail.',
+    assistant_reply: asString(parsed.assistant_reply) || 'Please continue with your intake details.',
     extracted: compactObject(parsed.extracted || {}),
-    missing_fields: Array.isArray(parsed.missing_fields)
-      ? parsed.missing_fields.map((item) => asString(item)).filter(Boolean)
-      : [],
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
     model,
   };
-}
-
-function missingFields(profile, requiredFields) {
-  return requiredFields.filter((field) => !asString(profile[field]));
-}
-
-function buildQuickReplies(missing) {
-  const map = {
-    chemicalName: 'Chemical: Citric Acid',
-    companyName: 'Company: ACME Labs',
-    destinationCountry: 'Destination: United States',
-    destinationPostalCode: 'Postal code: 94105',
-    quantity: 'Quantity: 2',
-    quantityUnit: 'Unit: metric tons',
-    shippingMode: 'Shipping: sea freight',
-    timeline: 'Timeline: 3 weeks',
-    email: 'Email: you@company.com',
-  };
-
-  return missing
-    .slice(0, 3)
-    .map((field) => map[field])
-    .filter(Boolean);
 }
 
 async function sendEmail({ toEmail, fromEmail, subject, text, html }) {
@@ -228,7 +214,7 @@ async function sendEmail({ toEmail, fromEmail, subject, text, html }) {
 
 async function loadRecentMessages(sessionId, limit = 30) {
   const snap = await db
-    .collection('publicChatSessions')
+    .collection('chatSessions')
     .doc(sessionId)
     .collection('messages')
     .orderBy('createdAt', 'asc')
@@ -248,13 +234,15 @@ async function loadRecentMessages(sessionId, limit = 30) {
 }
 
 async function ensureSession(sessionId, metadata = {}) {
-  const ref = db.collection('publicChatSessions').doc(sessionId);
+  const ref = db.collection('chatSessions').doc(sessionId);
   const snap = await ref.get();
   const now = admin.firestore.FieldValue.serverTimestamp();
 
   if (!snap.exists) {
     await ref.set({
       sessionId,
+      uid: null,
+      isGuest: true,
       status: 'active',
       profile: {},
       metadata: {
@@ -272,14 +260,6 @@ async function ensureSession(sessionId, metadata = {}) {
   }
 
   return ref;
-}
-
-function hashOtp(code) {
-  return createHash('sha256').update(code).digest('hex');
-}
-
-function generateOtp() {
-  return String(randomInt(0, 1000000)).padStart(6, '0');
 }
 
 async function findActiveChallenge(sessionId, email) {
@@ -328,48 +308,6 @@ async function upsertUserProfile(uid, email, profile, contactName) {
   );
 }
 
-async function migrateSessionToUser(sessionId, uid, email) {
-  const sessionRef = db.collection('publicChatSessions').doc(sessionId);
-  const sessionSnap = await sessionRef.get();
-  if (!sessionSnap.exists) return;
-
-  const sessionData = sessionSnap.data() || {};
-  const profile = sessionData.profile || {};
-  const messages = await loadRecentMessages(sessionId, 100);
-
-  const userSessionRef = db.collection('users').doc(uid).collection('chatSessions').doc(sessionId);
-  const now = admin.firestore.FieldValue.serverTimestamp();
-
-  await userSessionRef.set(
-    {
-      sessionId,
-      migratedFromPublicSession: true,
-      email,
-      profile,
-      createdAt: now,
-      updatedAt: now,
-      messageCount: messages.length,
-    },
-    { merge: true }
-  );
-
-  const batch = db.batch();
-  messages.forEach((message) => {
-    const ref = userSessionRef.collection('messages').doc(message.id || randomUUID());
-    batch.set(ref, {
-      role: message.role,
-      content: message.content,
-      quickReplies: Array.isArray(message.quickReplies) ? message.quickReplies : [],
-      createdAt: now,
-    });
-  });
-  await batch.commit();
-
-  await upsertUserProfile(uid, email, profile, profile.contactName || '');
-
-  await db.recursiveDelete(sessionRef);
-}
-
 export const createPublicSession = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
@@ -377,17 +315,17 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
   try {
     const requested = normalizeSessionId(req.body?.sessionId);
     const sessionId = requested || randomUUID();
-    const metadata = req.body?.metadata || {};
 
-    const sessionRef = await ensureSession(sessionId, metadata);
+    const sessionRef = await ensureSession(sessionId, req.body?.metadata || {});
     const sessionSnap = await sessionRef.get();
     const session = sessionSnap.data() || {};
-
     const profile = session.profile || {};
+
     const intakeMissingFields = missingFields(profile, REQUIRED_PROFILE_FIELDS);
     const authMissingFields = missingFields(profile, AUTH_REQUIRED_FIELDS);
-    const messages = await loadRecentMessages(sessionId);
     const authReady = authMissingFields.length === 0 && (session.userTurns || 0) >= USER_TURNS_FOR_AUTH;
+
+    const messages = await loadRecentMessages(sessionId);
 
     setCors(res);
     res.status(200).json({
@@ -395,6 +333,8 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
       sessionId,
       session: {
         status: session.status || 'active',
+        uid: session.uid || null,
+        isGuest: session.uid ? false : true,
         profile,
         messages,
         intakeMissingFields,
@@ -485,10 +425,7 @@ export const chatPublicAssistant = onRequest(
         authReady,
       });
     } catch (error) {
-      logger.error('[chatPublicAssistant] failed', {
-        sessionId,
-        error: error?.message || String(error),
-      });
+      logger.error('[chatPublicAssistant] failed', { sessionId, error: error?.message || String(error) });
       return jsonError(res, 500, 'Failed to process chat message');
     }
   }
@@ -512,7 +449,7 @@ export const sendLoginCode = onRequest(
     if (!email) return jsonError(res, 400, 'email is required');
 
     try {
-      const sessionRef = db.collection('publicChatSessions').doc(sessionId);
+      const sessionRef = db.collection('chatSessions').doc(sessionId);
       const sessionSnap = await sessionRef.get();
       if (!sessionSnap.exists) return jsonError(res, 404, 'session not found');
 
@@ -531,8 +468,7 @@ export const sendLoginCode = onRequest(
 
       const code = generateOtp();
       const codeHash = hashOtp(code);
-      const nowDate = new Date();
-      const expiresAtDate = new Date(nowDate.getTime() + OTP_TTL_MINUTES * 60 * 1000);
+      const expiresAtDate = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
       const challengeRef = db.collection('loginChallenges').doc();
       await challengeRef.set({
@@ -573,12 +509,7 @@ export const sendLoginCode = onRequest(
       );
 
       setCors(res);
-      res.status(200).json({
-        ok: true,
-        sessionId,
-        codeSent: true,
-        expiresInMinutes: OTP_TTL_MINUTES,
-      });
+      res.status(200).json({ ok: true, codeSent: true, expiresInMinutes: OTP_TTL_MINUTES });
     } catch (error) {
       logger.error('[sendLoginCode] failed', { sessionId, error: error?.message || String(error) });
       return jsonError(res, 500, 'Failed to send login code');
@@ -616,8 +547,7 @@ export const verifyLoginCode = onRequest({ region: REGION, timeoutSeconds: 60 },
       return jsonError(res, 429, 'Too many attempts. Request a new code.');
     }
 
-    const incomingHash = hashOtp(code);
-    if (incomingHash !== challenge.codeHash) {
+    if (hashOtp(code) !== challenge.codeHash) {
       await challengeDoc.ref.set(
         {
           attempts: admin.firestore.FieldValue.increment(1),
@@ -628,13 +558,7 @@ export const verifyLoginCode = onRequest({ region: REGION, timeoutSeconds: 60 },
       return jsonError(res, 400, 'Invalid code');
     }
 
-    await challengeDoc.ref.set(
-      {
-        used: true,
-        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    await challengeDoc.ref.set({ used: true, verifiedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
 
     let userRecord;
     try {
@@ -643,18 +567,40 @@ export const verifyLoginCode = onRequest({ region: REGION, timeoutSeconds: 60 },
       userRecord = await auth.createUser({ email, emailVerified: true });
     }
 
+    const sessionRef = db.collection('chatSessions').doc(sessionId);
+    const sessionSnap = await sessionRef.get();
+    const session = sessionSnap.exists ? sessionSnap.data() || {} : {};
+
+    await sessionRef.set(
+      {
+        uid: userRecord.uid,
+        isGuest: false,
+        authVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        profile: {
+          ...(session.profile || {}),
+          email,
+          ...(challenge.contactName ? { contactName: asString(challenge.contactName) } : {}),
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    await upsertUserProfile(
+      userRecord.uid,
+      email,
+      {
+        ...(session.profile || {}),
+        email,
+        ...(challenge.contactName ? { contactName: asString(challenge.contactName) } : {}),
+      },
+      asString(challenge.contactName)
+    );
+
     const customToken = await auth.createCustomToken(userRecord.uid);
 
-    await migrateSessionToUser(sessionId, userRecord.uid, email);
-
     setCors(res);
-    res.status(200).json({
-      ok: true,
-      uid: userRecord.uid,
-      email,
-      customToken,
-      migrated: true,
-    });
+    res.status(200).json({ ok: true, uid: userRecord.uid, email, customToken });
   } catch (error) {
     logger.error('[verifyLoginCode] failed', { sessionId, email, error: error?.message || String(error) });
     return jsonError(res, 500, 'Failed to verify login code');
@@ -727,7 +673,7 @@ export const submitQuoteLead = onRequest(
     if (!email) return jsonError(res, 400, 'email is required');
 
     try {
-      const sessionRef = db.collection('publicChatSessions').doc(sessionId);
+      const sessionRef = db.collection('chatSessions').doc(sessionId);
       const sessionSnap = await sessionRef.get();
       if (!sessionSnap.exists) return jsonError(res, 404, 'session not found');
 
@@ -744,7 +690,8 @@ export const submitQuoteLead = onRequest(
       await leadRef.set({
         leadId: leadRef.id,
         sessionId,
-        source: 'public_chat',
+        uid: session.uid || null,
+        source: session.uid ? 'authenticated_chat' : 'guest_chat',
         profile,
         status: 'new',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -757,6 +704,7 @@ export const submitQuoteLead = onRequest(
         const text = [
           `New QuoteChem lead (${leadRef.id})`,
           `Session: ${sessionId}`,
+          `User UID: ${session.uid || 'guest'}`,
           `Email: ${profile.email || '-'}`,
           `Chemical: ${profile.chemicalName || '-'}`,
           `Company: ${profile.companyName || '-'}`,
@@ -776,11 +724,7 @@ export const submitQuoteLead = onRequest(
       await sessionRef.set({ profile, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
 
       setCors(res);
-      res.status(200).json({
-        ok: true,
-        leadId: leadRef.id,
-        emailed: Boolean(toEmail),
-      });
+      res.status(200).json({ ok: true, leadId: leadRef.id, emailed: Boolean(toEmail) });
     } catch (error) {
       logger.error('[submitQuoteLead] failed', { sessionId, error: error?.message || String(error) });
       return jsonError(res, 500, 'Failed to submit lead');
