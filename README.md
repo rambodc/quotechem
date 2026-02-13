@@ -1,9 +1,9 @@
 # quotechem production app
 
 This repository now contains a cleaned production starter focused on:
-- `Home`: ChatGPT-style assistant workspace UI
-- `More`: account entry point + logout
-- `Account`: change email, change password, edit username
+- `Home`: public QuoteChem chat intake experience
+- `More`: product info plus optional account entry
+- `Account`: signed-in credential management pages
 
 ## Branch and deploy behavior
 
@@ -39,7 +39,25 @@ Add these in GitHub repo settings (Environment `Prod` or repository-level):
 
 Use `env.example` as reference for `.env.local` values.
 
-## ChatGPT backend plan
+## Public Chat Backend
 
-Implementation plan is documented in:
-- `src/docs/CHATGPT_IMPLEMENTATION_PLAN.md`
+Implemented endpoints:
+- `createPublicSession`
+- `chatPublicAssistant`
+- `submitQuoteLead`
+
+Detailed architecture:
+- `src/docs/QUOTECHEM_AI_ARCHITECTURE.md`
+
+Functions secrets to set:
+- `OPENAI_API_KEY`
+- `SENDGRID_API_KEY`
+- `QUOTECHEM_SALES_EMAIL`
+- `QUOTECHEM_FROM_EMAIL`
+
+Functions non-secret env:
+- `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
+
+Frontend env:
+- `REACT_APP_QUOTECHEM_API_BASE` (recommended, full functions base URL)
+- `REACT_APP_FIREBASE_PROJECT_ID` (fallback for endpoint auto-build)

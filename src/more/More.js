@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { FiChevronRight, FiLogOut, FiUser } from 'react-icons/fi';
+import { FiChevronRight, FiInfo, FiLogIn, FiLogOut, FiUser } from 'react-icons/fi';
 import { UserContext } from '../App';
 import { auth } from '../firebase';
 import './More.css';
@@ -31,26 +31,37 @@ export default function More() {
     <section className="more-page">
       <header>
         <h2>More</h2>
-        <p>Manage your account and session settings.</p>
+        <p>QuoteChem assistant settings and account options.</p>
       </header>
 
       <article className="more-profile">
-        <h3>Profile</h3>
+        <h3>{appUser ? 'Signed-in Profile' : 'Guest Session'}</h3>
         <dl>
           <div>
+            <dt>Status</dt>
+            <dd>{appUser ? 'Authenticated user' : 'Public anonymous visitor'}</dd>
+          </div>
+          <div>
             <dt>Email</dt>
-            <dd>{appUser?.email || 'No email found'}</dd>
+            <dd>{appUser?.email || 'Not signed in'}</dd>
           </div>
           <div>
             <dt>Username</dt>
-            <dd>{appUser?.username || 'Not set'}</dd>
+            <dd>{appUser?.username || 'Guest'}</dd>
           </div>
         </dl>
       </article>
 
       <div className="more-list">
-        <RowButton icon={FiUser} label="Account settings" onClick={() => navigate('/account')} />
-        <RowButton icon={FiLogOut} label="Logout" danger onClick={onLogout} />
+        {appUser ? (
+          <>
+            <RowButton icon={FiUser} label="Account settings" onClick={() => navigate('/account')} />
+            <RowButton icon={FiLogOut} label="Logout" danger onClick={onLogout} />
+          </>
+        ) : (
+          <RowButton icon={FiLogIn} label="Sign in (internal tools)" onClick={() => navigate('/signin')} />
+        )}
+        <RowButton icon={FiInfo} label="Back to chat" onClick={() => navigate('/')} />
       </div>
     </section>
   );

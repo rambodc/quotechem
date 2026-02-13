@@ -13,7 +13,6 @@ import EditUsername from './account/EditUsername';
 import Login from './auth/Login';
 import Signup from './auth/Signup';
 import ForgotPassword from './auth/ForgotPassword';
-import LandingPage from './landing/LandingPage';
 
 export const UserContext = createContext(null);
 
@@ -140,29 +139,49 @@ function App() {
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={firebaseUser ? <Navigate to="/home" replace /> : <LandingPage />} />
-          <Route path="/signin" element={!firebaseUser ? <Login /> : <Navigate to="/home" replace />} />
-          <Route path="/signup" element={!firebaseUser ? <Signup /> : <Navigate to="/home" replace />} />
-          <Route path="/forgot" element={!firebaseUser ? <ForgotPassword /> : <Navigate to="/home" replace />} />
-
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute user={firebaseUser} checking={checking}>
-                <AppShell user={contextValue} />
-              </ProtectedRoute>
-            }
-          >
+          <Route path="/" element={<AppShell user={contextValue} />}>
+            <Route index element={<Navigate to="/home" replace />} />
             <Route path="home" element={<Home />} />
             <Route path="more" element={<More />} />
-            <Route path="account" element={<Account />} />
-            <Route path="account/email" element={<ChangeEmail />} />
-            <Route path="account/password" element={<ChangePassword />} />
-            <Route path="account/username" element={<EditUsername />} />
-            <Route path="username" element={<Navigate to="/account/username" replace />} />
+            <Route
+              path="account"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checking}>
+                  <Account />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account/email"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checking}>
+                  <ChangeEmail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account/password"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checking}>
+                  <ChangePassword />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="account/username"
+              element={
+                <ProtectedRoute user={firebaseUser} checking={checking}>
+                  <EditUsername />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
-          <Route path="*" element={<Navigate to={firebaseUser ? '/home' : '/signin'} replace />} />
+          <Route path="/signin" element={!firebaseUser ? <Login /> : <Navigate to="/more" replace />} />
+          <Route path="/signup" element={!firebaseUser ? <Signup /> : <Navigate to="/more" replace />} />
+          <Route path="/forgot" element={!firebaseUser ? <ForgotPassword /> : <Navigate to="/more" replace />} />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </UserContext.Provider>
     </Router>

@@ -65,8 +65,8 @@ export default function AppShell({ user }) {
         <div className="sidebar-user">
           <div className="avatar">{initials}</div>
           <div className="user-meta">
-            <strong>{user?.username || 'user'}</strong>
-            <span>{user?.email || 'Signed in'}</span>
+            <strong>{user?.username || 'guest'}</strong>
+            <span>{user?.email || 'Public session'}</span>
           </div>
         </div>
       </aside>
