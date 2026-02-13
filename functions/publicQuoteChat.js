@@ -387,10 +387,16 @@ export const chatPublicAssistant = onRequest(
       const nextUserTurns = (session.userTurns || 0) + 1;
       const authReady = authMissingFields.length === 0 && nextUserTurns >= USER_TURNS_FOR_AUTH;
       const quickReplies = buildQuickReplies(intakeMissingFields);
+      const profileEmail = normalizeEmail(mergedProfile.email);
+      let assistantReply = ai.assistant_reply;
+
+      if (authReady && !profileEmail) {
+        assistantReply = `${assistantReply} To continue, please share your email so I can send your 6-digit sign-in code.`;
+      }
 
       await sessionRef.collection('messages').doc().set({
         role: 'assistant',
-        content: ai.assistant_reply,
+        content: assistantReply,
         quickReplies,
         createdAt: now,
         confidence: ai.confidence,
@@ -416,7 +422,7 @@ export const chatPublicAssistant = onRequest(
         ok: true,
         sessionId,
         assistant: {
-          reply: ai.assistant_reply,
+          reply: assistantReply,
           quickReplies,
         },
         profile: mergedProfile,

@@ -74,6 +74,7 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
   const [codeSent, setCodeSent] = useState(false);
+  const [emailPrompted, setEmailPrompted] = useState(false);
 
   const messageCount = useMemo(() => messages.length, [messages.length]);
 
@@ -112,6 +113,7 @@ export default function Home() {
     const emailFromSession = session.profile?.email || '';
     setPendingEmail(emailFromSession);
     setCodeSent(false);
+    setEmailPrompted(Boolean(emailFromSession));
   };
 
   useEffect(() => {
@@ -142,7 +144,10 @@ export default function Home() {
     if (data.codeSent) {
       setPendingEmail(email);
       setCodeSent(true);
-      appendMessage({ role: 'assistant', content: `Code sent to ${email}. Reply with the 6-digit code.` });
+      appendMessage({
+        role: 'assistant',
+        content: `Code sent to ${email}. Check your inbox, then reply here with the 6-digit code.`,
+      });
     }
   };
 
@@ -216,10 +221,21 @@ export default function Home() {
 
       appendMessage({ role: 'assistant', content: data.assistant?.reply || 'Continue.' });
       setProfile(data.profile || {});
-      setAuthReady(Boolean(data.authReady));
+      const nextAuthReady = Boolean(data.authReady);
+      setAuthReady(nextAuthReady);
 
-      if (Boolean(data.authReady) && !codeSent) {
-        appendMessage({ role: 'assistant', content: 'Send your email in chat to receive a 6-digit sign-in code.' });
+      const nextEmail = extractEmail(data.profile?.email || '');
+      if (nextEmail) {
+        setPendingEmail(nextEmail);
+        setEmailPrompted(true);
+      }
+
+      if (nextAuthReady && !nextEmail && !emailPrompted) {
+        appendMessage({
+          role: 'assistant',
+          content: 'To continue, send your email in chat so I can send your 6-digit sign-in code.',
+        });
+        setEmailPrompted(true);
       }
     } catch (err) {
       setError(err?.message || 'Failed to send message.');
