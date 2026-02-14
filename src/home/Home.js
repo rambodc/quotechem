@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import './Home.css';
 
-const LOCAL_SESSION_KEY = 'quotechem_session_id';
+const LOCAL_SESSION_KEY = 'quotechem_public_intake_session_v2';
 const INITIAL_PROMPT = 'We help you find the best price chemicals. Tell me what chemicals you are looking for?';
 
 function endpointBase() {
@@ -67,7 +68,6 @@ function deriveStage(messages) {
 
 export default function Home() {
   const [sessionId, setSessionId] = useState('');
-  const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -77,10 +77,6 @@ export default function Home() {
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   const transitionTimerRef = useRef(null);
-
-  const appendMessage = (message) => {
-    setMessages((prev) => [...prev, normalizeMessage(message)]);
-  };
 
   const updateStageWithTransition = (nextPrompt, nextResponse) => {
     if (transitionTimerRef.current) {
@@ -117,8 +113,6 @@ export default function Home() {
       ? data.session.messages.map(normalizeMessage)
       : [];
 
-    setMessages(restored);
-
     const stage = deriveStage(restored);
     setPrompt(stage.prompt);
     setResponse(stage.response);
@@ -151,17 +145,13 @@ export default function Home() {
     if (!value || !sessionId || loading) return;
 
     setError('');
-    appendMessage({ role: 'user', content: value });
     setResponse(value);
     setDraft('');
     setLoading(true);
 
     try {
       const data = await postJson('chatPublicAssistant', { sessionId, message: value });
-
       const assistantReply = data.assistant?.reply || 'Tell me more about the chemical requirements.';
-
-      appendMessage({ role: 'assistant', content: assistantReply });
       updateStageWithTransition(assistantReply, '');
     } catch (err) {
       setError(err?.message || 'Failed to send message.');
@@ -174,9 +164,17 @@ export default function Home() {
     <section className="public-home">
       <div className="public-home-glow" aria-hidden />
 
-      <div className="chat-card">
-        <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
+      <header className="home-topbar">
+        <div className="home-brand">
+          <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
+          <span>QuoteChem</span>
+        </div>
+        <Link to="/signin" className="home-admin-link">
+          Admin Sign in
+        </Link>
+      </header>
 
+      <div className="chat-card">
         <div className={`stage-bubbles ${isTransitioning ? 'is-transitioning' : ''}`}>
           <article className="bubble bubble-prompt">
             <p>{prompt}</p>

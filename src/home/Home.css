@@ -1,25 +1,66 @@
 .public-home {
-  min-height: calc(100vh - 56px);
+  min-height: 100vh;
   display: grid;
   place-items: center;
   position: relative;
   overflow: hidden;
+  padding: 18px;
 }
 
 .public-home-glow {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(900px 420px at 50% -12%, rgba(56, 189, 248, 0.22), transparent 62%),
-    radial-gradient(660px 360px at 12% 92%, rgba(14, 116, 144, 0.2), transparent 66%),
-    radial-gradient(820px 400px at 88% 92%, rgba(59, 130, 246, 0.16), transparent 64%),
+    radial-gradient(1000px 460px at 50% -12%, rgba(56, 189, 248, 0.22), transparent 62%),
+    radial-gradient(720px 380px at 12% 92%, rgba(14, 116, 144, 0.2), transparent 66%),
+    radial-gradient(860px 420px at 88% 92%, rgba(59, 130, 246, 0.16), transparent 64%),
     #05070d;
+}
+
+.home-topbar {
+  width: min(1080px, 100%);
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.home-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #e2e8f0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.home-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 4px;
+}
+
+.home-admin-link {
+  text-decoration: none;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: #dbeafe;
+  background: rgba(15, 23, 42, 0.55);
+  font-weight: 600;
 }
 
 .chat-card {
   width: min(980px, 100%);
   position: relative;
   z-index: 1;
+  margin-top: 46px;
   border-radius: 24px;
   border: 1px solid rgba(56, 189, 248, 0.2);
   background: linear-gradient(160deg, rgba(10, 15, 26, 0.94), rgba(7, 11, 20, 0.98));
@@ -29,15 +70,6 @@
   padding: 28px;
   display: grid;
   gap: 22px;
-}
-
-.home-logo {
-  width: 42px;
-  height: 42px;
-  justify-self: center;
-  border-radius: 12px;
-  background: #ffffff;
-  padding: 6px;
 }
 
 .stage-bubbles {
@@ -166,10 +198,15 @@
 
 @media (max-width: 900px) {
   .public-home {
-    min-height: calc(100vh - 120px);
+    padding: 14px;
+  }
+
+  .home-topbar {
+    top: 12px;
   }
 
   .chat-card {
+    margin-top: 56px;
     padding: 18px 14px;
     border-radius: 20px;
   }

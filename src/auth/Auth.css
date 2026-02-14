@@ -66,11 +66,15 @@
 .auth-link {
   margin: 0;
   color: #0284c7;
-  cursor: pointer;
   font-size: 0.92rem;
 }
 
-.auth-link:hover {
+.auth-link a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.auth-link a:hover {
   text-decoration: underline;
 }
 

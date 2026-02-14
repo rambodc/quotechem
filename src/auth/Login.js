@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import './Auth.css';
@@ -26,7 +26,7 @@ export default function Login() {
 
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      navigate('/home', { replace: true });
+      navigate('/more', { replace: true });
     } catch (err) {
       setError(mapLoginError(err));
     } finally {
@@ -38,7 +38,7 @@ export default function Login() {
     <div className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
         <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
-        <h1>Sign in</h1>
+        <h1>Admin Sign in</h1>
 
         {error ? <p className="auth-error">{error}</p> : null}
 
@@ -66,11 +66,11 @@ export default function Login() {
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
 
-        <p className="auth-link" onClick={() => navigate('/forgot')}>
-          Forgot password
+        <p className="auth-link">
+          <Link to="/forgot">Forgot password</Link>
         </p>
-        <p className="auth-link" onClick={() => navigate('/signup')}>
-          Create account
+        <p className="auth-link">
+          <Link to="/home">Back to public home</Link>
         </p>
       </form>
     </div>

@@ -3,19 +3,21 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import AppShell from './layout/AppShell';
 import Home from './home/Home';
+import Login from './auth/Login';
+import ForgotPassword from './auth/ForgotPassword';
 import More from './more/More';
 import Account from './account/Account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
 import EditUsername from './account/EditUsername';
+import AdminLayout from './layout/AdminLayout';
 
 export const UserContext = createContext(null);
 
 function ProtectedRoute({ user, checking, children }) {
   if (checking) return null;
-  return user ? children : <Navigate to="/home" replace />;
+  return user ? children : <Navigate to="/signin" replace />;
 }
 
 function App() {
@@ -113,50 +115,68 @@ function App() {
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={<AppShell user={firebaseUser ? contextValue : null} />}>
-            <Route index element={<Navigate to="/home" replace />} />
-            <Route path="home" element={<Home />} />
-            <Route
-              path="more"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<Home />} />
+          <Route
+            path="/signin"
+            element={firebaseUser ? <Navigate to="/more" replace /> : <Login />}
+          />
+          <Route
+            path="/forgot"
+            element={firebaseUser ? <Navigate to="/more" replace /> : <ForgotPassword />}
+          />
+
+          <Route
+            path="/more"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <AdminLayout user={contextValue}>
                   <More />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <AdminLayout user={contextValue}>
                   <Account />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account/email"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account/email"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <AdminLayout user={contextValue}>
                   <ChangeEmail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account/password"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account/password"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <AdminLayout user={contextValue}>
                   <ChangePassword />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account/username"
-              element={
-                <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account/username"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <AdminLayout user={contextValue}>
                   <EditUsername />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </UserContext.Provider>
