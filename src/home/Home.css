@@ -10,7 +10,7 @@
   padding: calc(20px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px))
     calc(20px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
   background: #05070d;
-  font-family: Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 .public-home-glow {
@@ -25,7 +25,8 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 14px;
   margin-bottom: 10px;
 }
 
@@ -34,7 +35,7 @@
   align-items: center;
   gap: 10px;
   color: #eff6ff;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.02em;
   font-size: 0.95rem;
 }
@@ -74,6 +75,7 @@
   z-index: 1;
   width: min(980px, 100%);
   margin-bottom: 12px;
+  text-align: center;
 }
 
 .home-intro h1 {
@@ -81,19 +83,8 @@
   color: #f8fafc;
   font-size: clamp(1.35rem, 2.6vw, 1.8rem);
   line-height: 1.1;
-  font-weight: 600;
-}
-
-.home-intro p {
-  margin: 10px 0 0;
-  color: #dbeafe;
-  font-size: clamp(0.88rem, 1.8vw, 1rem);
-  line-height: 1.45;
-}
-
-.home-intro .mini {
-  color: #93c5fd;
-  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 
 .chat-card {
@@ -110,8 +101,9 @@
   color: #7fb4dd;
   font-size: 0.74rem;
   text-transform: capitalize;
-  justify-self: start;
+  justify-self: center;
   opacity: 0.8;
+  text-align: center;
 }
 
 .assistant-display {
@@ -130,7 +122,7 @@
   line-height: 1.32;
   letter-spacing: 0.01em;
   text-align: center;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .quick-choice-row {
@@ -138,6 +130,7 @@
   flex-wrap: wrap;
   gap: 8px;
   width: min(760px, 100%);
+  justify-content: center;
 }
 
 .quick-choice {
@@ -146,7 +139,7 @@
   background: rgba(2, 132, 199, 0.2);
   color: #e0f2fe;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 400;
   padding: 7px 11px;
   cursor: pointer;
   transition: background-color 160ms ease, transform 160ms ease, opacity 160ms ease;
@@ -223,6 +216,7 @@
   gap: 10px;
   align-items: center;
   width: min(760px, 100%);
+  justify-content: center;
 }
 
 .notes-btn {
@@ -251,6 +245,7 @@
   margin: 0;
   color: #7dd3fc;
   font-size: 0.76rem;
+  text-align: center;
 }
 
 .status-error {
@@ -264,6 +259,7 @@
   color: #d1fae5;
   animation: fadeInUp 260ms ease;
   width: min(760px, 100%);
+  text-align: center;
 }
 
 .completion-card h2 {
@@ -318,10 +314,6 @@
 
   .home-intro h1 {
     font-size: clamp(1.2rem, 5.8vw, 1.45rem);
-  }
-
-  .home-intro p {
-    font-size: 0.86rem;
   }
 
   .assistant-display p {

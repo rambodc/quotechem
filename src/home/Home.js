@@ -185,8 +185,6 @@ export default function Home() {
 
       <div className="home-intro" aria-live="polite">
         <h1>Get Bulk Chemical Quotes Fast.</h1>
-        <p>Tell us what you need. We&apos;ll match verified suppliers and email you quotes.</p>
-        <p className="mini">Fast • Verified suppliers • No spam</p>
       </div>
 
       <div className="chat-card">
