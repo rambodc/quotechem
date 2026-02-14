@@ -1,32 +1,36 @@
 .public-home {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
-  place-items: center;
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  justify-items: center;
   position: relative;
   overflow: hidden;
-  padding: 18px;
+  padding-top: calc(18px + env(safe-area-inset-top, 0px));
+  padding-right: max(18px, env(safe-area-inset-right, 0px));
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(18px, env(safe-area-inset-left, 0px));
 }
 
 .public-home-glow {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(1000px 460px at 50% -12%, rgba(56, 189, 248, 0.22), transparent 62%),
-    radial-gradient(720px 380px at 12% 92%, rgba(14, 116, 144, 0.2), transparent 66%),
-    radial-gradient(860px 420px at 88% 92%, rgba(59, 130, 246, 0.16), transparent 64%),
+    radial-gradient(980px 520px at 50% -12%, rgba(56, 189, 248, 0.26), transparent 60%),
+    radial-gradient(760px 420px at 10% 94%, rgba(14, 116, 144, 0.24), transparent 64%),
+    radial-gradient(860px 420px at 88% 92%, rgba(59, 130, 246, 0.2), transparent 62%),
     #05070d;
+  animation: backgroundDrift 18s ease-in-out infinite alternate;
 }
 
 .home-topbar {
   width: min(1080px, 100%);
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 14px;
 }
 
 .home-brand {
@@ -48,46 +52,72 @@
 
 .home-admin-link {
   text-decoration: none;
-  border: 1px solid rgba(148, 163, 184, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.5);
   border-radius: 10px;
   padding: 8px 12px;
   color: #dbeafe;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.4);
   font-weight: 600;
+}
+
+.home-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.home-ghost-btn {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.38);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.home-ghost-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .chat-card {
   width: min(980px, 100%);
   position: relative;
   z-index: 1;
-  margin-top: 46px;
+  align-self: stretch;
   border-radius: 24px;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  background: linear-gradient(160deg, rgba(10, 15, 26, 0.94), rgba(7, 11, 20, 0.98));
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(160deg, rgba(10, 15, 26, 0.56), rgba(7, 11, 20, 0.48));
   box-shadow:
-    0 18px 50px rgba(2, 6, 23, 0.68),
-    inset 0 1px 0 rgba(148, 163, 184, 0.15);
+    0 20px 60px rgba(2, 6, 23, 0.58),
+    inset 0 1px 0 rgba(148, 163, 184, 0.13);
+  backdrop-filter: blur(10px);
   padding: 28px;
   display: grid;
-  gap: 22px;
+  gap: 20px;
+  grid-template-rows: 1fr auto auto;
+  min-height: min(78vh, 860px);
 }
 
 .stage-bubbles {
   display: grid;
   gap: 16px;
-  transition: opacity 220ms ease, transform 220ms ease;
+  align-content: center;
+  transition: opacity 320ms ease, transform 320ms ease, filter 320ms ease;
 }
 
 .stage-bubbles.is-transitioning {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(12px) scale(0.99);
+  filter: blur(2px);
 }
 
 .bubble {
   border-radius: 20px;
-  border: 1px solid rgba(71, 85, 105, 0.7);
+  border: 1px solid rgba(71, 85, 105, 0.6);
   backdrop-filter: blur(12px);
-  animation: bubbleIn 320ms ease;
+  animation: bubbleIn 460ms cubic-bezier(0.2, 0.65, 0.22, 1);
 }
 
 .bubble p {
@@ -99,7 +129,7 @@
   justify-self: center;
   width: min(780px, 100%);
   padding: 22px 24px;
-  background: linear-gradient(140deg, rgba(15, 23, 42, 0.95), rgba(7, 12, 25, 0.98));
+  background: linear-gradient(140deg, rgba(15, 23, 42, 0.86), rgba(7, 12, 25, 0.84));
   border-color: rgba(56, 189, 248, 0.26);
 }
 
@@ -114,7 +144,7 @@
   justify-self: center;
   width: min(680px, 100%);
   padding: 16px 18px;
-  background: linear-gradient(130deg, rgba(2, 132, 199, 0.2), rgba(14, 116, 144, 0.2));
+  background: linear-gradient(130deg, rgba(2, 132, 199, 0.24), rgba(14, 116, 144, 0.2));
   border-color: rgba(125, 211, 252, 0.35);
 }
 
@@ -129,26 +159,29 @@
   justify-self: center;
   display: grid;
   grid-template-columns: 1fr auto;
+  align-items: end;
   gap: 12px;
 }
 
-.chat-input-row input {
+.chat-input-row textarea {
   min-width: 0;
-  height: 52px;
+  min-height: 52px;
+  max-height: 180px;
+  resize: vertical;
   border-radius: 14px;
   border: 1px solid rgba(71, 85, 105, 0.85);
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(15, 23, 42, 0.58);
   color: #f1f5f9;
-  padding: 0 14px;
+  padding: 12px 14px;
   outline: none;
   transition: border-color 130ms ease, box-shadow 130ms ease;
 }
 
-.chat-input-row input::placeholder {
+.chat-input-row textarea::placeholder {
   color: #94a3b8;
 }
 
-.chat-input-row input:focus {
+.chat-input-row textarea:focus {
   border-color: rgba(56, 189, 248, 0.8);
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
@@ -188,7 +221,7 @@
 @keyframes bubbleIn {
   from {
     opacity: 0;
-    transform: translateY(9px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -196,19 +229,29 @@
   }
 }
 
+@keyframes backgroundDrift {
+  from {
+    transform: scale(1) translateY(0px);
+    filter: saturate(100%);
+  }
+  to {
+    transform: scale(1.06) translateY(-6px);
+    filter: saturate(112%);
+  }
+}
+
 @media (max-width: 900px) {
   .public-home {
-    padding: 14px;
-  }
-
-  .home-topbar {
-    top: 12px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
   }
 
   .chat-card {
-    margin-top: 56px;
     padding: 18px 14px;
     border-radius: 20px;
+    min-height: min(82vh, 900px);
   }
 
   .bubble-prompt {
@@ -221,5 +264,15 @@
 
   .chat-input-row {
     width: 100%;
+  }
+
+  .home-brand span {
+    font-size: 0.95rem;
+  }
+
+  .home-admin-link,
+  .home-ghost-btn {
+    padding: 7px 10px;
+    font-size: 0.85rem;
   }
 }

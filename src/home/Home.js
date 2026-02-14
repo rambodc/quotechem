@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './Home.css';
 
-const LOCAL_SESSION_KEY = 'quotechem_public_intake_session_v2';
 const INITIAL_PROMPT = 'We help you find the best price chemicals. Tell me what chemicals you are looking for?';
 
 function endpointBase() {
@@ -88,14 +87,11 @@ export default function Home() {
       setPrompt(nextPrompt || INITIAL_PROMPT);
       setResponse(nextResponse || '');
       setIsTransitioning(false);
-    }, 220);
+    }, 320);
   };
 
   const bootSession = async () => {
-    const existing = typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_SESSION_KEY) : '';
-
     const data = await postJson('createPublicSession', {
-      sessionId: existing || undefined,
       metadata: {
         locale: typeof navigator !== 'undefined' ? navigator.language : '',
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -105,10 +101,6 @@ export default function Home() {
 
     setSessionId(data.sessionId);
 
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(LOCAL_SESSION_KEY, data.sessionId);
-    }
-
     const restored = Array.isArray(data?.session?.messages)
       ? data.session.messages.map(normalizeMessage)
       : [];
@@ -116,6 +108,22 @@ export default function Home() {
     const stage = deriveStage(restored);
     setPrompt(stage.prompt);
     setResponse(stage.response);
+  };
+
+  const startNewSession = async () => {
+    setError('');
+    setDraft('');
+    setResponse('');
+    setPrompt(INITIAL_PROMPT);
+    setLoading(true);
+
+    try {
+      await bootSession();
+    } catch (err) {
+      setError(err?.message || 'Unable to start a new session.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -169,9 +177,14 @@ export default function Home() {
           <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
           <span>QuoteChem</span>
         </div>
-        <Link to="/signin" className="home-admin-link">
-          Admin Sign in
-        </Link>
+        <div className="home-actions">
+          <button type="button" className="home-ghost-btn" onClick={startNewSession} disabled={loading}>
+            New Session
+          </button>
+          <Link to="/signin" className="home-admin-link">
+            Admin Sign in
+          </Link>
+        </div>
       </header>
 
       <div className="chat-card">
@@ -194,11 +207,18 @@ export default function Home() {
             sendMessage(draft);
           }}
         >
-          <input
+          <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Type your answer..."
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage(draft);
+              }
+            }}
+            placeholder="Type your message..."
             disabled={!sessionId || loading}
+            rows={2}
           />
           <button type="submit" disabled={!sessionId || loading || !draft.trim()}>
             Send
