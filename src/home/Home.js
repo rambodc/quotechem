@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { signInWithCustomToken } from 'firebase/auth';
-import { auth } from '../firebase';
+import React, { useEffect, useRef, useState } from 'react';
 import './Home.css';
 
 const LOCAL_SESSION_KEY = 'quotechem_session_id';
+const INITIAL_PROMPT = 'We help you find the best price chemicals. Tell me what chemicals you are looking for?';
 
 function endpointBase() {
   const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE;
@@ -41,25 +40,29 @@ function normalizeMessage(message) {
   };
 }
 
-function extractEmail(text) {
-  const match = String(text || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-  return match ? match[0].toLowerCase() : '';
-}
+function deriveStage(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return { prompt: INITIAL_PROMPT, response: '' };
+  }
 
-function extractOtp(text) {
-  const match = String(text || '').match(/\b(\d{6})\b/);
-  return match ? match[1] : '';
-}
+  const last = messages[messages.length - 1];
 
-function parseTestCommand(text) {
-  const normalized = String(text || '').trim();
-  const basic = normalized.match(/^\/test\s+basic\s+(.+)$/i);
-  if (basic) return { template: 'basic', email: extractEmail(basic[1]) };
+  if (last.role === 'assistant') {
+    return { prompt: last.content || INITIAL_PROMPT, response: '' };
+  }
 
-  const quoteStatus = normalized.match(/^\/test\s+quote_status\s+(.+)$/i);
-  if (quoteStatus) return { template: 'quote_status', email: extractEmail(quoteStatus[1]) };
+  if (last.role === 'user') {
+    const previousAssistant = [...messages]
+      .reverse()
+      .find((message, index) => index > 0 && message.role === 'assistant');
 
-  return null;
+    return {
+      prompt: previousAssistant?.content || INITIAL_PROMPT,
+      response: last.content || '',
+    };
+  }
+
+  return { prompt: INITIAL_PROMPT, response: '' };
 }
 
 export default function Home() {
@@ -68,23 +71,32 @@ export default function Home() {
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [sessionRestored, setSessionRestored] = useState(false);
 
-  const [profile, setProfile] = useState({});
-  const [authReady, setAuthReady] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState('');
-  const [codeSent, setCodeSent] = useState(false);
-  const [emailPrompted, setEmailPrompted] = useState(false);
+  const [prompt, setPrompt] = useState(INITIAL_PROMPT);
+  const [response, setResponse] = useState('');
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const messageCount = useMemo(() => messages.length, [messages.length]);
+  const transitionTimerRef = useRef(null);
 
   const appendMessage = (message) => {
     setMessages((prev) => [...prev, normalizeMessage(message)]);
   };
 
-  const bootSession = async (keepExisting = true) => {
-    const existing =
-      keepExisting && typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_SESSION_KEY) : '';
+  const updateStageWithTransition = (nextPrompt, nextResponse) => {
+    if (transitionTimerRef.current) {
+      clearTimeout(transitionTimerRef.current);
+    }
+
+    setIsTransitioning(true);
+    transitionTimerRef.current = setTimeout(() => {
+      setPrompt(nextPrompt || INITIAL_PROMPT);
+      setResponse(nextResponse || '');
+      setIsTransitioning(false);
+    }, 220);
+  };
+
+  const bootSession = async () => {
+    const existing = typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_SESSION_KEY) : '';
 
     const data = await postJson('createPublicSession', {
       sessionId: existing || undefined,
@@ -101,19 +113,15 @@ export default function Home() {
       window.localStorage.setItem(LOCAL_SESSION_KEY, data.sessionId);
     }
 
-    const session = data.session || {};
-    const restored = Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [];
+    const restored = Array.isArray(data?.session?.messages)
+      ? data.session.messages.map(normalizeMessage)
+      : [];
 
     setMessages(restored);
-    setSessionRestored(Boolean(existing) && restored.length > 0);
 
-    setProfile(session.profile || {});
-    setAuthReady(Boolean(session.authReady));
-
-    const emailFromSession = session.profile?.email || '';
-    setPendingEmail(emailFromSession);
-    setCodeSent(false);
-    setEmailPrompted(Boolean(emailFromSession));
+    const stage = deriveStage(restored);
+    setPrompt(stage.prompt);
+    setResponse(stage.response);
   };
 
   useEffect(() => {
@@ -121,7 +129,7 @@ export default function Home() {
 
     const init = async () => {
       try {
-        await bootSession(true);
+        await bootSession();
       } catch (err) {
         if (!active) return;
         setError(err?.message || 'Unable to initialize session.');
@@ -129,80 +137,14 @@ export default function Home() {
     };
 
     init();
+
     return () => {
       active = false;
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+      }
     };
   }, []);
-
-  const sendLoginCodeByChat = async (email) => {
-    const data = await postJson('sendLoginCode', {
-      sessionId,
-      email,
-      contactName: profile.contactName || '',
-    });
-
-    if (data.codeSent) {
-      setPendingEmail(email);
-      setCodeSent(true);
-      appendMessage({
-        role: 'assistant',
-        content: `Code sent to ${email}. Check your inbox, then reply here with the 6-digit code.`,
-      });
-    }
-  };
-
-  const verifyCodeByChat = async (code) => {
-    const data = await postJson('verifyLoginCode', {
-      sessionId,
-      email: pendingEmail,
-      code,
-    });
-
-    if (!data.customToken) throw new Error('Missing auth token in response.');
-
-    await signInWithCustomToken(auth, data.customToken);
-
-    appendMessage({ role: 'assistant', content: 'Authenticated successfully.' });
-
-    setCodeSent(false);
-    setPendingEmail('');
-    setAuthReady(false);
-  };
-
-  const handleCommand = async (value) => {
-    const testCommand = parseTestCommand(value);
-    if (testCommand) {
-      if (!testCommand.email) {
-        appendMessage({ role: 'assistant', content: 'Invalid test command.' });
-        return true;
-      }
-
-      const data = await postJson('sendTestEmail', {
-        email: testCommand.email,
-        template: testCommand.template,
-      });
-
-      appendMessage({
-        role: 'assistant',
-        content: data.sent ? `Test email (${data.template}) sent.` : 'Test email request completed.',
-      });
-      return true;
-    }
-
-    const otp = extractOtp(value);
-    if (codeSent && otp) {
-      await verifyCodeByChat(otp);
-      return true;
-    }
-
-    const email = extractEmail(value);
-    if (authReady && email && !codeSent) {
-      await sendLoginCodeByChat(email);
-      return true;
-    }
-
-    return false;
-  };
 
   const sendMessage = async (input) => {
     const value = input.trim();
@@ -210,78 +152,64 @@ export default function Home() {
 
     setError('');
     appendMessage({ role: 'user', content: value });
+    setResponse(value);
     setDraft('');
     setLoading(true);
 
     try {
-      const handled = await handleCommand(value);
-      if (handled) return;
-
       const data = await postJson('chatPublicAssistant', { sessionId, message: value });
 
-      appendMessage({ role: 'assistant', content: data.assistant?.reply || 'Continue.' });
-      setProfile(data.profile || {});
-      const nextAuthReady = Boolean(data.authReady);
-      setAuthReady(nextAuthReady);
+      const assistantReply = data.assistant?.reply || 'Tell me more about the chemical requirements.';
 
-      const nextEmail = extractEmail(data.profile?.email || '');
-      if (nextEmail) {
-        setPendingEmail(nextEmail);
-        setEmailPrompted(true);
-      }
-
-      if (nextAuthReady && !nextEmail && !emailPrompted) {
-        appendMessage({
-          role: 'assistant',
-          content: 'To continue, send your email in chat so I can send your 6-digit sign-in code.',
-        });
-        setEmailPrompted(true);
-      }
+      appendMessage({ role: 'assistant', content: assistantReply });
+      updateStageWithTransition(assistantReply, '');
     } catch (err) {
       setError(err?.message || 'Failed to send message.');
-      appendMessage({ role: 'assistant', content: 'Temporary error. Please retry.' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <section className="chat-page">
-      <div className="chat-thread" role="log" aria-live="polite">
-        {sessionRestored ? <p className="session-note">Session restored</p> : null}
+    <section className="public-home">
+      <div className="public-home-glow" aria-hidden />
 
-        {messages.map((message) => (
-          <article key={message.id} className={`chat-message ${message.role === 'user' ? 'user' : 'assistant'}`}>
-            {message.content ? <p>{message.content}</p> : null}
+      <div className="chat-card">
+        <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
+
+        <div className={`stage-bubbles ${isTransitioning ? 'is-transitioning' : ''}`}>
+          <article className="bubble bubble-prompt">
+            <p>{prompt}</p>
           </article>
-        ))}
 
-        {loading ? <p className="chat-loading">...</p> : null}
-      </div>
+          {response ? (
+            <article className="bubble bubble-response">
+              <p>{response}</p>
+            </article>
+          ) : null}
+        </div>
 
-      {error ? <p className="chat-error">{error}</p> : null}
-
-      <form
-        className="chat-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          sendMessage(draft);
-        }}
-      >
-        <textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder=""
-          rows={2}
-          disabled={!sessionId || loading}
-        />
-        <div className="composer-actions">
-          <span>{sessionId ? `${messageCount}` : ''}</span>
+        <form
+          className="chat-input-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            sendMessage(draft);
+          }}
+        >
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Type your answer..."
+            disabled={!sessionId || loading}
+          />
           <button type="submit" disabled={!sessionId || loading || !draft.trim()}>
             Send
           </button>
-        </div>
-      </form>
+        </form>
+
+        {loading ? <p className="status-text">Thinking...</p> : null}
+        {error ? <p className="status-text status-error">{error}</p> : null}
+      </div>
     </section>
   );
 }
