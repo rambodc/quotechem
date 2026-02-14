@@ -11,6 +11,7 @@
     calc(20px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
   background: #05070d;
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 300;
 }
 
 .public-home-glow {
@@ -35,7 +36,7 @@
   align-items: center;
   gap: 10px;
   color: #eff6ff;
-  font-weight: 400;
+  font-weight: 300;
   letter-spacing: 0.02em;
   font-size: 0.95rem;
 }
@@ -58,7 +59,7 @@
   text-decoration: none;
   background: rgba(15, 23, 42, 0.38);
   color: #dbeafe;
-  font-weight: 600;
+  font-weight: 300;
   font-size: 0.82rem;
   padding: 7px 10px;
   border: 0;
@@ -83,7 +84,7 @@
   color: #f8fafc;
   font-size: clamp(1.35rem, 2.6vw, 1.8rem);
   line-height: 1.1;
-  font-weight: 400;
+  font-weight: 300;
   letter-spacing: 0.01em;
 }
 
@@ -122,7 +123,7 @@
   line-height: 1.32;
   letter-spacing: 0.01em;
   text-align: center;
-  font-weight: 400;
+  font-weight: 300;
 }
 
 .quick-choice-row {
@@ -139,7 +140,7 @@
   background: rgba(2, 132, 199, 0.2);
   color: #e0f2fe;
   font-size: 0.82rem;
-  font-weight: 400;
+  font-weight: 300;
   padding: 7px 11px;
   cursor: pointer;
   transition: background-color 160ms ease, transform 160ms ease, opacity 160ms ease;
@@ -170,7 +171,7 @@
   resize: vertical;
   border: 0;
   border-radius: 14px;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(51, 65, 85, 0.42);
   color: #f8fafc;
   padding: 16px;
   outline: none;
@@ -180,7 +181,7 @@
 }
 
 .chat-input-row textarea:focus {
-  background: rgba(30, 41, 59, 0.58);
+  background: rgba(71, 85, 105, 0.5);
 }
 
 .chat-input-row textarea::placeholder {
@@ -194,7 +195,7 @@
   background: #0ea5e9;
   color: #f0f9ff;
   font-size: 1.08rem;
-  font-weight: 700;
+  font-weight: 400;
   padding: 0 24px;
   cursor: pointer;
   transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
@@ -225,7 +226,7 @@
   padding: 8px 12px;
   background: rgba(15, 23, 42, 0.45);
   color: #cbd5e1;
-  font-weight: 600;
+  font-weight: 300;
   font-size: 0.78rem;
   cursor: pointer;
   transition: opacity 160ms ease, transform 160ms ease;
@@ -266,6 +267,7 @@
   margin: 0;
   font-size: 1.2rem;
   color: #ecfdf5;
+  font-weight: 300;
 }
 
 .completion-card p {
