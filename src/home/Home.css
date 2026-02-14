@@ -11,17 +11,13 @@
   padding-right: max(18px, env(safe-area-inset-right, 0px));
   padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   padding-left: max(18px, env(safe-area-inset-left, 0px));
+  background: #05070d;
 }
 
 .public-home-glow {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(980px 520px at 50% -12%, rgba(56, 189, 248, 0.26), transparent 60%),
-    radial-gradient(760px 420px at 10% 94%, rgba(14, 116, 144, 0.24), transparent 64%),
-    radial-gradient(860px 420px at 88% 92%, rgba(59, 130, 246, 0.2), transparent 62%),
-    #05070d;
-  animation: backgroundDrift 18s ease-in-out infinite alternate;
+  background: #05070d;
 }
 
 .home-topbar {
@@ -226,17 +222,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes backgroundDrift {
-  from {
-    transform: scale(1) translateY(0px);
-    filter: saturate(100%);
-  }
-  to {
-    transform: scale(1.06) translateY(-6px);
-    filter: saturate(112%);
   }
 }
 
