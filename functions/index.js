@@ -1,19 +1,4 @@
 import { runStartupDiagnostics } from './runStartupDiagnostics.js';
-import {
-  createPublicSession,
-  chatPublicAssistant,
-  sendLoginCode,
-  verifyLoginCode,
-  sendTestEmail,
-  submitQuoteLead,
-} from './publicQuoteChat.js';
+import { createPublicSession, chatPublicAssistant, sendTestEmail } from './publicQuoteChat.js';
 
-export {
-  runStartupDiagnostics,
-  createPublicSession,
-  chatPublicAssistant,
-  sendLoginCode,
-  verifyLoginCode,
-  sendTestEmail,
-  submitQuoteLead,
-};
+export { runStartupDiagnostics, createPublicSession, chatPublicAssistant, sendTestEmail };
