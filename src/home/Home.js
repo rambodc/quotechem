@@ -111,32 +111,6 @@ export default function Home() {
     setRfqId(data?.session?.rfqId || '');
   };
 
-  const startNewSession = async () => {
-    setError('');
-    setDraft('');
-    setAssistantMessage({
-      id: `initial-${Date.now()}`,
-      role: 'assistant',
-      content: INITIAL_PROMPT,
-      quickReplies: [],
-    });
-    setProfile({});
-    setIntakeStage('collecting_core');
-    setMissingRequired([]);
-    setProfileCompleteness(0);
-    setCompleted(false);
-    setRfqId('');
-    setLoading(true);
-
-    try {
-      await bootSession();
-    } catch (err) {
-      setError(err?.message || 'Unable to start a new session.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     let active = true;
 
@@ -203,9 +177,6 @@ export default function Home() {
           <span>QuoteChem</span>
         </div>
         <div className="home-actions">
-          <button type="button" className="home-ghost-btn" onClick={startNewSession} disabled={loading}>
-            New Session
-          </button>
           <Link to="/signin" className="home-admin-link">
             Admin Sign in
           </Link>
