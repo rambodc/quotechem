@@ -477,6 +477,13 @@ function containsAbusiveLanguage(message) {
   return blocked.some((word) => text.includes(word));
 }
 
+function looksLikeQuestion(message) {
+  const text = asString(message);
+  if (!text) return false;
+  if (text.includes('?')) return true;
+  return /^(do|does|did|what|how|can|could|would|is|are|should|where|when|why)\b/i.test(text);
+}
+
 function sanitizeAssistantCopy(input) {
   const text = asString(input);
   if (!text) return '';
@@ -944,18 +951,34 @@ function mergeProfiles(existing, modelExtracted, parsedHints) {
   return merged;
 }
 
-function assistantReplyForState({ stage, missingRequired, missingPreferred, aiReply, profile }) {
+function assistantReplyForState({ stage, missingRequired, missingPreferred, aiReply, profile, allowSideAnswer }) {
+  const answerPlusQuestion = (questionText) => {
+    const helpful = sanitizeAssistantCopy(aiReply);
+    if (!helpful) return questionText;
+    const normalizedHelpful = helpful.replace(/\s+/g, ' ').trim();
+    if (!normalizedHelpful) return questionText;
+    if (normalizedHelpful.toLowerCase() === questionText.toLowerCase()) return questionText;
+    return `${normalizedHelpful} ${questionText}`;
+  };
+
+  const shouldBlendHelp = Boolean(allowSideAnswer);
+
   if (stage === 'collecting_core') {
-    return questionForMissingField(missingRequired[0]).text;
+    const questionText = questionForMissingField(missingRequired[0]).text;
+    return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
   }
 
   if (stage === 'awaiting_email') {
-    return questionForMissingField('email').text;
+    const questionText = questionForMissingField('email').text;
+    return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
   }
 
   if (stage === 'collecting_preferences') {
     const field = missingPreferred.find((item) => PRICE_SENSITIVE_PREFERRED.includes(item));
-    if (field) return questionForMissingField(field).text;
+    if (field) {
+      const questionText = questionForMissingField(field).text;
+      return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
+    }
   }
 
   if (stage === 'ready_for_confirmation') {
@@ -1113,6 +1136,7 @@ export const chatPublicAssistant = onRequest(
 
       const parsedHints = parseUserHints(userMessage);
       const mergedProfile = mergeProfiles(baseProfile, ai.extracted, parsedHints);
+      const allowSideAnswer = looksLikeQuestion(userMessage) && Boolean(asString(ai.assistant_reply));
 
       const missingRequired = missingFields(mergedProfile, REQUIRED_FIELDS);
       const missingPreferred = missingFields(mergedProfile, PREFERRED_FIELDS);
@@ -1146,7 +1170,14 @@ export const chatPublicAssistant = onRequest(
       const assistantReply =
         stage === 'completed'
           ? `Got it — ${conciseSummary(mergedProfile)}. I\'m sending your confirmation email now. We\'re contacting 3-5 suppliers and will follow up with quotes soon after.`
-          : assistantReplyForState({ stage, missingRequired, missingPreferred, aiReply: ai.assistant_reply, profile: mergedProfile });
+          : assistantReplyForState({
+              stage,
+              missingRequired,
+              missingPreferred,
+              aiReply: ai.assistant_reply,
+              profile: mergedProfile,
+              allowSideAnswer,
+            });
 
       const quickChoices = buildQuickChoices(stage, missingRequired, missingPreferred);
 
