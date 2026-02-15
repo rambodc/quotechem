@@ -27,6 +27,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   margin-bottom: 10px;
 }
 
@@ -43,6 +44,37 @@
 .home-logo {
   width: 190px;
   height: auto;
+}
+
+.session-reset-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.45);
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 300;
+  cursor: pointer;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.session-reset-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-50%) rotate(-25deg);
+}
+
+.session-reset-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .home-rotator {
@@ -327,6 +359,12 @@
 
   .home-logo {
     width: 160px;
+  }
+
+  .session-reset-btn {
+    width: 22px;
+    height: 22px;
+    font-size: 0.72rem;
   }
 
   .home-rotator {

@@ -8,6 +8,32 @@ const ROTATING_HEADLINES = [
   'Verified Suppliers. Competitive Pricing.',
   'Quotes in Minutes, Not Days.',
 ];
+const SESSION_STORAGE_KEY = 'quotechem.publicSessionId';
+
+function readStoredSessionId() {
+  try {
+    return window.localStorage.getItem(SESSION_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredSessionId(sessionId) {
+  try {
+    if (!sessionId) return;
+    window.localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function clearStoredSessionId() {
+  try {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // ignore storage failures
+  }
+}
 
 function endpointBase() {
   const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE;
@@ -93,16 +119,21 @@ export default function Home() {
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
 
-  const bootSession = async () => {
-    const data = await postJson('createPublicSession', {
+  const bootSession = async ({ forceNew = false } = {}) => {
+    const storedSessionId = !forceNew ? readStoredSessionId() : '';
+    const payload = {
       metadata: {
         locale: typeof navigator !== 'undefined' ? navigator.language : '',
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         referrer: typeof document !== 'undefined' ? document.referrer : '',
       },
-    });
+      ...(storedSessionId ? { sessionId: storedSessionId } : {}),
+    };
+
+    const data = await postJson('createPublicSession', payload);
 
     setSessionId(data.sessionId);
+    writeStoredSessionId(data.sessionId);
 
     const restored = Array.isArray(data?.session?.messages) ? data.session.messages.map(normalizeMessage) : [];
     const latestAssistant = getLatestAssistant(restored);
@@ -112,6 +143,35 @@ export default function Home() {
     setMissingRequired(Array.isArray(data?.session?.missingRequired) ? data.session.missingRequired : []);
     setCompleted(Boolean(data?.session?.completed));
     setRfqId(data?.session?.rfqId || '');
+  };
+
+  const startFreshSession = async () => {
+    const confirmed = window.confirm('Start a new chat session? This will clear current chat context.');
+    if (!confirmed || loading) return;
+
+    clearStoredSessionId();
+    setError('');
+    setDraft('');
+    setShowDetails(false);
+    setCompleted(false);
+    setRfqId('');
+    setProfile({});
+    setMissingRequired([]);
+    setAssistantMessage({
+      id: 'initial',
+      role: 'assistant',
+      content: INITIAL_PROMPT,
+      quickReplies: [],
+    });
+
+    try {
+      setLoading(true);
+      await bootSession({ forceNew: true });
+    } catch (err) {
+      setError(err?.message || 'Unable to start a new session.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -192,6 +252,9 @@ export default function Home() {
         <div className="home-brand">
           <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
         </div>
+        <button type="button" className="session-reset-btn" onClick={startFreshSession} title="Start new chat" disabled={loading}>
+          ↻
+        </button>
       </header>
 
       <div className="home-rotator" aria-live="polite">

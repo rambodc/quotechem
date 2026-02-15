@@ -56,6 +56,19 @@ const QUICK_CHOICES = {
   neededBy: ['ASAP', 'This week', 'This month'],
 };
 
+const KNOWN_CITY_HINTS = {
+  calgary: { locationCity: 'Calgary', locationStateProvince: 'Alberta', locationCountry: 'Canada' },
+  edmonton: { locationCity: 'Edmonton', locationStateProvince: 'Alberta', locationCountry: 'Canada' },
+  vancouver: { locationCity: 'Vancouver', locationStateProvince: 'British Columbia', locationCountry: 'Canada' },
+  toronto: { locationCity: 'Toronto', locationStateProvince: 'Ontario', locationCountry: 'Canada' },
+  ottawa: { locationCity: 'Ottawa', locationStateProvince: 'Ontario', locationCountry: 'Canada' },
+  montreal: { locationCity: 'Montreal', locationStateProvince: 'Quebec', locationCountry: 'Canada' },
+  winnipeg: { locationCity: 'Winnipeg', locationStateProvince: 'Manitoba', locationCountry: 'Canada' },
+  regina: { locationCity: 'Regina', locationStateProvince: 'Saskatchewan', locationCountry: 'Canada' },
+  halifax: { locationCity: 'Halifax', locationStateProvince: 'Nova Scotia', locationCountry: 'Canada' },
+  saskatoon: { locationCity: 'Saskatoon', locationStateProvince: 'Saskatchewan', locationCountry: 'Canada' },
+};
+
 const INITIAL_ASSISTANT_MESSAGE =
   'Hey — I\'m QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, how much, and where should it be delivered?';
 
@@ -231,6 +244,14 @@ function parseLocationFromText(text) {
     };
   }
 
+  const lower = value.toLowerCase();
+  for (const [cityKey, normalized] of Object.entries(KNOWN_CITY_HINTS)) {
+    const pattern = new RegExp(`\\b${cityKey}\\b`, 'i');
+    if (pattern.test(lower)) {
+      return normalized;
+    }
+  }
+
   return {};
 }
 
@@ -324,6 +345,14 @@ function pickAllowedFields(input = {}) {
     out.locationCountry = out.locationCountry || parsed.locationCountry || '';
   }
 
+  const locationSeed = [out.locationCity, out.locationStateProvince, out.locationCountry, out.location].join(' ').trim();
+  if ((!out.locationCity || !out.locationStateProvince || !out.locationCountry) && locationSeed) {
+    const inferred = parseLocationFromText(locationSeed);
+    out.locationCity = out.locationCity || inferred.locationCity || '';
+    out.locationStateProvince = out.locationStateProvince || inferred.locationStateProvince || '';
+    out.locationCountry = out.locationCountry || inferred.locationCountry || '';
+  }
+
   const normalizedPackaging = normalizePackaging(out.packagingPreference);
   if (normalizedPackaging) out.packagingPreference = normalizedPackaging;
 
@@ -399,7 +428,7 @@ function questionForMissingField(field) {
   if (field === 'locationCity' || field === 'locationStateProvince' || field === 'locationCountry') {
     return {
       text: 'What city, state/province, and country should this be delivered to?',
-      quickChoices: ['United States', 'Canada'],
+      quickChoices: [],
     };
   }
 
@@ -500,6 +529,8 @@ function buildSystemPrompt() {
     'You are QuoteChem, a procurement concierge for bulk chemicals.',
     'Keep tone calm, professional, fast, non-salesy.',
     'Ask one concise question at a time and only for missing info.',
+    'If user asks a relevant chemical/procurement question, answer briefly first, then continue intake.',
+    'Use conversation history and profile state; do not forget earlier user details in the same session.',
     'Never promise final pricing or supplier guarantees.',
     'Prefer short responses.',
     'Return strict JSON only with keys: assistant_reply, extracted, confidence, next_missing_required, next_missing_preferred.',
@@ -531,7 +562,7 @@ async function callOpenAI({ userMessage, history, profile, stage }) {
   }
 
   const historyText = history
-    .slice(-14)
+    .slice(-30)
     .map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.content}`)
     .join('\n');
 
@@ -623,7 +654,7 @@ async function sendEmail({ toEmail, fromEmail, subject, text, html }) {
   };
 }
 
-async function loadRecentMessages(sessionId, limit = 30) {
+async function loadRecentMessages(sessionId, limit = 60) {
   const snap = await db
     .collection(SESSION_COLLECTION)
     .doc(sessionId)
