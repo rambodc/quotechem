@@ -3,7 +3,11 @@ import './Home.css';
 
 const INITIAL_PROMPT =
   "Hey — I'm QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, how much, and where should it be delivered?";
-const ROTATING_HEADLINES = ['Get Quotes', 'Any Chemicals', 'Fast and Easy'];
+const ROTATING_HEADLINES = [
+  'Source Bulk Chemicals Smarter',
+  'Verified Suppliers. Competitive Pricing.',
+  'Quotes in Minutes, Not Days.',
+];
 
 function endpointBase() {
   const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE;
@@ -84,6 +88,7 @@ export default function Home() {
   const [rfqId, setRfqId] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [headlineIndex, setHeadlineIndex] = useState(0);
+  const [typedAssistantText, setTypedAssistantText] = useState(INITIAL_PROMPT);
 
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
@@ -131,10 +136,33 @@ export default function Home() {
   useEffect(() => {
     const timer = setInterval(() => {
       setHeadlineIndex((prev) => (prev + 1) % ROTATING_HEADLINES.length);
-    }, 1100);
+    }, 2500);
 
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const content = (assistantMessage?.content || '').trim();
+    if (!content) {
+      setTypedAssistantText('');
+      return undefined;
+    }
+
+    const words = content.split(/\s+/).filter(Boolean);
+    setTypedAssistantText('');
+
+    let index = 0;
+    const timer = setInterval(() => {
+      index += 1;
+      setTypedAssistantText(words.slice(0, index).join(' '));
+
+      if (index >= words.length) {
+        clearInterval(timer);
+      }
+    }, 130);
+
+    return () => clearInterval(timer);
+  }, [assistantMessage.id, assistantMessage.content]);
 
   const sendMessage = async (input) => {
     const value = input.trim();
@@ -177,7 +205,7 @@ export default function Home() {
 
       <header className="home-topbar">
         <div className="home-brand">
-          <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo2.png`} alt="QuoteChem" className="home-logo" />
+          <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
         </div>
       </header>
 
@@ -189,7 +217,7 @@ export default function Home() {
 
       <div className="chat-card">
         <div key={assistantMessage.id} className="assistant-display">
-          <p>{assistantMessage.content}</p>
+          <p>{typedAssistantText}</p>
         </div>
 
         {quickChoices.length > 0 ? (
