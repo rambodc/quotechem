@@ -3,6 +3,7 @@ import './Home.css';
 
 const INITIAL_PROMPT =
   "Hey — I'm QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, how much, and where should it be delivered?";
+const ROTATING_HEADLINES = ['Get Quotes', 'Any Chemicals', 'Fast and Easy'];
 
 function endpointBase() {
   const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE;
@@ -82,6 +83,7 @@ export default function Home() {
   const [completed, setCompleted] = useState(false);
   const [rfqId, setRfqId] = useState('');
   const [showDetails, setShowDetails] = useState(false);
+  const [headlineIndex, setHeadlineIndex] = useState(0);
 
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
@@ -124,6 +126,14 @@ export default function Home() {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHeadlineIndex((prev) => (prev + 1) % ROTATING_HEADLINES.length);
+    }, 1100);
+
+    return () => clearInterval(timer);
   }, []);
 
   const sendMessage = async (input) => {
@@ -170,6 +180,12 @@ export default function Home() {
           <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo2.png`} alt="QuoteChem" className="home-logo" />
         </div>
       </header>
+
+      <div className="home-rotator" aria-live="polite">
+        <p key={ROTATING_HEADLINES[headlineIndex]} className="rotator-text">
+          {ROTATING_HEADLINES[headlineIndex]}
+        </p>
+      </div>
 
       <div className="chat-card">
         <div key={assistantMessage.id} className="assistant-display">
