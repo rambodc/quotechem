@@ -62,7 +62,14 @@
   font-weight: 200;
   letter-spacing: 0.01em;
   font-size: clamp(1rem, 2.1vw, 1.3rem);
-  animation: rotateFade 1.1s ease-in-out;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.rotator-text.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .chat-card {
@@ -305,28 +312,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes rotateFade {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-
-  18% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  82% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateY(-6px);
   }
 }
 

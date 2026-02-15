@@ -88,7 +88,7 @@ export default function Home() {
   const [rfqId, setRfqId] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [headlineIndex, setHeadlineIndex] = useState(0);
-  const [typedAssistantText, setTypedAssistantText] = useState(INITIAL_PROMPT);
+  const [headlineVisible, setHeadlineVisible] = useState(true);
 
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
@@ -134,35 +134,20 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let fadeTimer = null;
     const timer = setInterval(() => {
-      setHeadlineIndex((prev) => (prev + 1) % ROTATING_HEADLINES.length);
+      setHeadlineVisible(false);
+      fadeTimer = setTimeout(() => {
+        setHeadlineIndex((prev) => (prev + 1) % ROTATING_HEADLINES.length);
+        setHeadlineVisible(true);
+      }, 220);
     }, 2500);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      if (fadeTimer) clearTimeout(fadeTimer);
+    };
   }, []);
-
-  useEffect(() => {
-    const content = (assistantMessage?.content || '').trim();
-    if (!content) {
-      setTypedAssistantText('');
-      return undefined;
-    }
-
-    const words = content.split(/\s+/).filter(Boolean);
-    setTypedAssistantText('');
-
-    let index = 0;
-    const timer = setInterval(() => {
-      index += 1;
-      setTypedAssistantText(words.slice(0, index).join(' '));
-
-      if (index >= words.length) {
-        clearInterval(timer);
-      }
-    }, 130);
-
-    return () => clearInterval(timer);
-  }, [assistantMessage.id, assistantMessage.content]);
 
   const sendMessage = async (input) => {
     const value = input.trim();
@@ -210,14 +195,14 @@ export default function Home() {
       </header>
 
       <div className="home-rotator" aria-live="polite">
-        <p key={ROTATING_HEADLINES[headlineIndex]} className="rotator-text">
+        <p className={`rotator-text ${headlineVisible ? 'is-visible' : ''}`}>
           {ROTATING_HEADLINES[headlineIndex]}
         </p>
       </div>
 
       <div className="chat-card">
         <div key={assistantMessage.id} className="assistant-display">
-          <p>{typedAssistantText}</p>
+          <p>{assistantMessage.content}</p>
         </div>
 
         {quickChoices.length > 0 ? (
