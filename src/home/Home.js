@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import './Home.css';
 
 const INITIAL_PROMPT =
@@ -79,11 +78,10 @@ export default function Home() {
   });
 
   const [profile, setProfile] = useState({});
-  const [intakeStage, setIntakeStage] = useState('collecting_core');
   const [missingRequired, setMissingRequired] = useState([]);
-  const [profileCompleteness, setProfileCompleteness] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [rfqId, setRfqId] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
 
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
@@ -104,9 +102,7 @@ export default function Home() {
 
     setAssistantMessage(latestAssistant);
     setProfile(data?.session?.profile || {});
-    setIntakeStage(data?.session?.intakeStage || 'collecting_core');
     setMissingRequired(Array.isArray(data?.session?.missingRequired) ? data.session.missingRequired : []);
-    setProfileCompleteness(Number(data?.session?.profileCompleteness || 0));
     setCompleted(Boolean(data?.session?.completed));
     setRfqId(data?.session?.rfqId || '');
   };
@@ -155,9 +151,7 @@ export default function Home() {
       });
 
       setProfile(data.profile || {});
-      setIntakeStage(data.intakeStage || 'collecting_core');
       setMissingRequired(Array.isArray(data.missingRequired) ? data.missingRequired : []);
-      setProfileCompleteness(Number(data.profileCompleteness || 0));
       setCompleted(Boolean(data.completed));
       setRfqId(data.rfqId || '');
     } catch (err) {
@@ -174,22 +168,10 @@ export default function Home() {
       <header className="home-topbar">
         <div className="home-brand">
           <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
-          <span>QuoteChem</span>
-        </div>
-        <div className="home-actions">
-          <Link to="/signin" className="home-admin-link">
-            Admin Sign in
-          </Link>
         </div>
       </header>
 
-      <div className="home-intro" aria-live="polite">
-        <h1>Get Bulk Chemical Quotes Fast.</h1>
-      </div>
-
       <div className="chat-card">
-        <p className="chat-meta">{intakeStage.replace(/_/g, ' ')} • {profileCompleteness}% complete</p>
-
         <div key={assistantMessage.id} className="assistant-display">
           <p>{assistantMessage.content}</p>
         </div>
@@ -232,13 +214,28 @@ export default function Home() {
         <div className="chat-helper-actions">
           <button
             type="button"
-            className="notes-btn"
-            disabled={loading || !sessionId}
-            onClick={() => setDraft((prev) => (prev ? `${prev}\nSpec/notes: ` : 'Spec/notes: '))}
+            className="details-toggle"
+            onClick={() => setShowDetails((prev) => !prev)}
+            aria-expanded={showDetails}
           >
-            Paste spec / notes
+            <span className={`details-arrow ${showDetails ? 'is-open' : ''}`} aria-hidden>
+              ▼
+            </span>
+            <span>Details</span>
           </button>
-          {missingRequired.length > 0 ? <p className="status-text">Missing: {missingRequired.join(', ')}</p> : null}
+          {showDetails ? (
+            <div className="details-panel">
+              <button
+                type="button"
+                className="notes-btn"
+                disabled={loading || !sessionId}
+                onClick={() => setDraft((prev) => (prev ? `${prev}\nSpec/notes: ` : 'Spec/notes: '))}
+              >
+                Paste spec / notes
+              </button>
+              {missingRequired.length > 0 ? <p className="status-text">Missing: {missingRequired.join(', ')}</p> : null}
+            </div>
+          ) : null}
         </div>
 
         {completed ? (
