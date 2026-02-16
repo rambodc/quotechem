@@ -353,7 +353,22 @@ function parseChemicalNameFromText(text) {
     if (words.length <= 6) candidate = value;
   }
 
+  if (!candidate) {
+    const afterQuantity = value.match(
+      /^(?:\d+(?:[.,]\d+)?\s*(?:kg|kilograms?|lbs?|lb|mt|tons?|tonnes?|bags?|totes?|drums?|l|liters?|litres?)\s*(?:of)?\s*)+(.+)$/i
+    );
+    if (afterQuantity?.[1]) candidate = asString(afterQuantity[1]);
+  }
+
   if (!candidate) return '';
+  if (/^\d/.test(candidate) || /\b(bags?|totes?|drums?|kg|kilograms?|lbs?|lb|mt|tons?|tonnes?|liters?|litres?|l)\b/i.test(candidate)) {
+    candidate = candidate
+      .replace(/\b\d+(?:[.,]\d+)?\b/gi, ' ')
+      .replace(/\b(kg|kilograms?|lbs?|lb|mt|tons?|tonnes?|bags?|drums?|totes?|l|liters?|litres?|of|x)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   candidate = candidate
     .replace(/\b(for|to|in)\s+[a-z].*$/i, '')
     .replace(/[,.!?;:]+$/g, '')
@@ -367,15 +382,40 @@ function parseChemicalNameFromText(text) {
   return candidate;
 }
 
+function normalizeIndustryUse(value) {
+  const raw = asString(value);
+  if (!raw) return '';
+  const lower = raw.toLowerCase().replace(/[^a-z0-9\s/&-]/g, ' ');
+
+  const mappings = [
+    ['drilling fluids', ['drilling fluids', 'drilling fluid', 'drilling', 'drilling mud', 'drilling-fluid', 'ddrilling', 'barite']],
+    ['water treatment', ['water treatment', 'wastewater', 'municipal water', 'boiler water']],
+    ['cleaning products', ['cleaning', 'detergent', 'sanitation', 'household cleaner']],
+    ['food processing', ['food', 'beverage', 'food processing']],
+    ['pharma', ['pharma', 'pharmaceutical', 'drug', 'api']],
+    ['manufacturing', ['manufacturing', 'factory', 'production', 'industrial process']],
+    ['oil and gas', ['oil and gas', 'oil', 'gas', 'upstream', 'downstream']],
+    ['agriculture', ['agriculture', 'fertilizer', 'crop', 'agri']],
+    ['cosmetics', ['cosmetic', 'personal care', 'skin care', 'hair care']],
+  ];
+
+  for (const [canonical, patterns] of mappings) {
+    if (patterns.some((item) => lower.includes(item))) return canonical;
+  }
+
+  return raw.slice(0, 80);
+}
+
 function parseIndustryUseFromText(text) {
   const value = asString(text);
   if (!value) return '';
 
   const lower = value.toLowerCase();
   const explicitPattern = value.match(/\b(?:for|used for|industry|application)\s*[:\-]?\s*([a-z0-9 ,/&-]{3,80})/i);
-  if (explicitPattern?.[1]) return asString(explicitPattern[1]);
+  if (explicitPattern?.[1]) return normalizeIndustryUse(explicitPattern[1]);
 
   const industryMap = [
+    ['drilling fluids', ['drilling fluids', 'drilling fluid', 'drilling', 'drilling mud', 'ddrilling', 'barite']],
     ['water treatment', ['water treatment', 'wastewater', 'municipal water', 'boiler water']],
     ['cleaning products', ['cleaning', 'detergent', 'sanitation', 'household cleaner']],
     ['food processing', ['food', 'beverage', 'food processing']],
@@ -470,12 +510,7 @@ function looksLikeSpecificChemicalName(name) {
 }
 
 function needsChemicalIdentity(profile) {
-  const chemicalName = asString(profile.chemicalName);
-  if (!chemicalName) return false;
-  if (hasChemicalIdentitySignal(profile)) return false;
-  if (looksLikeSpecificChemicalName(chemicalName)) return false;
-
-  if (isAmbiguousChemicalName(chemicalName)) return true;
+  void profile;
   return false;
 }
 
@@ -556,6 +591,8 @@ function pickAllowedFields(input = {}) {
   const normalizedFrequency = normalizeFrequency(out.frequency);
   if (normalizedFrequency) out.frequency = normalizedFrequency;
 
+  if (out.industryUse) out.industryUse = normalizeIndustryUse(out.industryUse);
+
   if (out.neededBy) out.neededBy = normalizeNeededBy(out.neededBy);
 
   if (out.quantityUnit) out.quantityUnitNormalized = normalizeQuantityUnit(out.quantityUnit);
@@ -572,6 +609,12 @@ function pickAllowedFields(input = {}) {
     out.quantityRaw = out.quantityRaw || parsed.quantityRaw || out.quantity;
     if (parsed.quantityValue != null && out.quantityValue == null) out.quantityValue = parsed.quantityValue;
     if (!out.quantityUnitNormalized && parsed.quantityUnitNormalized) out.quantityUnitNormalized = parsed.quantityUnitNormalized;
+  }
+
+  if (out.chemicalName) {
+    const normalizedChemicalName = parseChemicalNameFromText(out.chemicalName);
+    if (normalizedChemicalName) out.chemicalName = normalizedChemicalName;
+    else delete out.chemicalName;
   }
 
   if (out.email && !isEmail(out.email)) delete out.email;
@@ -649,13 +692,6 @@ function questionForMissingField(field) {
     };
   }
 
-  if (field === 'chemicalIdentity') {
-    return {
-      text: 'Quick check: what is this chemical exactly (CAS, concentration, grade, or a one-line SDS-style description)?',
-      quickChoices: [],
-    };
-  }
-
   if (field === 'packagingPreference') {
     return {
       text: 'Packaging preference: bags / totes / drums / bulk?',
@@ -698,8 +734,6 @@ function buildQuickChoices(stage, missingRequired, missingPreferred) {
   if (stage === 'collecting_core') {
     return questionForMissingField(missingRequired[0]).quickChoices;
   }
-
-  if (stage === 'collecting_chemical_identity') return [];
 
   if (stage === 'awaiting_email') return [];
 
@@ -1761,11 +1795,6 @@ function assistantReplyForState({ stage, missingRequired, missingPreferred, aiRe
     return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
   }
 
-  if (stage === 'collecting_chemical_identity') {
-    const questionText = questionForMissingField('chemicalIdentity').text;
-    return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
-  }
-
   if (stage === 'collecting_preferences') {
     const field = missingPreferred.find((item) => PRICE_SENSITIVE_PREFERRED.includes(item));
     if (field) {
@@ -1972,8 +2001,10 @@ export const chatPublicAssistant = onRequest(
         chemicalIdentityNeeded,
         parsedChemicalName: asString(parsedHints.chemicalName),
         parsedChemicalIdentity: asString(parsedHints.chemicalIdentity),
+        parsedIndustryUse: asString(parsedHints.industryUse),
         mergedChemicalName: asString(mergedProfile.chemicalName),
         mergedChemicalIdentity: asString(mergedProfile.chemicalIdentity),
+        mergedIndustryUse: asString(mergedProfile.industryUse),
       });
 
       const readyForEmail =

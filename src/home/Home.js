@@ -8,7 +8,6 @@ const ROTATING_HEADLINES = [
   'Verified Suppliers. Competitive Pricing.',
   'Quotes in Minutes, Not Days.',
 ];
-const LOADING_STEPS = ['Reading your request', 'Matching requirements', 'Preparing next question'];
 const SHOW_DEBUG_BADGE = String(process.env.REACT_APP_DEBUG_CHAT_HINTS || 'false').toLowerCase() === 'true';
 
 function endpointBase() {
@@ -94,7 +93,6 @@ export default function Home() {
   const [headlineVisible, setHeadlineVisible] = useState(true);
   const [memoryMode, setMemoryMode] = useState('full');
   const [clarificationNeeded, setClarificationNeeded] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
 
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
@@ -142,19 +140,6 @@ export default function Home() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!loading) {
-      setLoadingStep(0);
-      return undefined;
-    }
-
-    const timer = setInterval(() => {
-      setLoadingStep((prev) => (prev + 1) % LOADING_STEPS.length);
-    }, 680);
-
-    return () => clearInterval(timer);
-  }, [loading]);
 
   useEffect(() => {
     let fadeTimer = null;
@@ -233,8 +218,7 @@ export default function Home() {
         ) : null}
         <div key={loading ? `loading-${assistantMessage.id}` : assistantMessage.id} className={`assistant-display ${loading ? 'is-loading' : ''}`}>
           {loading ? (
-            <div className="assistant-progress" aria-live="polite" role="status">
-              <p className="assistant-progress-label">{LOADING_STEPS[loadingStep]}</p>
+            <div className="assistant-progress" aria-label="Loading response" role="status">
               <div className="assistant-progress-track">
                 <span className="assistant-progress-fill" />
               </div>
