@@ -2,20 +2,20 @@ import React, { useMemo, useState, useEffect } from 'react';
 import './Home2.css';
 
 const INITIAL_PROMPT =
-  "Hey — I'm QuoteChem V2. Tell me what chemical you need, what industry/use it's for, quantity, and delivery location.";
+  "Hey — I'm QuoteChem V2. Tell me what chemical you need, what industry/use it's for, quantity, delivery location, and email.";
 const ROTATING_HEADLINES = [
   'Source Bulk Chemicals Smarter',
   'Verified Suppliers. Competitive Pricing.',
   'Quotes in Minutes, Not Days.',
 ];
 
-const EDITABLE_FIELDS = [
+const SHOW_MANUAL_FINALIZE = String(process.env.REACT_APP_HOME2_SHOW_MANUAL_FINALIZE || 'false').toLowerCase() === 'true';
+
+const EXTRACTED_FIELDS = [
   'chemicalName',
   'industryUse',
   'quantity',
-  'locationCity',
-  'locationStateProvince',
-  'locationCountry',
+  'deliveryLocation',
   'email',
   'packagingPreference',
   'neededBy',
@@ -74,9 +74,7 @@ function toFieldLabel(field) {
     chemicalName: 'Chemical',
     industryUse: 'Industry / Use',
     quantity: 'Quantity',
-    locationCity: 'Delivery City',
-    locationStateProvince: 'State / Province',
-    locationCountry: 'Country',
+    deliveryLocation: 'Delivery Location',
     email: 'Email',
     packagingPreference: 'Packaging Preference',
     neededBy: 'Needed By',
@@ -91,7 +89,6 @@ export default function Home2() {
   const [sessionId, setSessionId] = useState('');
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const [assistantMessage, setAssistantMessage] = useState({
@@ -102,28 +99,20 @@ export default function Home2() {
 
   const [completed, setCompleted] = useState(false);
   const [rfqId, setRfqId] = useState('');
+  const [emailStatus, setEmailStatus] = useState('not_attempted');
+
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const [headlineVisible, setHeadlineVisible] = useState(true);
 
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewExtracted, setReviewExtracted] = useState({});
-  const [validationErrors, setValidationErrors] = useState([]);
-  const [canConfirm, setCanConfirm] = useState(false);
+  const [showUnderstood, setShowUnderstood] = useState(false);
+  const [extractedState, setExtractedState] = useState({ confirm: false });
+  const [missingRequired, setMissingRequired] = useState([]);
+  const [readyToFinalize, setReadyToFinalize] = useState(false);
 
-  const validationByField = useMemo(() => {
-    const out = {};
-    (Array.isArray(validationErrors) ? validationErrors : []).forEach((item) => {
-      const field = item?.field || '_';
-      out[field] = item?.message || 'Invalid value';
-    });
-    return out;
-  }, [validationErrors]);
-
-  const summaryRows = useMemo(() => {
-    return EDITABLE_FIELDS
-      .map((field) => [toFieldLabel(field), reviewExtracted[field]])
-      .filter(([, value]) => value);
-  }, [reviewExtracted]);
+  const extractedRows = useMemo(
+    () => EXTRACTED_FIELDS.map((field) => [toFieldLabel(field), extractedState[field]]).filter(([, value]) => value),
+    [extractedState]
+  );
 
   const bootSession = async () => {
     const payload = {
@@ -138,10 +127,17 @@ export default function Home2() {
     setSessionId(data.sessionId);
 
     const restored = Array.isArray(data?.session?.messages) ? data.session.messages.map(normalizeMessage) : [];
-    const latestAssistant = getLatestAssistant(restored);
-    setAssistantMessage(latestAssistant);
+    setAssistantMessage(getLatestAssistant(restored));
+
     setCompleted(Boolean(data?.session?.completed));
     setRfqId(data?.session?.rfqId || '');
+    setEmailStatus(data?.session?.emailStatus || 'not_attempted');
+
+    if (data?.session?.lastFinalizedExtracted && typeof data.session.lastFinalizedExtracted === 'object') {
+      setExtractedState({ ...data.session.lastFinalizedExtracted, confirm: true });
+      setReadyToFinalize(true);
+      setMissingRequired([]);
+    }
   };
 
   useEffect(() => {
@@ -179,28 +175,34 @@ export default function Home2() {
     };
   }, []);
 
+  const applyStateFromResponse = (data) => {
+    const state = data?.state || {};
+    setExtractedState(state.extracted || { confirm: false });
+    setMissingRequired(Array.isArray(state.missingRequired) ? state.missingRequired : []);
+    setReadyToFinalize(Boolean(state.readyToFinalize));
+
+    const confirmed = Boolean(state.confirmed) || Boolean(data?.completed);
+    setCompleted(confirmed);
+    setRfqId(state.rfqId || data?.rfqId || '');
+    if (state.emailStatus) setEmailStatus(state.emailStatus);
+  };
+
   const sendMessage = async (input) => {
     const value = input.trim();
-    if (!value || !sessionId || loading || submitting || completed) return;
+    if (!value || !sessionId || loading || completed) return;
 
     setError('');
     setDraft('');
-    setReviewOpen(false);
-    setValidationErrors([]);
-    setCanConfirm(false);
     setLoading(true);
 
     try {
       const data = await postJson('chatPublicAssistantV2', { sessionId, message: value });
-      const assistantReply = data.assistant?.reply || 'Tell me more about your requirements.';
-
-      const assistant = {
+      setAssistantMessage({
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: assistantReply,
-      };
-
-      setAssistantMessage(assistant);
+        content: data.assistant?.reply || 'Please continue with your requirement details.',
+      });
+      applyStateFromResponse(data);
     } catch (err) {
       setError(err?.message || 'Failed to send message.');
     } finally {
@@ -208,55 +210,47 @@ export default function Home2() {
     }
   };
 
-  const previewExtraction = async () => {
-    if (!sessionId || loading || submitting || completed) return;
+  const runManualFinalize = async () => {
+    if (!sessionId || loading || completed) return;
     setError('');
-    setSubmitting(true);
+    setLoading(true);
 
     try {
-      const data = await postJson('finalizePublicSessionV2', { sessionId, action: 'preview' });
-      setReviewExtracted(data.extracted || {});
-      setValidationErrors(Array.isArray(data.validationErrors) ? data.validationErrors : []);
-      setCanConfirm(Boolean(data.canConfirm));
-      setReviewOpen(true);
-    } catch (err) {
-      setError(err?.message || 'Failed to generate extraction preview.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const onEditField = (field, value) => {
-    setReviewExtracted((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const confirmExtraction = async () => {
-    if (!sessionId || loading || submitting || completed) return;
-    setError('');
-    setSubmitting(true);
-
-    try {
-      const data = await postJson('finalizePublicSessionV2', {
-        sessionId,
-        action: 'confirm',
-        edits: reviewExtracted,
-      }, { allowAppError: true });
+      const data = await postJson(
+        'finalizePublicSessionV2',
+        {
+          sessionId,
+          action: 'confirm',
+          edits: extractedState,
+        },
+        { allowAppError: true }
+      );
 
       if (data?.ok === false) {
-        setValidationErrors(Array.isArray(data.validationErrors) ? data.validationErrors : []);
-        setCanConfirm(false);
+        const missing = Array.isArray(data.missingRequired) ? data.missingRequired : [];
+        setMissingRequired(missing);
+        setReadyToFinalize(false);
+        setError(missing.length ? `Missing: ${missing.join(', ')}` : 'Unable to finalize yet.');
         return;
       }
+
       setCompleted(Boolean(data.saved));
       setRfqId(data.rfqId || '');
-      setReviewOpen(false);
+      setEmailStatus(data.emailStatus || 'sent');
+      setMissingRequired([]);
+      setReadyToFinalize(true);
+      setAssistantMessage({
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content:
+          data.emailStatus === 'sent'
+            ? `Confirmed — request submitted and email sent. RFQ ID: ${data.rfqId || ''}`
+            : `Request submitted. Email status: ${data.emailStatus || 'unknown'}. RFQ ID: ${data.rfqId || ''}`,
+      });
     } catch (err) {
-      setError(err?.message || 'Failed to confirm extraction.');
+      setError(err?.message || 'Manual finalize failed.');
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
@@ -276,7 +270,7 @@ export default function Home2() {
 
       <div className="chat-card">
         <div key={loading ? `loading-${assistantMessage.id}` : assistantMessage.id} className={`assistant-display ${loading ? 'is-loading' : ''}`}>
-          {loading || submitting ? (
+          {loading ? (
             <div className="assistant-progress" aria-label="Loading response" role="status">
               <div className="assistant-progress-track">
                 <span className="assistant-progress-fill" />
@@ -304,69 +298,65 @@ export default function Home2() {
               }
             }}
             placeholder="Type what you need..."
-            disabled={!sessionId || loading || submitting || completed}
+            disabled={!sessionId || loading || completed}
             rows={2}
           />
-          <button type="submit" disabled={!sessionId || loading || submitting || !draft.trim() || completed}>
+          <button type="submit" disabled={!sessionId || loading || !draft.trim() || completed}>
             Send
           </button>
         </form>
 
-        {!completed ? (
-          <div className="chat-helper-actions">
-            <button
-              type="button"
-              className="details-toggle"
-              disabled={!sessionId || loading || submitting}
-              onClick={previewExtraction}
-            >
-              Submit Request
-            </button>
-          </div>
-        ) : null}
+        <div className="chat-helper-actions">
+          <button
+            type="button"
+            className="details-toggle"
+            onClick={() => setShowUnderstood((prev) => !prev)}
+            aria-expanded={showUnderstood}
+          >
+            <span className={`details-arrow ${showUnderstood ? 'is-open' : ''}`} aria-hidden>
+              ▼
+            </span>
+            <span>What We Understood</span>
+          </button>
 
-        {reviewOpen ? (
-          <div className="review-card">
-            <h3>Review Extracted Fields</h3>
-            <div className="review-grid">
-              {EDITABLE_FIELDS.map((field) => (
-                <label key={field} className="review-field">
-                  <span>{toFieldLabel(field)}</span>
-                  <input
-                    type={field === 'email' ? 'email' : 'text'}
-                    value={reviewExtracted[field] || ''}
-                    onChange={(event) => onEditField(field, event.target.value)}
-                    disabled={submitting || completed}
-                  />
-                  {validationByField[field] ? <em>{validationByField[field]}</em> : null}
-                </label>
-              ))}
+          {showUnderstood ? (
+            <div className="understood-card">
+              {extractedRows.length > 0 ? (
+                <div className="completion-grid">
+                  {extractedRows.map(([label, value]) => (
+                    <p key={label} className="completion-row">
+                      <span>{label}: </span>
+                      <strong>{value}</strong>
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="status-text">No extracted details yet.</p>
+              )}
+
+              {missingRequired.length > 0 ? <p className="status-text">Missing: {missingRequired.join(', ')}</p> : null}
+              <p className="status-text">Ready to finalize: {readyToFinalize ? 'yes' : 'no'}</p>
+              <p className="status-text">Confirm detected: {extractedState.confirm ? 'yes' : 'no'}</p>
             </div>
-            {validationByField._ ? <p className="status-text status-error">{validationByField._}</p> : null}
-            <div className="review-actions">
-              <button type="button" className="notes-btn" disabled={submitting || completed} onClick={previewExtraction}>
-                Re-run Preview
-              </button>
-              <button type="button" className="details-toggle" disabled={submitting || completed || !canConfirm} onClick={confirmExtraction}>
-                Confirm & Save
-              </button>
-            </div>
-          </div>
-        ) : null}
+          ) : null}
+
+          {SHOW_MANUAL_FINALIZE && !completed ? (
+            <button type="button" className="notes-btn" disabled={!sessionId || loading} onClick={runManualFinalize}>
+              Manual Finalize (Debug)
+            </button>
+          ) : null}
+        </div>
 
         {completed ? (
           <div className="completion-card">
-            <h2>Request Saved (Home2)</h2>
-            <p>Structured extraction has been saved to V2 collections.</p>
+            <h2>Request Submitted (Home2)</h2>
+            <p>
+              {emailStatus === 'sent'
+                ? 'Your request was saved and confirmation email was sent.'
+                : 'Your request was saved. Email is pending/failed; please check logs.'}
+            </p>
             {rfqId ? <p className="rfq-id">RFQ ID: {rfqId}</p> : null}
-            <div className="completion-grid">
-              {summaryRows.map(([label, value]) => (
-                <p key={label} className="completion-row">
-                  <span>{label}: </span>
-                  <strong>{value}</strong>
-                </p>
-              ))}
-            </div>
+            <p className="status-text">Email status: {emailStatus || 'unknown'}</p>
           </div>
         ) : null}
 
