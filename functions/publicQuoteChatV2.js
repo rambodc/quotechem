@@ -68,7 +68,9 @@ function readSecret(secretRef) {
 }
 
 function shouldUseHome2AutoConfirmFlow() {
-  return String(process.env.HOME2_AUTO_CONFIRM_FLOW || 'false').toLowerCase() === 'true';
+  const raw = String(process.env.HOME2_AUTO_CONFIRM_FLOW || '').trim().toLowerCase();
+  if (!raw) return true;
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
 function escapeHtml(text) {
@@ -138,6 +140,17 @@ function validateExtractedTurnState(extracted = {}) {
 
 function computeCompletionFingerprint(extracted = {}) {
   return REQUIRED_FIELDS.map((field) => asString(extracted[field]).toLowerCase()).join('|');
+}
+
+function looksLikeUserConfirmation(message) {
+  const text = asString(message).toLowerCase();
+  if (!text) return false;
+
+  if (/\b(do not|don't|dont|not yet|no)\s+(submit|confirm|proceed|send)\b/.test(text)) {
+    return false;
+  }
+
+  return /\b(confirm|confirmed|proceed|submit|send it|go ahead|looks good|that's correct|that is correct|approved|approve)\b/.test(text);
 }
 
 function mapMessageDoc(docSnap) {
@@ -301,7 +314,12 @@ async function callOpenAIConversationV2({ transcript, userMessage, extracted, mi
     JSON.stringify(extracted || {}),
     `Missing required fields: ${(missingRequired || []).join(', ') || 'none'}`,
     `User requested confirm: ${confirmRequested ? 'true' : 'false'}`,
-    'Reply as QuoteChem V2. If missing fields exist, ask one concise missing-field question. If all fields complete and not confirmed, ask for confirmation.',
+    'Reply as QuoteChem V2.',
+    'If user asks an informational question (examples: what chemicals are used in drilling fluids, what grade is typical), answer it clearly first.',
+    'After answering, continue intake naturally: ask at most one concise follow-up only when it fits.',
+    'Do not force a follow-up question in every message.',
+    'If required fields are missing, prefer the most important next field but keep the tone consultative.',
+    'If all required fields are complete and user has not confirmed, ask for confirmation.',
   ].join('\n');
 
   try {
@@ -318,7 +336,7 @@ async function callOpenAIConversationV2({ transcript, userMessage, extracted, mi
           {
             role: 'system',
             content:
-              'You are QuoteChem V2, concise procurement concierge. Ask one question at a time. Do not output JSON.',
+              'You are QuoteChem V2, concise procurement concierge. Be helpful and informative. Answer user questions directly when asked, then guide intake step-by-step. Ask at most one follow-up question when appropriate. Do not output JSON.',
           },
           { role: 'user', content: prompt },
         ],
@@ -687,6 +705,9 @@ export const createPublicSessionV2 = onRequest({ region: REGION }, async (req, r
         completed: Boolean(session.completed),
         rfqId: asString(session.rfqId),
         emailStatus: asString(session?.emailSend?.status || 'not_attempted'),
+        latestExtractedState: session?.latestExtractedState || {},
+        missingRequired: Array.isArray(session?.missingRequired) ? session.missingRequired : [],
+        readyToFinalize: Boolean(session?.readyToFinalize),
         lastFinalizedExtracted: session?.lastFinalizedExtracted || {},
         messages,
       },
@@ -743,12 +764,35 @@ export const chatPublicAssistantV2 = onRequest(
       }
 
       const validation = validateExtractedTurnState(extracted);
-      const confirmRequested = Boolean(extracted.confirm);
+      const aiConfirmRequested = Boolean(extracted.confirm);
+      const userConfirmRequested = looksLikeUserConfirmation(userMessage);
+      const confirmRequested = aiConfirmRequested || userConfirmRequested;
+
+      // Keep latest extracted snapshot visible on the session root doc for observability.
+      const turnSnapshot = {
+        ...validation.normalized,
+        confirm: confirmRequested,
+      };
+      const turnPatch = {
+        latestExtractedState: turnSnapshot,
+        missingRequired: validation.missingRequired,
+        readyToFinalize: validation.readyToFinalize,
+        extractionUpdatedAt: now,
+      };
+      for (const field of REQUIRED_FIELDS) {
+        const value = asString(validation.normalized[field]);
+        if (value) turnPatch[field] = value;
+      }
+      await sessionRef.set(turnPatch, { merge: true });
 
       logger.info('home2_turn_extraction_generated', {
         sessionId,
         model: extractionModel || 'unknown',
         confirm: confirmRequested,
+        confirmSource: {
+          ai: aiConfirmRequested,
+          user: userConfirmRequested,
+        },
         missingRequired: validation.missingRequired,
       });
 
@@ -772,7 +816,7 @@ export const chatPublicAssistantV2 = onRequest(
             sessionRef,
             sessionId,
             sessionDoc: session,
-            extracted: validation.normalized,
+            extracted: { ...validation.normalized, confirm: true },
             transcript,
           });
         } else {
@@ -840,7 +884,7 @@ export const chatPublicAssistantV2 = onRequest(
           quickReplies: [],
         },
         state: buildStateResponse({
-          extracted,
+          extracted: { ...validation.normalized, confirm: confirmRequested },
           validation,
           confirmed: finalizeResult.confirmed,
           rfqId: finalizeResult.rfqId,

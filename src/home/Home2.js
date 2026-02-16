@@ -133,6 +133,12 @@ export default function Home2() {
     setRfqId(data?.session?.rfqId || '');
     setEmailStatus(data?.session?.emailStatus || 'not_attempted');
 
+    if (data?.session?.latestExtractedState && typeof data.session.latestExtractedState === 'object') {
+      setExtractedState(data.session.latestExtractedState);
+      setReadyToFinalize(Boolean(data?.session?.readyToFinalize));
+      setMissingRequired(Array.isArray(data?.session?.missingRequired) ? data.session.missingRequired : []);
+    }
+
     if (data?.session?.lastFinalizedExtracted && typeof data.session.lastFinalizedExtracted === 'object') {
       setExtractedState({ ...data.session.lastFinalizedExtracted, confirm: true });
       setReadyToFinalize(true);
