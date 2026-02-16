@@ -2,12 +2,13 @@ import React, { useMemo, useState, useEffect } from 'react';
 import './Home.css';
 
 const INITIAL_PROMPT =
-  "Hey — I'm QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, how much, and where should it be delivered?";
+  "Hey — I'm QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, what industry/use is it for, how much, and where should it be delivered?";
 const ROTATING_HEADLINES = [
   'Source Bulk Chemicals Smarter',
   'Verified Suppliers. Competitive Pricing.',
   'Quotes in Minutes, Not Days.',
 ];
+const LOADING_STEPS = ['Reading your request', 'Matching requirements', 'Preparing next question'];
 const SHOW_DEBUG_BADGE = String(process.env.REACT_APP_DEBUG_CHAT_HINTS || 'false').toLowerCase() === 'true';
 
 function endpointBase() {
@@ -58,6 +59,7 @@ function buildSummaryRows(profile) {
 
   const rows = [
     ['Chemical', profile.chemicalName],
+    ['Industry / Use', profile.industryUse],
     ['Quantity', profile.quantity || profile.quantityRaw],
     ['Delivery', location],
     ['Packaging', profile.packagingPreference],
@@ -92,6 +94,7 @@ export default function Home() {
   const [headlineVisible, setHeadlineVisible] = useState(true);
   const [memoryMode, setMemoryMode] = useState('full');
   const [clarificationNeeded, setClarificationNeeded] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
 
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
@@ -139,6 +142,19 @@ export default function Home() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStep(0);
+      return undefined;
+    }
+
+    const timer = setInterval(() => {
+      setLoadingStep((prev) => (prev + 1) % LOADING_STEPS.length);
+    }, 680);
+
+    return () => clearInterval(timer);
+  }, [loading]);
 
   useEffect(() => {
     let fadeTimer = null;
@@ -215,8 +231,17 @@ export default function Home() {
             memory: {memoryMode} {clarificationNeeded ? '• clarify' : ''}
           </p>
         ) : null}
-        <div key={assistantMessage.id} className="assistant-display">
-          <p>{assistantMessage.content}</p>
+        <div key={loading ? `loading-${assistantMessage.id}` : assistantMessage.id} className={`assistant-display ${loading ? 'is-loading' : ''}`}>
+          {loading ? (
+            <div className="assistant-progress" aria-live="polite" role="status">
+              <p className="assistant-progress-label">{LOADING_STEPS[loadingStep]}</p>
+              <div className="assistant-progress-track">
+                <span className="assistant-progress-fill" />
+              </div>
+            </div>
+          ) : (
+            <p>{assistantMessage.content}</p>
+          )}
         </div>
 
         {quickChoices.length > 0 ? (
@@ -297,7 +322,6 @@ export default function Home() {
           </div>
         ) : null}
 
-        {loading ? <p className="status-text">Working on it...</p> : null}
         {error ? <p className="status-text status-error">{error}</p> : null}
       </div>
     </section>

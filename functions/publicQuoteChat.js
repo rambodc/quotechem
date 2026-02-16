@@ -16,6 +16,7 @@ const QUOTECHEM_SALES_EMAIL = defineSecret('QUOTECHEM_SALES_EMAIL');
 
 const REQUIRED_FIELDS = [
   'chemicalName',
+  'industryUse',
   'quantity',
   'locationCity',
   'locationStateProvince',
@@ -23,14 +24,15 @@ const REQUIRED_FIELDS = [
   'email',
 ];
 
-const CORE_FIELDS = ['chemicalName', 'quantity', 'locationCity', 'locationStateProvince', 'locationCountry'];
+const CORE_FIELDS = ['chemicalName', 'industryUse', 'quantity', 'locationCity', 'locationStateProvince', 'locationCountry'];
 
-const PREFERRED_FIELDS = ['packagingPreference', 'gradeSpec', 'neededBy', 'frequency', 'specNotes'];
-const PRICE_SENSITIVE_PREFERRED = ['packagingPreference', 'gradeSpec', 'neededBy'];
+const PREFERRED_FIELDS = ['packagingPreference', 'neededBy', 'frequency', 'specNotes'];
+const PRICE_SENSITIVE_PREFERRED = ['packagingPreference', 'neededBy'];
 
 const PROFILE_FIELDS = [
   ...REQUIRED_FIELDS,
   ...PREFERRED_FIELDS,
+  'chemicalIdentity',
   'companyName',
   'contactName',
   'quantityRaw',
@@ -51,7 +53,6 @@ const PROFILE_FIELDS = [
 
 const QUICK_CHOICES = {
   packagingPreference: ['bags', 'totes', 'drums', 'bulk', 'not sure'],
-  gradeSpec: ['food', 'industrial', 'pharma', 'api', 'drilling', 'not sure'],
   frequency: ['one-time', 'recurring'],
   neededBy: ['ASAP', 'This week', 'This month'],
 };
@@ -59,6 +60,7 @@ const QUICK_CHOICES = {
 const FACT_FIELDS = [
   ...REQUIRED_FIELDS,
   ...PREFERRED_FIELDS,
+  'chemicalIdentity',
   'companyName',
   'contactName',
   'quantityRaw',
@@ -89,8 +91,23 @@ const KNOWN_CITY_HINTS = {
   saskatoon: { locationCity: 'Saskatoon', locationStateProvince: 'Saskatchewan', locationCountry: 'Canada' },
 };
 
+const AMBIGUOUS_CHEMICAL_TERMS = [
+  'fusion',
+  'blend',
+  'mixture',
+  'mix',
+  'formula',
+  'solution',
+  'product',
+  'compound',
+  'additive',
+  'cleaner',
+  'proprietary',
+  'custom',
+];
+
 const INITIAL_ASSISTANT_MESSAGE =
-  'Hey — I\'m QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, how much, and where should it be delivered?';
+  'Hey — I\'m QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, what industry/use is it for, how much, and where should it be delivered?';
 
 function setCors(res) {
   res.set('Access-Control-Allow-Origin', '*');
@@ -289,6 +306,93 @@ function parseLocationFromText(text) {
   return {};
 }
 
+function parseChemicalIdentityFromText(text) {
+  const value = asString(text);
+  if (!value) return '';
+
+  const casMatch = value.match(/\b\d{2,7}-\d{2}-\d\b/);
+  if (casMatch) return casMatch[0];
+
+  const concentrationMatch = value.match(/\b\d{1,3}(?:\.\d+)?\s*%\b/);
+  if (concentrationMatch) return concentrationMatch[0];
+
+  if (/\b(cas|sds|msds|coa|purity|concentration|assay|active ingredient|formula)\b/i.test(value)) {
+    return value.slice(0, 220);
+  }
+
+  return '';
+}
+
+function parseChemicalNameFromText(text) {
+  const value = asString(text);
+  if (!value) return '';
+
+  const lower = value.toLowerCase();
+  if (isEmail(value)) return '';
+  if (value.includes('?')) return '';
+  if (/^\s*(yes|no|ok|okay|thanks|thank you|hello|hi)\s*$/i.test(value)) return '';
+  if (/\b(city|state|country|deliver|delivery|ship|shipping|email)\b/i.test(lower) && value.split(/\s+/).length <= 5) return '';
+  if (/^(water treatment|cleaning products?|food processing|pharma|pharmaceutical|manufacturing|oil and gas|agriculture|cosmetics)$/i.test(lower)) return '';
+
+  const patterns = [
+    /(?:need|looking for|quote|rfq|pricing for|source|sourcing)\s+(.+)/i,
+    /(?:chemical|product)\s*(?:is|:)\s*(.+)/i,
+  ];
+
+  let candidate = '';
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match?.[1]) {
+      candidate = asString(match[1]);
+      break;
+    }
+  }
+
+  if (!candidate) {
+    const words = value.split(/\s+/).filter(Boolean);
+    if (words.length <= 6) candidate = value;
+  }
+
+  if (!candidate) return '';
+  candidate = candidate
+    .replace(/\b(for|to|in)\s+[a-z].*$/i, '')
+    .replace(/[,.!?;:]+$/g, '')
+    .trim();
+
+  if (!candidate) return '';
+  if (candidate.length < 2 || candidate.length > 80) return '';
+  if (/^\d+(\.\d+)?\s*(kg|lbs?|lb|mt|tons?|tonnes?|bags?|drums?|totes?|l|liters?|litres?)$/i.test(candidate)) return '';
+  if (/^(asap|today|tomorrow|this week|this month)$/i.test(candidate)) return '';
+
+  return candidate;
+}
+
+function parseIndustryUseFromText(text) {
+  const value = asString(text);
+  if (!value) return '';
+
+  const lower = value.toLowerCase();
+  const explicitPattern = value.match(/\b(?:for|used for|industry|application)\s*[:\-]?\s*([a-z0-9 ,/&-]{3,80})/i);
+  if (explicitPattern?.[1]) return asString(explicitPattern[1]);
+
+  const industryMap = [
+    ['water treatment', ['water treatment', 'wastewater', 'municipal water', 'boiler water']],
+    ['cleaning products', ['cleaning', 'detergent', 'sanitation', 'household cleaner']],
+    ['food processing', ['food', 'beverage', 'food processing']],
+    ['pharma', ['pharma', 'pharmaceutical', 'drug', 'api']],
+    ['manufacturing', ['manufacturing', 'factory', 'production', 'industrial process']],
+    ['oil and gas', ['oil', 'gas', 'drilling', 'upstream', 'downstream']],
+    ['agriculture', ['agriculture', 'fertilizer', 'crop', 'agri']],
+    ['cosmetics', ['cosmetic', 'personal care', 'skin care', 'hair care']],
+  ];
+
+  for (const [industry, patterns] of industryMap) {
+    if (patterns.some((item) => lower.includes(item))) return industry;
+  }
+
+  return '';
+}
+
 function parseUserHints(message) {
   const text = asString(message).toLowerCase();
   const extracted = {};
@@ -308,6 +412,9 @@ function parseUserHints(message) {
   const frequency = normalizeFrequency(text);
   if (frequency) extracted.frequency = frequency;
 
+  const industryUse = parseIndustryUseFromText(message);
+  if (industryUse) extracted.industryUse = industryUse;
+
   if (/\basap\b/i.test(text)) extracted.neededBy = 'ASAP';
   const dateMatch = asString(message).match(/\b\d{4}-\d{2}-\d{2}\b/);
   if (dateMatch) extracted.neededBy = dateMatch[0];
@@ -316,7 +423,60 @@ function parseUserHints(message) {
     extracted.specNotes = asString(message);
   }
 
+  const chemicalName = parseChemicalNameFromText(message);
+  if (chemicalName) extracted.chemicalName = chemicalName;
+
+  const chemicalIdentity = parseChemicalIdentityFromText(message);
+  if (chemicalIdentity) extracted.chemicalIdentity = chemicalIdentity;
+
   return extracted;
+}
+
+function isAmbiguousChemicalName(name) {
+  const value = asString(name).toLowerCase();
+  if (!value) return false;
+  if (AMBIGUOUS_CHEMICAL_TERMS.some((term) => new RegExp(`\\b${term}\\b`, 'i').test(value))) return true;
+  if (!value.includes(' ') && /^[a-z0-9-]+$/i.test(value)) return true;
+  return false;
+}
+
+function hasChemicalIdentitySignal(profile) {
+  const chemicalIdentity = asString(profile.chemicalIdentity);
+  const gradeSpec = asString(profile.gradeSpec);
+  const specNotes = asString(profile.specNotes);
+  const notes = asString(profile.notes);
+  const chemicalName = asString(profile.chemicalName);
+  const combined = [chemicalIdentity, gradeSpec, specNotes, notes, chemicalName].join(' ');
+  const ambiguousName = isAmbiguousChemicalName(chemicalName);
+
+  if (chemicalIdentity.length >= 6) return true;
+  if (specNotes.length >= 10) return true;
+  if (/\b\d{2,7}-\d{2}-\d\b/.test(combined)) return true;
+  if (/\b\d{1,3}(?:\.\d+)?\s*%\b/.test(combined)) return true;
+  if (!ambiguousName && gradeSpec && gradeSpec !== 'not_sure') return true;
+  return false;
+}
+
+function looksLikeSpecificChemicalName(name) {
+  const value = asString(name).toLowerCase();
+  if (!value) return false;
+  if (/\b\d{2,7}-\d{2}-\d\b/.test(value)) return true;
+  if (/[0-9()%/]/.test(value)) return true;
+  if (/\b(acid|hydroxide|chloride|carbonate|sulfate|sulphate|phosphate|nitrate|acetate|ethanol|methanol|isopropyl|glycol|ammonia|peroxide|benzene|xylene|toluene|resin|polymer)\b/.test(value)) {
+    return true;
+  }
+  if (value.includes(' ') && value.length >= 8 && !AMBIGUOUS_CHEMICAL_TERMS.includes(value)) return true;
+  return false;
+}
+
+function needsChemicalIdentity(profile) {
+  const chemicalName = asString(profile.chemicalName);
+  if (!chemicalName) return false;
+  if (hasChemicalIdentitySignal(profile)) return false;
+  if (looksLikeSpecificChemicalName(chemicalName)) return false;
+
+  if (isAmbiguousChemicalName(chemicalName)) return true;
+  return false;
 }
 
 function deriveSizeBucket(profile) {
@@ -424,15 +584,24 @@ function missingFields(profile, required) {
 }
 
 function profileCompleteness(profile) {
-  const complete = REQUIRED_FIELDS.filter((field) => asString(profile[field])).length;
-  return Number(((complete / REQUIRED_FIELDS.length) * 100).toFixed(1));
+  const required = [...REQUIRED_FIELDS];
+  if (needsChemicalIdentity(profile)) required.push('chemicalIdentity');
+
+  const complete = required.filter((field) => {
+    if (field === 'chemicalIdentity') return hasChemicalIdentitySignal(profile);
+    return asString(profile[field]);
+  }).length;
+
+  return Number(((complete / required.length) * 100).toFixed(1));
 }
 
-function deriveIntakeStage(session, profile, missingRequired, missingPreferred) {
+function deriveIntakeStage(session, profile, missingRequired, missingPreferred, chemicalIdentityNeeded = false) {
   if (session?.completed || asString(profile.intakeStage) === 'completed') return 'completed';
 
   const missingCore = CORE_FIELDS.filter((field) => missingRequired.includes(field));
   if (missingCore.length > 0) return 'collecting_core';
+
+  if (chemicalIdentityNeeded) return 'collecting_chemical_identity';
 
   if (missingRequired.includes('email')) return 'awaiting_email';
 
@@ -447,7 +616,14 @@ function deriveIntakeStage(session, profile, missingRequired, missingPreferred) 
 function questionForMissingField(field) {
   if (field === 'chemicalName') {
     return {
-      text: 'What chemical do you need quoted?',
+      text: 'What chemical do you need quoted, and what industry/use is it for?',
+      quickChoices: [],
+    };
+  }
+
+  if (field === 'industryUse') {
+    return {
+      text: 'What industry or application is this chemical for?',
       quickChoices: [],
     };
   }
@@ -473,17 +649,17 @@ function questionForMissingField(field) {
     };
   }
 
+  if (field === 'chemicalIdentity') {
+    return {
+      text: 'Quick check: what is this chemical exactly (CAS, concentration, grade, or a one-line SDS-style description)?',
+      quickChoices: [],
+    };
+  }
+
   if (field === 'packagingPreference') {
     return {
       text: 'Packaging preference: bags / totes / drums / bulk?',
       quickChoices: QUICK_CHOICES.packagingPreference,
-    };
-  }
-
-  if (field === 'gradeSpec') {
-    return {
-      text: 'Do you need a specific grade? (food / industrial / pharma / api / drilling / not sure)',
-      quickChoices: QUICK_CHOICES.gradeSpec,
     };
   }
 
@@ -510,17 +686,20 @@ function questionForMissingField(field) {
 function conciseSummary(profile) {
   const quantity = asString(profile.quantity) || asString(profile.quantityRaw) || 'quantity not specified';
   const chemical = asString(profile.chemicalName) || 'chemical';
+  const industry = asString(profile.industryUse);
   const city = asString(profile.locationCity) || 'destination city';
   const state = asString(profile.locationStateProvince);
   const country = asString(profile.locationCountry);
   const location = [city, state, country].filter(Boolean).join(', ');
-  return `${quantity} of ${chemical} to ${location}`;
+  return `${quantity} of ${chemical}${industry ? ` for ${industry}` : ''} to ${location}`;
 }
 
 function buildQuickChoices(stage, missingRequired, missingPreferred) {
   if (stage === 'collecting_core') {
     return questionForMissingField(missingRequired[0]).quickChoices;
   }
+
+  if (stage === 'collecting_chemical_identity') return [];
 
   if (stage === 'awaiting_email') return [];
 
@@ -565,6 +744,8 @@ function buildSystemPrompt() {
     'Ask one concise question at a time and only for missing info.',
     'If user asks a relevant chemical/procurement question, answer briefly first, then continue intake.',
     'Use conversation history and profile state; do not forget earlier user details in the same session.',
+    'Collect industry/application early with chemical name (example: water treatment, cleaning, food processing).',
+    'If chemical name looks like a brand/proprietary term (example: "Fusion"), ask for one basic identifier (CAS, concentration, grade, or one-line composition) before completion.',
     'Never promise final pricing or supplier guarantees.',
     'Prefer short responses.',
     'Return strict JSON only with keys: assistant_reply, extracted, confidence, next_missing_required, next_missing_preferred, field_confidence, completion_signal.',
@@ -957,6 +1138,8 @@ async function summarizeConversationIfNeeded({
     'Current profile:',
     JSON.stringify({
       chemicalName: mergedProfile.chemicalName || '',
+      industryUse: mergedProfile.industryUse || '',
+      chemicalIdentity: mergedProfile.chemicalIdentity || '',
       quantity: mergedProfile.quantity || '',
       locationCity: mergedProfile.locationCity || '',
       locationStateProvince: mergedProfile.locationStateProvince || '',
@@ -997,6 +1180,8 @@ function escapeHtml(text) {
 function buildSummaryItems(profile) {
   return [
     ['Chemical', profile.chemicalName],
+    ['Industry / Use', profile.industryUse],
+    ['Chemical Details', profile.chemicalIdentity],
     ['Quantity', profile.quantity || profile.quantityRaw],
     ['Delivery', [profile.locationCity, profile.locationStateProvince, profile.locationCountry].filter(Boolean).join(', ')],
     ['Packaging', profile.packagingPreference],
@@ -1088,6 +1273,8 @@ async function callOpenAIForEmail1({ profile, includeProviderExamples }) {
 
   const payload = {
     chemicalName: asString(profile.chemicalName),
+    industryUse: asString(profile.industryUse),
+    chemicalIdentity: asString(profile.chemicalIdentity),
     quantity: asString(profile.quantity) || asString(profile.quantityRaw),
     locationCity: asString(profile.locationCity),
     locationStateProvince: asString(profile.locationStateProvince),
@@ -1358,7 +1545,7 @@ function computeCompletionFingerprint(profile) {
 
 async function finalizeRfqIfReady({ sessionRef, session, profile, history }) {
   const missingRequired = missingFields(profile, REQUIRED_FIELDS);
-  if (missingRequired.length > 0) {
+  if (missingRequired.length > 0 || needsChemicalIdentity(profile)) {
     return { completed: false, rfqId: asString(session.rfqId) };
   }
 
@@ -1520,6 +1707,14 @@ function mergeProfiles(existing, modelExtracted, parsedHints) {
     merged.chemicalName = asString(modelExtracted.useCase);
   }
 
+  if (!merged.chemicalIdentity) {
+    merged.chemicalIdentity =
+      asString(modelExtracted?.chemicalIdentity) ||
+      asString(modelExtracted?.casNumber) ||
+      asString(modelExtracted?.composition) ||
+      '';
+  }
+
   if (!merged.quantity && merged.quantityRaw) merged.quantity = merged.quantityRaw;
 
   if (!merged.locationCountry && merged.destinationCountry) {
@@ -1566,6 +1761,11 @@ function assistantReplyForState({ stage, missingRequired, missingPreferred, aiRe
     return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
   }
 
+  if (stage === 'collecting_chemical_identity') {
+    const questionText = questionForMissingField('chemicalIdentity').text;
+    return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
+  }
+
   if (stage === 'collecting_preferences') {
     const field = missingPreferred.find((item) => PRICE_SENSITIVE_PREFERRED.includes(item));
     if (field) {
@@ -1597,7 +1797,9 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
 
     const missingRequired = missingFields(profile, REQUIRED_FIELDS);
     const missingPreferred = missingFields(profile, PREFERRED_FIELDS);
-    const stage = deriveIntakeStage(session, profile, missingRequired, missingPreferred);
+    const chemicalIdentityNeeded = needsChemicalIdentity(profile);
+    const stage = deriveIntakeStage(session, profile, missingRequired, missingPreferred, chemicalIdentityNeeded);
+    const missingFieldsForUi = chemicalIdentityNeeded ? [...missingRequired, 'chemicalIdentity'] : missingRequired;
 
     if (messages.length === 0) {
       messages.push({
@@ -1620,12 +1822,13 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
           intakeStage: stage,
         },
         messages,
-        missingFields: missingRequired,
+        missingFields: missingFieldsForUi,
         missingRequired,
         missingPreferred,
         intakeStage: stage,
         profileCompleteness: profileCompleteness(profile),
-        readyForEmail: CORE_FIELDS.every((field) => !missingRequired.includes(field)) && missingRequired.includes('email'),
+        readyForEmail:
+          !chemicalIdentityNeeded && CORE_FIELDS.every((field) => !missingRequired.includes(field)) && missingRequired.includes('email'),
         completed: stage === 'completed' || Boolean(session.completed),
         rfqId: asString(session.rfqId),
         memoryMode: asString(session?.memory?.modeLastUsed) || 'full',
@@ -1633,6 +1836,7 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
         requiredFieldConfidences: session?.ai?.requiredFieldConfidences || {},
         clarificationNeeded: false,
         clarificationField: '',
+        chemicalIdentityNeeded,
       },
     });
   } catch (error) {
@@ -1695,15 +1899,18 @@ export const chatPublicAssistant = onRequest(
         );
 
         setCors(res);
+        const baseMissingRequired = missingFields(baseProfile, REQUIRED_FIELDS);
+        const baseChemicalIdentityNeeded = needsChemicalIdentity(baseProfile);
+        const baseMissingFieldsForUi = baseChemicalIdentityNeeded ? [...baseMissingRequired, 'chemicalIdentity'] : baseMissingRequired;
         return res.status(200).json({
           ok: true,
           sessionId,
           assistant: { reply: safeReply, quickReplies: [] },
           profile: baseProfile,
-          missingFields: missingFields(baseProfile, REQUIRED_FIELDS),
-          missingRequired: missingFields(baseProfile, REQUIRED_FIELDS),
+          missingFields: baseMissingFieldsForUi,
+          missingRequired: baseMissingRequired,
           missingPreferred: missingFields(baseProfile, PREFERRED_FIELDS),
-          intakeStage: asString(baseProfile.intakeStage) || 'collecting_core',
+          intakeStage: asString(baseProfile.intakeStage) || (baseChemicalIdentityNeeded ? 'collecting_chemical_identity' : 'collecting_core'),
           profileCompleteness: profileCompleteness(baseProfile),
           readyForEmail: false,
           completed: false,
@@ -1714,6 +1921,7 @@ export const chatPublicAssistant = onRequest(
           requiredFieldConfidences: {},
           clarificationNeeded: false,
           clarificationField: '',
+          chemicalIdentityNeeded: baseChemicalIdentityNeeded,
         });
       }
 
@@ -1753,9 +1961,23 @@ export const chatPublicAssistant = onRequest(
 
       const missingRequired = missingFields(mergedProfile, REQUIRED_FIELDS);
       const missingPreferred = missingFields(mergedProfile, PREFERRED_FIELDS);
-      let stage = deriveIntakeStage(session, mergedProfile, missingRequired, missingPreferred);
+      const chemicalIdentityNeeded = needsChemicalIdentity(mergedProfile);
+      let stage = deriveIntakeStage(session, mergedProfile, missingRequired, missingPreferred, chemicalIdentityNeeded);
+      const missingFieldsForUi = chemicalIdentityNeeded ? [...missingRequired, 'chemicalIdentity'] : missingRequired;
 
-      const readyForEmail = CORE_FIELDS.every((field) => !missingRequired.includes(field)) && missingRequired.includes('email');
+      logger.info('intake_progress_debug', {
+        sessionId,
+        stage,
+        missingRequired,
+        chemicalIdentityNeeded,
+        parsedChemicalName: asString(parsedHints.chemicalName),
+        parsedChemicalIdentity: asString(parsedHints.chemicalIdentity),
+        mergedChemicalName: asString(mergedProfile.chemicalName),
+        mergedChemicalIdentity: asString(mergedProfile.chemicalIdentity),
+      });
+
+      const readyForEmail =
+        !chemicalIdentityNeeded && CORE_FIELDS.every((field) => !missingRequired.includes(field)) && missingRequired.includes('email');
 
       let completed = false;
       let rfqId = asString(session.rfqId);
@@ -1766,7 +1988,7 @@ export const chatPublicAssistant = onRequest(
         preferencePromptIncrement = 1;
       }
 
-      if (missingRequired.length === 0 && (aiCompletionSignal || stage === 'ready_for_confirmation')) {
+      if (!chemicalIdentityNeeded && missingRequired.length === 0 && (aiCompletionSignal || stage === 'ready_for_confirmation')) {
         const completion = await finalizeRfqIfReady({
           sessionRef,
           session: {
@@ -1782,7 +2004,7 @@ export const chatPublicAssistant = onRequest(
       }
 
       const clarificationField = findClarificationField(requiredFieldConfidences, mergedProfile);
-      const clarificationNeeded = Boolean(clarificationField) && !completed && missingRequired.length === 0;
+      const clarificationNeeded = Boolean(clarificationField) && !completed && missingRequired.length === 0 && !chemicalIdentityNeeded;
 
       const assistantReply =
         stage === 'completed'
@@ -1835,7 +2057,7 @@ export const chatPublicAssistant = onRequest(
           sessionRef,
           context,
           mergedProfile: profileForSave,
-          missingRequired,
+          missingRequired: missingFieldsForUi,
           stage,
           assistantReply,
           requiredFieldConfidences,
@@ -1846,7 +2068,7 @@ export const chatPublicAssistant = onRequest(
       await sessionRef.set(
         {
           profile: profileForSave,
-          missingFields: missingRequired,
+          missingFields: missingFieldsForUi,
           missingRequired,
           missingPreferred,
           updatedAt: now,
@@ -1870,6 +2092,7 @@ export const chatPublicAssistant = onRequest(
         sessionId,
         stage,
         missingRequired,
+        chemicalIdentityNeeded,
         missingPreferred,
         completeness: profileCompleteness(mergedProfile),
         memoryMode: context.mode,
@@ -1886,7 +2109,7 @@ export const chatPublicAssistant = onRequest(
           quickReplies: quickChoices,
         },
         profile: profileForSave,
-        missingFields: missingRequired,
+        missingFields: missingFieldsForUi,
         missingRequired,
         missingPreferred,
         intakeStage: stage,
@@ -1900,6 +2123,7 @@ export const chatPublicAssistant = onRequest(
         requiredFieldConfidences,
         clarificationNeeded,
         clarificationField,
+        chemicalIdentityNeeded,
       });
     } catch (error) {
       logger.error('[chatPublicAssistant] failed', { sessionId, error: error?.message || String(error) });
