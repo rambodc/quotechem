@@ -71,6 +71,10 @@ const LOW_CONFIDENCE_THRESHOLD = Number.parseFloat(process.env.REQUIRED_FIELD_CO
 const CONTEXT_TOKEN_SOFT_LIMIT = Number.parseInt(process.env.OPENAI_CONTEXT_TOKEN_SOFT_LIMIT || '9000', 10);
 const CONTEXT_RECENT_TURNS = Number.parseInt(process.env.OPENAI_CONTEXT_RECENT_TURNS || '12', 10);
 const CONTEXT_MAX_MESSAGES = Number.parseInt(process.env.OPENAI_CONTEXT_MAX_MESSAGES || '1200', 10);
+const EMAIL_PROVIDER_CONFIDENCE_THRESHOLD = Number.parseFloat(
+  process.env.EMAIL_PROVIDER_CONFIDENCE_THRESHOLD || String(LOW_CONFIDENCE_THRESHOLD)
+);
+const EMAIL_BRAND_LOGO_URL = asString(process.env.EMAIL_BRAND_LOGO_URL) || 'https://quotechemfb.web.app/assets/quotechem-logo.png';
 
 const KNOWN_CITY_HINTS = {
   calgary: { locationCity: 'Calgary', locationStateProvince: 'Alberta', locationCountry: 'Canada' },
@@ -1003,20 +1007,286 @@ function buildSummaryItems(profile) {
   ].filter(([, value]) => asString(value));
 }
 
-function buildCustomerEmail(profile) {
+function shouldUseEmail1Ai() {
+  return String(process.env.EMAIL1_AI_ENABLED || 'false').toLowerCase() === 'true';
+}
+
+function getEmailModel() {
+  return process.env.OPENAI_EMAIL_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+}
+
+function buildFallbackEmailSummary(profile) {
+  const quantity = asString(profile.quantity) || asString(profile.quantityRaw) || 'your requested quantity';
+  const chemical = asString(profile.chemicalName) || 'your requested chemical';
+  const destination = [profile.locationCity, profile.locationStateProvince, profile.locationCountry].filter(Boolean).join(', ') || 'your destination';
+
+  return `We received your request for ${quantity} of ${chemical} to ${destination}. Our team is preparing supplier outreach and will follow up with quote options shortly.`;
+}
+
+function canShowProviderExamples(profile, requiredFieldConfidences = {}) {
+  if (!asString(profile.chemicalName)) {
+    return { include: false, reason: 'missing_chemical_name' };
+  }
+  if (!asString(profile.locationCity)) {
+    return { include: false, reason: 'missing_location_city' };
+  }
+  if (!asString(profile.locationStateProvince) && !asString(profile.locationCountry)) {
+    return { include: false, reason: 'missing_location_region' };
+  }
+
+  const confidenceChecks = ['chemicalName', 'locationCity'];
+  if (asString(profile.locationStateProvince)) confidenceChecks.push('locationStateProvince');
+  if (!asString(profile.locationStateProvince) && asString(profile.locationCountry)) confidenceChecks.push('locationCountry');
+
+  for (const field of confidenceChecks) {
+    const confidence = requiredFieldConfidences?.[field];
+    if (typeof confidence === 'number' && confidence < EMAIL_PROVIDER_CONFIDENCE_THRESHOLD) {
+      return { include: false, reason: `low_confidence_${field}` };
+    }
+  }
+
+  return { include: true, reason: 'included' };
+}
+
+function normalizeEmailProviderExamples(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .slice(0, 3)
+    .map((item) => ({
+      name: asString(item?.name).slice(0, 120),
+      city: asString(item?.city).slice(0, 80),
+      state_or_province: asString(item?.state_or_province).slice(0, 80),
+      why_relevant: asString(item?.why_relevant).slice(0, 240),
+    }))
+    .filter((item) => item.name && item.why_relevant);
+}
+
+async function callOpenAIForEmail1({ profile, includeProviderExamples }) {
+  const fallbackSummary = buildFallbackEmailSummary(profile);
+  const model = getEmailModel();
+  const aiEnabled = shouldUseEmail1Ai();
+  if (!aiEnabled) {
+    return {
+      shortSummary: fallbackSummary,
+      providerExamples: [],
+      aiGenerated: false,
+      model: 'email-ai-disabled',
+      error: '',
+    };
+  }
+
+  const apiKey = readSecret(OPENAI_API_KEY);
+  if (!apiKey) {
+    return {
+      shortSummary: fallbackSummary,
+      providerExamples: [],
+      aiGenerated: false,
+      model: 'email-ai-missing-key',
+      error: 'Missing OPENAI_API_KEY',
+    };
+  }
+
+  const payload = {
+    chemicalName: asString(profile.chemicalName),
+    quantity: asString(profile.quantity) || asString(profile.quantityRaw),
+    locationCity: asString(profile.locationCity),
+    locationStateProvince: asString(profile.locationStateProvince),
+    locationCountry: asString(profile.locationCountry),
+    packagingPreference: asString(profile.packagingPreference),
+    gradeSpec: asString(profile.gradeSpec),
+    neededBy: asString(profile.neededBy),
+    frequency: asString(profile.frequency),
+    specNotes: asString(profile.specNotes),
+  };
+
+  const prompt = [
+    'Generate a short customer email section for a chemical RFQ acknowledgment.',
+    'Return strict JSON with keys: short_summary, provider_examples.',
+    'short_summary: 2-3 sentences, concise, professional, no hype, no guarantees.',
+    'provider_examples: array with max 3 objects. Each object keys:',
+    'name, city, state_or_province, why_relevant.',
+    includeProviderExamples
+      ? 'Provider examples may be hypothetical suggestions near the customer location, and must avoid claiming confirmed stock or pricing.'
+      : 'Set provider_examples to an empty array.',
+    'Do not include markdown. Do not include extra keys.',
+    `RFQ profile JSON: ${JSON.stringify(payload)}`,
+  ].join('\n');
+
+  try {
+    const response = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You write safe, concise procurement email copy. Never promise final pricing, availability, regulatory approval, or guaranteed supplier fit.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const failureText = await response.text();
+      throw new Error(`OpenAI request failed: ${response.status} ${failureText}`);
+    }
+
+    const data = await response.json();
+    const raw = data?.choices?.[0]?.message?.content || '{}';
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = {};
+    }
+
+    const shortSummary = asString(parsed?.short_summary).slice(0, 500) || fallbackSummary;
+    const providerExamples = includeProviderExamples ? normalizeEmailProviderExamples(parsed?.provider_examples) : [];
+
+    return {
+      shortSummary,
+      providerExamples,
+      aiGenerated: true,
+      model,
+      error: '',
+    };
+  } catch (error) {
+    return {
+      shortSummary: fallbackSummary,
+      providerExamples: [],
+      aiGenerated: false,
+      model,
+      error: asString(error?.message || String(error)),
+    };
+  }
+}
+
+function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
+  const safeTitle = escapeHtml(title);
+  const safePreheader = escapeHtml(preheader);
+  const logoUrl = escapeHtml(EMAIL_BRAND_LOGO_URL);
+
+  const html = [
+    '<!doctype html>',
+    '<html lang="en">',
+    '<head>',
+    '<meta charset="utf-8" />',
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `<title>${safeTitle}</title>`,
+    '</head>',
+    '<body style="margin:0;padding:0;background:#f3f6fb;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;">',
+    `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${safePreheader}</div>`,
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f6fb;padding:22px 10px;">',
+    '<tr><td align="center">',
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border-radius:16px;border:1px solid #dbe7ff;overflow:hidden;">',
+    '<tr><td style="padding:18px 22px;background:#0f2a56;">',
+    `<img src="${logoUrl}" alt="QuoteChem" style="display:block;height:34px;width:auto;max-width:180px;" />`,
+    '</td></tr>',
+    `<tr><td style="padding:24px 22px 10px;"><h1 style="margin:0;font-size:24px;line-height:1.3;color:#0f172a;">${safeTitle}</h1></td></tr>`,
+    `<tr><td style="padding:0 22px 18px;">${contentHtml}</td></tr>`,
+    '<tr><td style="padding:16px 22px;background:#f8fafc;border-top:1px solid #e2e8f0;">',
+    '<p style="margin:0 0 8px;font-size:12px;line-height:1.45;color:#475569;">QuoteChem Procurement Concierge</p>',
+    '<p style="margin:0;font-size:12px;line-height:1.45;color:#64748b;">Information in this email is provided for quote preparation and should be confirmed before purchase.</p>',
+    '</td></tr>',
+    '</table>',
+    '</td></tr>',
+    '</table>',
+    '</body>',
+    '</html>',
+  ].join('');
+
+  const text = [
+    title,
+    '',
+    preheader,
+    '',
+    contentText,
+    '',
+    'QuoteChem Procurement Concierge',
+    'Information in this email is provided for quote preparation and should be confirmed before purchase.',
+  ].join('\n');
+
+  return { html, text };
+}
+
+async function buildCustomerEmail(profile, requiredFieldConfidences = {}) {
   const chemical = asString(profile.chemicalName) || 'Chemical Request';
   const city = asString(profile.locationCity) || 'your destination';
   const subject = `QuoteChem Request Received — ${chemical} to ${city}`;
-  const summaryRows = buildSummaryItems(profile)
-    .map(([label, value]) => `- ${label}: ${value}`)
-    .join('\n');
 
-  const text = [
+  const providerDecision = canShowProviderExamples(profile, requiredFieldConfidences);
+  const aiContent = await callOpenAIForEmail1({
+    profile,
+    includeProviderExamples: providerDecision.include,
+  });
+
+  const summaryItems = buildSummaryItems(profile);
+  const summaryRows = summaryItems.map(([label, value]) => `- ${label}: ${value}`).join('\n');
+  const htmlRows = summaryItems
+    .map(([label, value]) => `<tr><td style="padding:6px 10px;border:1px solid #d1d5db"><strong>${escapeHtml(label)}</strong></td><td style="padding:6px 10px;border:1px solid #d1d5db">${escapeHtml(value)}</td></tr>`)
+    .join('');
+
+  const providerExamples = providerDecision.include ? aiContent.providerExamples : [];
+  const providerExamplesIncluded = providerExamples.length > 0;
+  const providerReason = providerExamplesIncluded
+    ? 'included'
+    : providerDecision.include
+      ? aiContent.error
+        ? 'ai_generation_failed'
+        : 'ai_returned_none'
+      : providerDecision.reason;
+
+  const providerHtml = providerExamplesIncluded
+    ? [
+        '<h3 style="margin:18px 0 8px;font-size:17px;color:#0f172a;">Nearby Provider Examples</h3>',
+        '<p style="margin:0 0 8px;font-size:14px;line-height:1.55;color:#334155;">Provider examples are suggestions to verify; availability not confirmed.</p>',
+        '<ul style="padding-left:20px;margin:8px 0 0;">',
+        ...providerExamples.map((item) => {
+          const location = [item.city, item.state_or_province].filter(Boolean).join(', ');
+          return `<li style="margin:0 0 8px;"><strong>${escapeHtml(item.name)}</strong>${location ? ` (${escapeHtml(location)})` : ''}: ${escapeHtml(item.why_relevant)}</li>`;
+        }),
+        '</ul>',
+      ].join('')
+    : '';
+
+  const providerText = providerExamplesIncluded
+    ? [
+        'Nearby provider examples (suggestions to verify; availability not confirmed):',
+        ...providerExamples.map((item) => {
+          const location = [item.city, item.state_or_province].filter(Boolean).join(', ');
+          return `- ${item.name}${location ? ` (${location})` : ''}: ${item.why_relevant}`;
+        }),
+      ].join('\n')
+    : '';
+
+  const contentHtml = [
+    '<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#1e293b;">Thanks for your request. We received your RFQ and are contacting suppliers now.</p>',
+    `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#1e293b;">${escapeHtml(aiContent.shortSummary)}</p>`,
+    '<h3 style="margin:14px 0 8px;font-size:17px;color:#0f172a;">Request Summary</h3>',
+    `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:14px;color:#0f172a;">${htmlRows}</table>`,
+    providerHtml,
+    '<h3 style="margin:18px 0 8px;font-size:17px;color:#0f172a;">What Happens Next</h3>',
+    '<ul style="padding-left:20px;margin:8px 0;"><li style="margin:0 0 6px;">We are reaching out to 3-5 verified suppliers.</li><li style="margin:0;">You will receive quote options shortly by email.</li></ul>',
+    '<p style="margin:10px 0 0;font-size:13px;line-height:1.55;color:#64748b;"><em>Final pricing depends on grade, packaging, freight, and lead time.</em></p>',
+  ].join('');
+
+  const contentText = [
     'Thanks for your request. We received your RFQ and are contacting suppliers now.',
+    '',
+    aiContent.shortSummary,
     '',
     'Request summary:',
     summaryRows,
-    '',
+    providerText ? `\n${providerText}\n` : '',
     'What happens next:',
     '- We are reaching out to 3-5 verified suppliers.',
     '- You will receive quote options shortly by email.',
@@ -1024,21 +1294,25 @@ function buildCustomerEmail(profile) {
     'Final pricing depends on grade, packaging, freight, and lead time.',
   ].join('\n');
 
-  const htmlRows = buildSummaryItems(profile)
-    .map(([label, value]) => `<tr><td style="padding:6px 10px;border:1px solid #d1d5db"><strong>${escapeHtml(label)}</strong></td><td style="padding:6px 10px;border:1px solid #d1d5db">${escapeHtml(value)}</td></tr>`)
-    .join('');
+  const shell = buildEmailBrandShell({
+    title: 'QuoteChem Request Received',
+    preheader: `We received your ${chemical} RFQ and started supplier outreach.`,
+    contentHtml,
+    contentText,
+  });
 
-  const html = [
-    '<h2>QuoteChem Request Received</h2>',
-    '<p>Thanks for your request. We received your RFQ and are contacting suppliers now.</p>',
-    '<h3>Request Summary</h3>',
-    `<table style="border-collapse:collapse">${htmlRows}</table>`,
-    '<p><strong>What happens next:</strong></p>',
-    '<ul><li>We are reaching out to 3-5 verified suppliers.</li><li>You will receive quote options shortly by email.</li></ul>',
-    '<p><em>Final pricing depends on grade, packaging, freight, and lead time.</em></p>',
-  ].join('');
-
-  return { subject, text, html };
+  return {
+    subject,
+    text: shell.text,
+    html: shell.html,
+    meta: {
+      aiGenerated: aiContent.aiGenerated,
+      aiModel: aiContent.model,
+      aiError: aiContent.error,
+      providerExamplesIncluded,
+      providerExamplesReason: providerReason,
+    },
+  };
 }
 
 function buildOpsEmail(profile, sessionId, rfqId, sizeBucket) {
@@ -1117,8 +1391,25 @@ async function finalizeRfqIfReady({ sessionRef, session, profile, history }) {
     { merge: true }
   );
 
-  const customerEmail = buildCustomerEmail(profile);
+  const customerEmail = await buildCustomerEmail(profile, currentSession?.ai?.requiredFieldConfidences || {});
   const opsEmail = buildOpsEmail(profile, asString(currentSession.sessionId) || asString(session.sessionId), rfqId, profile.sizeBucket);
+
+  logger.info('email1_ai_generated', {
+    rfqId,
+    sessionId: currentSession.sessionId || session.sessionId || '',
+    enabled: shouldUseEmail1Ai(),
+    generated: Boolean(customerEmail?.meta?.aiGenerated),
+    model: asString(customerEmail?.meta?.aiModel) || 'unknown',
+    fallbackUsed: !customerEmail?.meta?.aiGenerated,
+    error: asString(customerEmail?.meta?.aiError),
+  });
+
+  logger.info('email1_provider_examples_included', {
+    rfqId,
+    sessionId: currentSession.sessionId || session.sessionId || '',
+    included: Boolean(customerEmail?.meta?.providerExamplesIncluded),
+    reason: asString(customerEmail?.meta?.providerExamplesReason) || 'unknown',
+  });
 
   let customerMessageId = '';
   let opsMessageId = '';
@@ -1621,7 +1912,7 @@ export const sendTestEmail = onRequest(
   {
     region: REGION,
     timeoutSeconds: 60,
-    secrets: [SENDGRID_API_KEY, QUOTECHEM_FROM_EMAIL],
+    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY, QUOTECHEM_FROM_EMAIL],
   },
   async (req, res) => {
     if (preflight(req, res)) return;
@@ -1648,7 +1939,29 @@ export const sendTestEmail = onRequest(
         },
       };
 
-      const selected = templates[template] || templates.basic;
+      let selected = templates[template] || templates.basic;
+      if (template === 'email1_preview') {
+        selected = await buildCustomerEmail(
+          {
+            chemicalName: 'Sodium Hydroxide',
+            quantity: '20,000 kg',
+            locationCity: 'Houston',
+            locationStateProvince: 'Texas',
+            locationCountry: 'United States',
+            packagingPreference: 'totes',
+            gradeSpec: 'industrial',
+            neededBy: 'ASAP',
+            frequency: 'one_time',
+            specNotes: 'COA preferred',
+          },
+          {
+            chemicalName: 1,
+            locationCity: 1,
+            locationStateProvince: 1,
+          }
+        );
+      }
+
       await sendEmail({
         toEmail: targetEmail,
         fromEmail,
@@ -1658,7 +1971,8 @@ export const sendTestEmail = onRequest(
       });
 
       setCors(res);
-      res.status(200).json({ ok: true, sent: true, template: template in templates ? template : 'basic' });
+      const knownTemplate = template in templates || template === 'email1_preview';
+      res.status(200).json({ ok: true, sent: true, template: knownTemplate ? template : 'basic' });
     } catch (error) {
       logger.error('[sendTestEmail] failed', { targetEmail, error: error?.message || String(error) });
       return jsonError(res, 500, 'Failed to send test email');
