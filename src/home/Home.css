@@ -113,6 +113,13 @@
   justify-items: center;
 }
 
+.debug-badge {
+  margin: 0;
+  font-size: 0.68rem;
+  color: #7fb4dd;
+  opacity: 0.85;
+}
+
 .assistant-display {
   background: rgba(15, 23, 42, 0.4);
   border-radius: 16px;

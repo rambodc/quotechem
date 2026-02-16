@@ -9,6 +9,7 @@ const ROTATING_HEADLINES = [
   'Quotes in Minutes, Not Days.',
 ];
 const SESSION_STORAGE_KEY = 'quotechem.publicSessionId';
+const SHOW_DEBUG_BADGE = String(process.env.REACT_APP_DEBUG_CHAT_HINTS || 'false').toLowerCase() === 'true';
 
 function readStoredSessionId() {
   try {
@@ -115,6 +116,8 @@ export default function Home() {
   const [showDetails, setShowDetails] = useState(false);
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const [headlineVisible, setHeadlineVisible] = useState(true);
+  const [memoryMode, setMemoryMode] = useState('full');
+  const [clarificationNeeded, setClarificationNeeded] = useState(false);
 
   const quickChoices = useMemo(() => assistantMessage.quickReplies || [], [assistantMessage]);
   const summaryRows = useMemo(() => buildSummaryRows(profile), [profile]);
@@ -143,6 +146,8 @@ export default function Home() {
     setMissingRequired(Array.isArray(data?.session?.missingRequired) ? data.session.missingRequired : []);
     setCompleted(Boolean(data?.session?.completed));
     setRfqId(data?.session?.rfqId || '');
+    setMemoryMode(data?.session?.memoryMode || 'full');
+    setClarificationNeeded(Boolean(data?.session?.clarificationNeeded));
   };
 
   const startFreshSession = async () => {
@@ -237,6 +242,8 @@ export default function Home() {
       setMissingRequired(Array.isArray(data.missingRequired) ? data.missingRequired : []);
       setCompleted(Boolean(data.completed));
       setRfqId(data.rfqId || '');
+      setMemoryMode(data.memoryMode || 'full');
+      setClarificationNeeded(Boolean(data.clarificationNeeded));
     } catch (err) {
       setError(err?.message || 'Failed to send message.');
     } finally {
@@ -264,6 +271,11 @@ export default function Home() {
       </div>
 
       <div className="chat-card">
+        {SHOW_DEBUG_BADGE ? (
+          <p className="debug-badge">
+            memory: {memoryMode} {clarificationNeeded ? '• clarify' : ''}
+          </p>
+        ) : null}
         <div key={assistantMessage.id} className="assistant-display">
           <p>{assistantMessage.content}</p>
         </div>

@@ -56,6 +56,22 @@ const QUICK_CHOICES = {
   neededBy: ['ASAP', 'This week', 'This month'],
 };
 
+const FACT_FIELDS = [
+  ...REQUIRED_FIELDS,
+  ...PREFERRED_FIELDS,
+  'companyName',
+  'contactName',
+  'quantityRaw',
+  'quantityValue',
+  'quantityUnitNormalized',
+  'sizeBucket',
+];
+
+const LOW_CONFIDENCE_THRESHOLD = Number.parseFloat(process.env.REQUIRED_FIELD_CONFIDENCE_THRESHOLD || '0.65');
+const CONTEXT_TOKEN_SOFT_LIMIT = Number.parseInt(process.env.OPENAI_CONTEXT_TOKEN_SOFT_LIMIT || '9000', 10);
+const CONTEXT_RECENT_TURNS = Number.parseInt(process.env.OPENAI_CONTEXT_RECENT_TURNS || '12', 10);
+const CONTEXT_MAX_MESSAGES = Number.parseInt(process.env.OPENAI_CONTEXT_MAX_MESSAGES || '1200', 10);
+
 const KNOWN_CITY_HINTS = {
   calgary: { locationCity: 'Calgary', locationStateProvince: 'Alberta', locationCountry: 'Canada' },
   edmonton: { locationCity: 'Edmonton', locationStateProvince: 'Alberta', locationCountry: 'Canada' },
@@ -117,6 +133,20 @@ function normalizeSessionId(value) {
   const v = asString(value);
   if (!v) return '';
   return v.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+}
+
+function shouldUseMemoryV2() {
+  return String(process.env.CONCIERGE_MEMORY_V2 || 'true').toLowerCase() === 'true';
+}
+
+function estimateTokensFromText(input) {
+  const text = asString(input);
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+function estimateTokensFromMessages(messages) {
+  return (Array.isArray(messages) ? messages : []).reduce((total, item) => total + estimateTokensFromText(item.content), 0);
 }
 
 function normalizeCountry(input) {
@@ -533,9 +563,11 @@ function buildSystemPrompt() {
     'Use conversation history and profile state; do not forget earlier user details in the same session.',
     'Never promise final pricing or supplier guarantees.',
     'Prefer short responses.',
-    'Return strict JSON only with keys: assistant_reply, extracted, confidence, next_missing_required, next_missing_preferred.',
+    'Return strict JSON only with keys: assistant_reply, extracted, confidence, next_missing_required, next_missing_preferred, field_confidence, completion_signal.',
     'allowed extracted keys:',
     PROFILE_FIELDS.join(', '),
+    'field_confidence must map field -> [0,1] confidence when possible.',
+    'completion_signal true when you believe required RFQ fields are complete.',
   ].join(' ');
 }
 
@@ -546,7 +578,7 @@ function normalizeMissingArray(input, allowed) {
     .filter((field) => allowed.includes(field));
 }
 
-async function callOpenAI({ userMessage, history, profile, stage }) {
+async function callOpenAI({ userMessage, context, profile, stage }) {
   const apiKey = readSecret(OPENAI_API_KEY);
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
@@ -557,22 +589,22 @@ async function callOpenAI({ userMessage, history, profile, stage }) {
       confidence: 0.2,
       next_missing_required: [],
       next_missing_preferred: [],
+      field_confidence: {},
+      completion_signal: false,
       model: 'fallback-no-openai-key',
     };
   }
 
-  const historyText = history
-    .slice(-30)
-    .map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.content}`)
-    .join('\n');
-
   const prompt = [
     'Current stage:',
     stage,
+    'Memory mode:',
+    context?.mode || 'full',
+    'Conversation token estimate:',
+    String(context?.tokenEstimate || 0),
     'Current intake profile JSON:',
     JSON.stringify(profile || {}),
-    'Conversation history:',
-    historyText || '(none)',
+    context?.historyText || 'Conversation history:\n(none)',
     'Latest user message:',
     userMessage,
   ].join('\n');
@@ -617,6 +649,8 @@ async function callOpenAI({ userMessage, history, profile, stage }) {
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
     next_missing_required: normalizeMissingArray(parsed.next_missing_required, REQUIRED_FIELDS),
     next_missing_preferred: normalizeMissingArray(parsed.next_missing_preferred, PREFERRED_FIELDS),
+    field_confidence: normalizeFieldConfidenceMap(parsed.field_confidence || {}),
+    completion_signal: Boolean(parsed.completion_signal),
     model,
   };
 }
@@ -654,6 +688,17 @@ async function sendEmail({ toEmail, fromEmail, subject, text, html }) {
   };
 }
 
+function mapMessageDoc(docSnap) {
+  const data = docSnap.data() || {};
+  return {
+    id: docSnap.id,
+    role: data.role || 'user',
+    content: data.content || '',
+    quickReplies: Array.isArray(data.quickReplies) ? data.quickReplies : [],
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
+  };
+}
+
 async function loadRecentMessages(sessionId, limit = 60) {
   const snap = await db
     .collection(SESSION_COLLECTION)
@@ -663,16 +708,65 @@ async function loadRecentMessages(sessionId, limit = 60) {
     .limitToLast(limit)
     .get();
 
-  return snap.docs.map((docSnap) => {
-    const data = docSnap.data() || {};
+  return snap.docs.map(mapMessageDoc);
+}
+
+async function loadAllMessages(sessionId, maxMessages = CONTEXT_MAX_MESSAGES) {
+  const snap = await db
+    .collection(SESSION_COLLECTION)
+    .doc(sessionId)
+    .collection('messages')
+    .orderBy('createdAt', 'asc')
+    .limit(maxMessages)
+    .get();
+
+  return snap.docs.map(mapMessageDoc);
+}
+
+function compactHistoryText(messages, label = 'Conversation history') {
+  return [
+    `${label}:`,
+    messages.map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.content}`).join('\n') || '(none)',
+  ].join('\n');
+}
+
+async function buildConversationContext({ sessionId, sessionDoc, tokenBudget = CONTEXT_TOKEN_SOFT_LIMIT }) {
+  const fullMessages = await loadAllMessages(sessionId);
+  const fullTokenEstimate = estimateTokensFromMessages(fullMessages);
+  const hasSummary = asString(sessionDoc?.memory?.summary);
+  const factsSnapshot = sessionDoc?.profile || {};
+
+  if (fullTokenEstimate <= tokenBudget || !shouldUseMemoryV2()) {
     return {
-      id: docSnap.id,
-      role: data.role || 'user',
-      content: data.content || '',
-      quickReplies: Array.isArray(data.quickReplies) ? data.quickReplies : [],
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
+      mode: 'full',
+      fullMessages,
+      recentMessages: fullMessages.slice(-CONTEXT_RECENT_TURNS),
+      historyText: compactHistoryText(fullMessages),
+      summaryText: hasSummary || '',
+      tokenEstimate: fullTokenEstimate,
+      factsSnapshot,
     };
-  });
+  }
+
+  const recentMessages = fullMessages.slice(-CONTEXT_RECENT_TURNS);
+  const summaryText = hasSummary || '(summary unavailable)';
+  const historyText = [
+    'Conversation summary:',
+    summaryText,
+    compactHistoryText(recentMessages, 'Recent turns'),
+    'Known facts snapshot:',
+    JSON.stringify(factsSnapshot),
+  ].join('\n');
+
+  return {
+    mode: 'summarized',
+    fullMessages,
+    recentMessages,
+    historyText,
+    summaryText,
+    tokenEstimate: fullTokenEstimate,
+    factsSnapshot,
+  };
 }
 
 async function ensureSession(sessionId, metadata = {}) {
@@ -699,6 +793,13 @@ async function ensureSession(sessionId, metadata = {}) {
       completed: false,
       email1Sent: false,
       email1Pending: false,
+      memory: {
+        summary: '',
+        modeLastUsed: 'full',
+      },
+      ai: {
+        lastCompletionSignal: false,
+      },
       createdAt: now,
       updatedAt: now,
       lastMessageAt: now,
@@ -708,6 +809,176 @@ async function ensureSession(sessionId, metadata = {}) {
   }
 
   return ref;
+}
+
+function normalizeFieldConfidenceMap(input = {}) {
+  const out = {};
+  for (const field of FACT_FIELDS) {
+    const raw = input?.[field];
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      out[field] = Math.max(0, Math.min(1, raw));
+    }
+  }
+  return out;
+}
+
+function buildRequiredFieldConfidences({ requiredFieldConfidences, mergedProfile, baseProfile, aiConfidence }) {
+  const out = {};
+  for (const field of REQUIRED_FIELDS) {
+    if (typeof requiredFieldConfidences?.[field] === 'number') {
+      out[field] = requiredFieldConfidences[field];
+      continue;
+    }
+
+    const changed = asString(baseProfile?.[field]) !== asString(mergedProfile?.[field]);
+    out[field] = changed ? (typeof aiConfidence === 'number' ? aiConfidence : 0.5) : 1;
+  }
+  return out;
+}
+
+function findClarificationField(requiredFieldConfidences, profile) {
+  for (const field of REQUIRED_FIELDS) {
+    if (!asString(profile?.[field])) continue;
+    if ((requiredFieldConfidences?.[field] ?? 1) < LOW_CONFIDENCE_THRESHOLD) return field;
+  }
+  return '';
+}
+
+function normalizedFactValue(field, profile) {
+  const value = profile?.[field];
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return asString(value);
+}
+
+async function upsertFactsFromProfile({
+  sessionRef,
+  previousProfile,
+  nextProfile,
+  fieldConfidences,
+  sourceMessageId,
+  sourceRole = 'user',
+  sourceTurn = 0,
+}) {
+  const factsRef = sessionRef.collection('facts');
+  const changedFields = FACT_FIELDS.filter(
+    (field) => normalizedFactValue(field, previousProfile) !== normalizedFactValue(field, nextProfile)
+  );
+
+  if (changedFields.length === 0) return;
+
+  const activeSnap = await factsRef.where('status', '==', 'active').get();
+  const activeByField = {};
+  activeSnap.docs.forEach((docSnap) => {
+    const data = docSnap.data() || {};
+    const field = asString(data.field);
+    if (field && !activeByField[field]) activeByField[field] = docSnap;
+  });
+
+  for (const field of changedFields) {
+    const nextValue = normalizedFactValue(field, nextProfile);
+    if (!nextValue) continue;
+
+    const confidence = typeof fieldConfidences?.[field] === 'number' ? fieldConfidences[field] : 0.5;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const prior = activeByField[field];
+    const newFactRef = factsRef.doc();
+
+    if (prior) {
+      const priorData = prior.data() || {};
+      if (asString(priorData.normalizedValue) === nextValue) {
+        await prior.ref.set(
+          {
+            value: nextValue,
+            normalizedValue: nextValue,
+            confidence,
+            sourceMessageId: sourceMessageId || '',
+            sourceRole,
+            sourceTurn,
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+        continue;
+      }
+
+      await prior.ref.set(
+        {
+          status: 'superseded',
+          supersededByFactId: newFactRef.id,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+    }
+
+    await newFactRef.set({
+      field,
+      value: nextValue,
+      normalizedValue: nextValue,
+      confidence,
+      sourceMessageId: sourceMessageId || '',
+      sourceRole,
+      sourceTurn,
+      isRequired: REQUIRED_FIELDS.includes(field),
+      status: 'active',
+      supersededByFactId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+async function summarizeConversationIfNeeded({
+  sessionRef,
+  context,
+  mergedProfile,
+  missingRequired,
+  stage,
+  assistantReply,
+  requiredFieldConfidences,
+  aiCompletionSignal,
+}) {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const summaryBase =
+    context?.mode === 'summarized' && asString(context?.summaryText)
+      ? asString(context.summaryText)
+      : context?.fullMessages
+          ?.slice(-16)
+          .map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.content}`)
+          .join('\n') || '';
+
+  const summary = [
+    'Stable summary:',
+    summaryBase,
+    'Current profile:',
+    JSON.stringify({
+      chemicalName: mergedProfile.chemicalName || '',
+      quantity: mergedProfile.quantity || '',
+      locationCity: mergedProfile.locationCity || '',
+      locationStateProvince: mergedProfile.locationStateProvince || '',
+      locationCountry: mergedProfile.locationCountry || '',
+      email: mergedProfile.email || '',
+    }),
+    `Missing required: ${missingRequired.join(', ') || 'none'}`,
+    `Stage: ${stage}`,
+    `Assistant last reply: ${assistantReply}`,
+  ].join('\n');
+
+  await sessionRef.set(
+    {
+      memory: {
+        summary,
+        modeLastUsed: context?.mode || 'full',
+        updatedAt: now,
+      },
+      ai: {
+        lastCompletionSignal: Boolean(aiCompletionSignal),
+        requiredFieldConfidences,
+        updatedAt: now,
+      },
+    },
+    { merge: true }
+  );
 }
 
 function escapeHtml(text) {
@@ -1066,6 +1337,11 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
         readyForEmail: CORE_FIELDS.every((field) => !missingRequired.includes(field)) && missingRequired.includes('email'),
         completed: stage === 'completed' || Boolean(session.completed),
         rfqId: asString(session.rfqId),
+        memoryMode: asString(session?.memory?.modeLastUsed) || 'full',
+        aiCompletionSignal: Boolean(session?.ai?.lastCompletionSignal),
+        requiredFieldConfidences: session?.ai?.requiredFieldConfidences || {},
+        clarificationNeeded: false,
+        clarificationField: '',
       },
     });
   } catch (error) {
@@ -1096,13 +1372,15 @@ export const chatPublicAssistant = onRequest(
       const session = sessionSnap.data() || {};
       const now = admin.firestore.FieldValue.serverTimestamp();
 
-      await sessionRef.collection('messages').doc().set({
+      const userMessageRef = sessionRef.collection('messages').doc();
+      await userMessageRef.set({
         role: 'user',
         content: userMessage,
         createdAt: now,
       });
 
-      const history = await loadRecentMessages(sessionId);
+      const context = await buildConversationContext({ sessionId, sessionDoc: session, tokenBudget: CONTEXT_TOKEN_SOFT_LIMIT });
+      const history = context.fullMessages;
       const baseProfile = pickAllowedFields(session.profile || {});
 
       if (containsAbusiveLanguage(userMessage)) {
@@ -1140,6 +1418,11 @@ export const chatPublicAssistant = onRequest(
           completed: false,
           rfqId: asString(session.rfqId),
           quickChoices: [],
+          memoryMode: context.mode,
+          aiCompletionSignal: false,
+          requiredFieldConfidences: {},
+          clarificationNeeded: false,
+          clarificationField: '',
         });
       }
 
@@ -1149,6 +1432,8 @@ export const chatPublicAssistant = onRequest(
         confidence: 0.2,
         next_missing_required: [],
         next_missing_preferred: [],
+        field_confidence: {},
+        completion_signal: false,
         model: 'deterministic-fallback',
       };
 
@@ -1156,7 +1441,7 @@ export const chatPublicAssistant = onRequest(
         try {
           ai = await callOpenAI({
             userMessage,
-            history,
+            context,
             profile: baseProfile,
             stage: asString(baseProfile.intakeStage) || 'collecting_core',
           });
@@ -1167,6 +1452,12 @@ export const chatPublicAssistant = onRequest(
 
       const parsedHints = parseUserHints(userMessage);
       const mergedProfile = mergeProfiles(baseProfile, ai.extracted, parsedHints);
+      const requiredFieldConfidences = buildRequiredFieldConfidences({
+        requiredFieldConfidences: ai.field_confidence,
+        mergedProfile,
+        baseProfile,
+        aiConfidence: ai.confidence,
+      });
       const allowSideAnswer = looksLikeQuestion(userMessage) && Boolean(asString(ai.assistant_reply));
 
       const missingRequired = missingFields(mergedProfile, REQUIRED_FIELDS);
@@ -1178,12 +1469,13 @@ export const chatPublicAssistant = onRequest(
       let completed = false;
       let rfqId = asString(session.rfqId);
       let preferencePromptIncrement = 0;
+      const aiCompletionSignal = Boolean(ai.completion_signal);
 
       if (stage === 'collecting_preferences') {
         preferencePromptIncrement = 1;
       }
 
-      if (stage === 'ready_for_confirmation') {
+      if (missingRequired.length === 0 && (aiCompletionSignal || stage === 'ready_for_confirmation')) {
         const completion = await finalizeRfqIfReady({
           sessionRef,
           session: {
@@ -1198,9 +1490,14 @@ export const chatPublicAssistant = onRequest(
         if (completed) stage = 'completed';
       }
 
+      const clarificationField = findClarificationField(requiredFieldConfidences, mergedProfile);
+      const clarificationNeeded = Boolean(clarificationField) && !completed && missingRequired.length === 0;
+
       const assistantReply =
         stage === 'completed'
           ? `Got it — ${conciseSummary(mergedProfile)}. I\'m sending your confirmation email now. We\'re contacting 3-5 suppliers and will follow up with quotes soon after.`
+          : clarificationNeeded
+            ? `Quick check: ${questionForMissingField(clarificationField).text}`
           : assistantReplyForState({
               stage,
               missingRequired,
@@ -1210,9 +1507,12 @@ export const chatPublicAssistant = onRequest(
               allowSideAnswer,
             });
 
-      const quickChoices = buildQuickChoices(stage, missingRequired, missingPreferred);
+      const quickChoices = clarificationNeeded
+        ? questionForMissingField(clarificationField).quickChoices
+        : buildQuickChoices(stage, missingRequired, missingPreferred);
 
-      await sessionRef.collection('messages').doc().set({
+      const assistantMessageRef = sessionRef.collection('messages').doc();
+      await assistantMessageRef.set({
         role: 'assistant',
         content: assistantReply,
         quickReplies: quickChoices,
@@ -1226,6 +1526,32 @@ export const chatPublicAssistant = onRequest(
         intakeStage: stage,
       };
 
+      await upsertFactsFromProfile({
+        sessionRef,
+        previousProfile: baseProfile,
+        nextProfile: profileForSave,
+        fieldConfidences: {
+          ...ai.field_confidence,
+          ...requiredFieldConfidences,
+        },
+        sourceMessageId: userMessageRef.id,
+        sourceRole: 'user',
+        sourceTurn: Number(session.messageCount || 0) + 1,
+      });
+
+      if (shouldUseMemoryV2()) {
+        await summarizeConversationIfNeeded({
+          sessionRef,
+          context,
+          mergedProfile: profileForSave,
+          missingRequired,
+          stage,
+          assistantReply,
+          requiredFieldConfidences,
+          aiCompletionSignal,
+        });
+      }
+
       await sessionRef.set(
         {
           profile: profileForSave,
@@ -1238,6 +1564,9 @@ export const chatPublicAssistant = onRequest(
           preferencePromptCount: admin.firestore.FieldValue.increment(preferencePromptIncrement),
           completed,
           rfqId: rfqId || null,
+          'memory.modeLastUsed': context.mode,
+          'ai.lastCompletionSignal': aiCompletionSignal,
+          'ai.requiredFieldConfidences': requiredFieldConfidences,
         },
         { merge: true }
       );
@@ -1252,6 +1581,9 @@ export const chatPublicAssistant = onRequest(
         missingRequired,
         missingPreferred,
         completeness: profileCompleteness(mergedProfile),
+        memoryMode: context.mode,
+        clarificationNeeded,
+        clarificationField,
       });
 
       setCors(res);
@@ -1272,6 +1604,11 @@ export const chatPublicAssistant = onRequest(
         completed,
         rfqId,
         quickChoices,
+        memoryMode: context.mode,
+        aiCompletionSignal,
+        requiredFieldConfidences,
+        clarificationNeeded,
+        clarificationField,
       });
     } catch (error) {
       logger.error('[chatPublicAssistant] failed', { sessionId, error: error?.message || String(error) });
