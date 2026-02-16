@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import Home from './home/Home';
+import Home2 from './home/Home2';
 import Login from './auth/Login';
 import ForgotPassword from './auth/ForgotPassword';
 import More from './more/More';
@@ -117,6 +118,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={<Home />} />
+          <Route path="/home2" element={<Home2 />} />
           <Route
             path="/signin"
             element={firebaseUser ? <Navigate to="/more" replace /> : <Login />}

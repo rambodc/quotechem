@@ -51,12 +51,6 @@ const PROFILE_FIELDS = [
   'shippingMode',
 ];
 
-const QUICK_CHOICES = {
-  packagingPreference: ['bags', 'totes', 'drums', 'bulk', 'not sure'],
-  frequency: ['one-time', 'recurring'],
-  neededBy: ['ASAP', 'This week', 'This month'],
-};
-
 const FACT_FIELDS = [
   ...REQUIRED_FIELDS,
   ...PREFERRED_FIELDS,
@@ -695,21 +689,21 @@ function questionForMissingField(field) {
   if (field === 'packagingPreference') {
     return {
       text: 'Packaging preference: bags / totes / drums / bulk?',
-      quickChoices: QUICK_CHOICES.packagingPreference,
+      quickChoices: [],
     };
   }
 
   if (field === 'neededBy') {
     return {
       text: 'When do you need it by? (date or ASAP)',
-      quickChoices: QUICK_CHOICES.neededBy,
+      quickChoices: [],
     };
   }
 
   if (field === 'frequency') {
     return {
       text: 'Is this one-time or recurring?',
-      quickChoices: QUICK_CHOICES.frequency,
+      quickChoices: [],
     };
   }
 
@@ -728,22 +722,6 @@ function conciseSummary(profile) {
   const country = asString(profile.locationCountry);
   const location = [city, state, country].filter(Boolean).join(', ');
   return `${quantity} of ${chemical}${industry ? ` for ${industry}` : ''} to ${location}`;
-}
-
-function buildQuickChoices(stage, missingRequired, missingPreferred) {
-  if (stage === 'collecting_core') {
-    return questionForMissingField(missingRequired[0]).quickChoices;
-  }
-
-  if (stage === 'awaiting_email') return [];
-
-  if (stage === 'collecting_preferences') {
-    const field = missingPreferred.find((item) => PRICE_SENSITIVE_PREFERRED.includes(item));
-    if (!field) return [];
-    return questionForMissingField(field).quickChoices;
-  }
-
-  return [];
 }
 
 function containsAbusiveLanguage(message) {
@@ -2051,9 +2029,7 @@ export const chatPublicAssistant = onRequest(
               allowSideAnswer,
             });
 
-      const quickChoices = clarificationNeeded
-        ? questionForMissingField(clarificationField).quickChoices
-        : buildQuickChoices(stage, missingRequired, missingPreferred);
+      const quickChoices = [];
 
       const assistantMessageRef = sessionRef.collection('messages').doc();
       await assistantMessageRef.set({
