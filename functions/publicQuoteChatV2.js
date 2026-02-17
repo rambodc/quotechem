@@ -14,7 +14,19 @@ const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
 const QUOTECHEM_FROM_EMAIL = defineSecret('QUOTECHEM_FROM_EMAIL');
 
 const REQUIRED_FIELDS = ['chemicalName', 'industryUse', 'quantity', 'deliveryLocation', 'email'];
-const OPTIONAL_FIELDS = ['packagingPreference', 'neededBy', 'frequency', 'specNotes', 'chemicalIdentity'];
+const OPTIONAL_FIELDS = [
+  'packagingPreference',
+  'neededBy',
+  'frequency',
+  'specNotes',
+  'chemicalIdentity',
+  'contactName',
+  'companyName',
+  'phone',
+  'jobTitle',
+  'website',
+  'companyAddress',
+];
 const ALL_EXTRACTION_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS, 'confirm'];
 
 const INITIAL_ASSISTANT_MESSAGE =
@@ -245,6 +257,7 @@ async function callOpenAIExtractionTurnV2({ transcript }) {
     ALL_EXTRACTION_FIELDS.join(', '),
     'Required fields:',
     REQUIRED_FIELDS.join(', '),
+    'Optional fields should be included only if the user explicitly provided them in the transcript.',
     'Set confirm=true only if the user clearly confirms proceeding/submitting.',
     'No markdown. No extra keys.',
     'Transcript:',
@@ -467,6 +480,12 @@ function buildCustomerEmailV2(extracted) {
     ['Quantity', extracted.quantity],
     ['Delivery', extracted.deliveryLocation],
     ['Email', extracted.email],
+    ['Contact Name', extracted.contactName],
+    ['Company Name', extracted.companyName],
+    ['Phone', extracted.phone],
+    ['Job Title', extracted.jobTitle],
+    ['Website', extracted.website],
+    ['Company Address', extracted.companyAddress],
     ['Packaging', extracted.packagingPreference],
     ['Needed By', extracted.neededBy],
     ['Frequency', extracted.frequency],
