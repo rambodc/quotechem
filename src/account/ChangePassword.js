@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
+import React, { useContext, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { updatePassword } from 'firebase/auth';
 import { auth } from '../firebase';
+import { UserContext } from '../App';
+import { accountBaseForRole } from './routeUtils';
 import './CredentialPage.css';
 
 export default function ChangePassword() {
   const navigate = useNavigate();
+  const appUser = useContext(UserContext);
+  const base = useMemo(() => accountBaseForRole(appUser?.role), [appUser?.role]);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -79,7 +83,7 @@ export default function ChangePassword() {
         />
 
         <div className="credential-actions">
-          <button type="button" className="secondary" onClick={() => navigate('/account')}>
+          <button type="button" className="secondary" onClick={() => navigate(base)}>
             Back
           </button>
           <button type="submit" className="primary" disabled={saving}>

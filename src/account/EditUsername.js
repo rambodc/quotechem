@@ -3,6 +3,7 @@ import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc
 import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../App';
 import { db } from '../firebase';
+import { accountBaseForRole } from './routeUtils';
 import './EditUsername.css';
 
 function normalizeUsername(value) {
@@ -16,6 +17,7 @@ function normalizeUsername(value) {
 export default function EditUsername() {
   const navigate = useNavigate();
   const appUser = useContext(UserContext);
+  const base = useMemo(() => accountBaseForRole(appUser?.role), [appUser?.role]);
 
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
@@ -91,7 +93,7 @@ export default function EditUsername() {
       );
 
       setStatus('Username updated.');
-      setTimeout(() => navigate('/account'), 400);
+      setTimeout(() => navigate(base), 400);
     } catch (err) {
       setError(err?.message || 'Unable to save username right now.');
     } finally {
@@ -124,7 +126,7 @@ export default function EditUsername() {
             <small>{valid ? `Saved value: ${normalized}` : 'Minimum 3 valid characters required.'}</small>
 
             <div className="username-actions">
-              <button type="button" className="secondary" onClick={() => navigate('/account')}>
+              <button type="button" className="secondary" onClick={() => navigate(base)}>
                 Cancel
               </button>
               <button type="button" className="primary" disabled={saving || !valid} onClick={save}>

@@ -1,0 +1,176 @@
+.admin-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-head h1,
+.admin-head h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.admin-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kpi-card,
+.panel,
+.row-card {
+  border: 1px solid #d8e5f2;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.kpi-card strong {
+  display: block;
+  font-size: 1.5rem;
+  margin-top: 4px;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+}
+
+.row-card h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.meta {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filters button,
+.filters input,
+.filters select,
+.action-btn,
+.primary-btn,
+.ghost-btn {
+  border: 1px solid #ccdae8;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 9px 11px;
+  font-size: 0.9rem;
+}
+
+.filters button.active {
+  background: #0b5fc0;
+  color: #ffffff;
+  border-color: #0b5fc0;
+}
+
+.table-wrap {
+  overflow: auto;
+  border: 1px solid #d8e5f2;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 840px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid #edf2f7;
+  font-size: 0.88rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  background: #eaf3ff;
+  color: #0b5fc0;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(480px, 100vw);
+  height: 100vh;
+  background: #ffffff;
+  border-left: 1px solid #d8e5f2;
+  box-shadow: -8px 0 24px rgba(15, 23, 42, 0.08);
+  padding: 14px;
+  overflow: auto;
+  z-index: 20;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.kv {
+  display: grid;
+  gap: 6px;
+}
+
+.kv p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.kv span {
+  color: #64748b;
+}
+
+.panel textarea {
+  width: 100%;
+  border: 1px solid #ccdae8;
+  border-radius: 10px;
+  padding: 9px;
+  min-height: 90px;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primary-btn {
+  background: #0b5fc0;
+  color: #ffffff;
+  border-color: #0b5fc0;
+}
+
+@media (max-width: 960px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

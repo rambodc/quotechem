@@ -26,7 +26,7 @@ export default function Login() {
 
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      navigate('/more', { replace: true });
+      navigate('/portal', { replace: true });
     } catch (err) {
       setError(mapLoginError(err));
     } finally {

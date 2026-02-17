@@ -3,21 +3,38 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import Home2 from './home/Home2';
+import Home from './home/Home';
 import Login from './auth/Login';
 import ForgotPassword from './auth/ForgotPassword';
-import More from './more/More';
 import Account from './account/Account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
 import EditUsername from './account/EditUsername';
-import AdminLayout from './layout/AdminLayout';
+import PortalLayout from './layout/PortalLayout';
+import Dashboard from './admin/Dashboard';
+import Leads from './admin/Leads';
+import Customers from './admin/Customers';
+import UserHome from './user/UserHome';
 
 export const UserContext = createContext(null);
+
+function normalizeRole(value) {
+  return String(value || '').toLowerCase() === 'admin' ? 'admin' : 'user';
+}
 
 function ProtectedRoute({ user, checking, children }) {
   if (checking) return null;
   return user ? children : <Navigate to="/signin" replace />;
+}
+
+function AdminRoute({ user, checking, role, children }) {
+  if (checking) return null;
+  if (!user) return <Navigate to="/signin" replace />;
+  return role === 'admin' ? children : <Navigate to="/user/home" replace />;
+}
+
+function PortalRedirect({ role }) {
+  return <Navigate to={role === 'admin' ? '/admin/dashboard' : '/user/home'} replace />;
 }
 
 function App() {
@@ -71,6 +88,7 @@ function App() {
               email: u.email ?? null,
               firstName: '',
               lastName: '',
+              role: 'user',
               username: generatedUsername,
               usernameNormalized: normalizeUsername(generatedUsername),
               primaryAuthUid: u.uid,
@@ -89,6 +107,7 @@ function App() {
             id: u.uid,
             firebaseUid: u.uid,
             email: u.email ?? null,
+            role: normalizeRole(data.role),
             firstName: typeof data.firstName === 'string' ? data.firstName : '',
             lastName: typeof data.lastName === 'string' ? data.lastName : '',
             username: typeof data.username === 'string' ? data.username : finalUsername,
@@ -99,7 +118,7 @@ function App() {
           });
         });
       } catch {
-        setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null });
+        setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, role: 'user' });
       }
     });
 
@@ -110,70 +129,152 @@ function App() {
   }, []);
 
   const contextValue = useMemo(() => appUser, [appUser]);
+  const role = normalizeRole(appUser?.role);
 
   return (
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={<Home2 />} />
+          <Route path="/" element={<Home />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
-          <Route path="/home2" element={<Navigate to="/" replace />} />
           <Route
             path="/signin"
-            element={firebaseUser ? <Navigate to="/more" replace /> : <Login />}
+            element={firebaseUser ? <Navigate to="/portal" replace /> : <Login />}
           />
           <Route
             path="/forgot"
-            element={firebaseUser ? <Navigate to="/more" replace /> : <ForgotPassword />}
+            element={firebaseUser ? <Navigate to="/portal" replace /> : <ForgotPassword />}
           />
 
           <Route
-            path="/more"
+            path="/portal"
             element={
               <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
-                <AdminLayout user={contextValue}>
-                  <More />
-                </AdminLayout>
+                <PortalRedirect role={role} />
               </ProtectedRoute>
             }
           />
+          <Route path="/account" element={<Navigate to="/portal" replace />} />
+          <Route path="/account/*" element={<Navigate to="/portal" replace />} />
+
           <Route
-            path="/account"
+            path="/admin/dashboard"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
-                <AdminLayout user={contextValue}>
+              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
+                <PortalLayout user={contextValue} role="admin">
+                  <Dashboard />
+                </PortalLayout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/leads"
+            element={
+              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
+                <PortalLayout user={contextValue} role="admin">
+                  <Leads />
+                </PortalLayout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/customers"
+            element={
+              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
+                <PortalLayout user={contextValue} role="admin">
+                  <Customers />
+                </PortalLayout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/account"
+            element={
+              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
+                <PortalLayout user={contextValue} role="admin">
                   <Account />
-                </AdminLayout>
-              </ProtectedRoute>
+                </PortalLayout>
+              </AdminRoute>
             }
           />
           <Route
-            path="/account/email"
+            path="/admin/account/email"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
-                <AdminLayout user={contextValue}>
+              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
+                <PortalLayout user={contextValue} role="admin">
                   <ChangeEmail />
-                </AdminLayout>
-              </ProtectedRoute>
+                </PortalLayout>
+              </AdminRoute>
             }
           />
           <Route
-            path="/account/password"
+            path="/admin/account/password"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
-                <AdminLayout user={contextValue}>
+              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
+                <PortalLayout user={contextValue} role="admin">
                   <ChangePassword />
-                </AdminLayout>
+                </PortalLayout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/account/username"
+            element={
+              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
+                <PortalLayout user={contextValue} role="admin">
+                  <EditUsername />
+                </PortalLayout>
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/user/home"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <PortalLayout user={contextValue} role="user">
+                  <UserHome />
+                </PortalLayout>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/account/username"
+            path="/user/account"
             element={
               <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
-                <AdminLayout user={contextValue}>
+                <PortalLayout user={contextValue} role="user">
+                  <Account />
+                </PortalLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/account/email"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <PortalLayout user={contextValue} role="user">
+                  <ChangeEmail />
+                </PortalLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/account/password"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <PortalLayout user={contextValue} role="user">
+                  <ChangePassword />
+                </PortalLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/account/username"
+            element={
+              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+                <PortalLayout user={contextValue} role="user">
                   <EditUsername />
-                </AdminLayout>
+                </PortalLayout>
               </ProtectedRoute>
             }
           />

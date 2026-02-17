@@ -12,96 +12,26 @@ const RFQ_COLLECTION = 'publicRfqs';
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
 const QUOTECHEM_FROM_EMAIL = defineSecret('QUOTECHEM_FROM_EMAIL');
-const QUOTECHEM_SALES_EMAIL = defineSecret('QUOTECHEM_SALES_EMAIL');
 
-const REQUIRED_FIELDS = [
-  'chemicalName',
-  'industryUse',
-  'quantity',
-  'locationCity',
-  'locationStateProvince',
-  'locationCountry',
-  'email',
-];
-
-const CORE_FIELDS = ['chemicalName', 'industryUse', 'quantity', 'locationCity', 'locationStateProvince', 'locationCountry'];
-
-const PREFERRED_FIELDS = ['packagingPreference', 'neededBy', 'frequency', 'specNotes'];
-const PRICE_SENSITIVE_PREFERRED = ['packagingPreference', 'neededBy'];
-
-const PROFILE_FIELDS = [
-  ...REQUIRED_FIELDS,
-  ...PREFERRED_FIELDS,
+const REQUIRED_FIELDS = ['chemicalName', 'industryUse', 'quantity', 'deliveryLocation', 'email'];
+const OPTIONAL_FIELDS = [
+  'packagingPreference',
+  'neededBy',
+  'frequency',
+  'specNotes',
+  'additionalNotes',
   'chemicalIdentity',
-  'companyName',
   'contactName',
-  'quantityRaw',
-  'quantityValue',
-  'quantityUnitNormalized',
-  'sizeBucket',
-  'assumedDefaults',
-  'intakeStage',
-  'intakeCompleteAt',
-  'customerEmailConfirmedAt',
-  'location',
-  'destinationCountry',
-  'quantityUnit',
-  'notes',
-  'timeline',
-  'shippingMode',
-];
-
-const FACT_FIELDS = [
-  ...REQUIRED_FIELDS,
-  ...PREFERRED_FIELDS,
-  'chemicalIdentity',
   'companyName',
-  'contactName',
-  'quantityRaw',
-  'quantityValue',
-  'quantityUnitNormalized',
-  'sizeBucket',
+  'phone',
+  'jobTitle',
+  'website',
+  'companyAddress',
 ];
-
-const LOW_CONFIDENCE_THRESHOLD = Number.parseFloat(process.env.REQUIRED_FIELD_CONFIDENCE_THRESHOLD || '0.65');
-const CONTEXT_TOKEN_SOFT_LIMIT = Number.parseInt(process.env.OPENAI_CONTEXT_TOKEN_SOFT_LIMIT || '9000', 10);
-const CONTEXT_RECENT_TURNS = Number.parseInt(process.env.OPENAI_CONTEXT_RECENT_TURNS || '12', 10);
-const CONTEXT_MAX_MESSAGES = Number.parseInt(process.env.OPENAI_CONTEXT_MAX_MESSAGES || '1200', 10);
-const EMAIL_PROVIDER_CONFIDENCE_THRESHOLD = Number.parseFloat(
-  process.env.EMAIL_PROVIDER_CONFIDENCE_THRESHOLD || String(LOW_CONFIDENCE_THRESHOLD)
-);
-const EMAIL_BRAND_LOGO_URL = asString(process.env.EMAIL_BRAND_LOGO_URL) || 'https://quotechemfb.web.app/assets/quotechem-logo.png';
-
-const KNOWN_CITY_HINTS = {
-  calgary: { locationCity: 'Calgary', locationStateProvince: 'Alberta', locationCountry: 'Canada' },
-  edmonton: { locationCity: 'Edmonton', locationStateProvince: 'Alberta', locationCountry: 'Canada' },
-  vancouver: { locationCity: 'Vancouver', locationStateProvince: 'British Columbia', locationCountry: 'Canada' },
-  toronto: { locationCity: 'Toronto', locationStateProvince: 'Ontario', locationCountry: 'Canada' },
-  ottawa: { locationCity: 'Ottawa', locationStateProvince: 'Ontario', locationCountry: 'Canada' },
-  montreal: { locationCity: 'Montreal', locationStateProvince: 'Quebec', locationCountry: 'Canada' },
-  winnipeg: { locationCity: 'Winnipeg', locationStateProvince: 'Manitoba', locationCountry: 'Canada' },
-  regina: { locationCity: 'Regina', locationStateProvince: 'Saskatchewan', locationCountry: 'Canada' },
-  halifax: { locationCity: 'Halifax', locationStateProvince: 'Nova Scotia', locationCountry: 'Canada' },
-  saskatoon: { locationCity: 'Saskatoon', locationStateProvince: 'Saskatchewan', locationCountry: 'Canada' },
-};
-
-const AMBIGUOUS_CHEMICAL_TERMS = [
-  'fusion',
-  'blend',
-  'mixture',
-  'mix',
-  'formula',
-  'solution',
-  'product',
-  'compound',
-  'additive',
-  'cleaner',
-  'proprietary',
-  'custom',
-];
+const ALL_EXTRACTION_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS, 'confirm'];
 
 const INITIAL_ASSISTANT_MESSAGE =
-  'Hey — I\'m QuoteChem. I can get you pricing from suppliers. What chemical are you looking for, what industry/use is it for, how much, and where should it be delivered?';
+  "Hey — I'm QuoteChem. Tell me what chemical you need, what industry/use it's for, quantity, and delivery location.";
 
 function setCors(res) {
   res.set('Access-Control-Allow-Origin', '*');
@@ -118,13 +48,19 @@ function preflight(req, res) {
   return false;
 }
 
-function jsonError(res, status, message) {
+function jsonError(res, status, message, extra = {}) {
   setCors(res);
-  res.status(status).json({ ok: false, error: message });
+  res.status(status).json({ ok: false, error: message, ...extra });
 }
 
 function asString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeSessionId(value) {
+  const v = asString(value);
+  if (!v) return '';
+  return v.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
 }
 
 function normalizeEmail(value) {
@@ -144,677 +80,252 @@ function readSecret(secretRef) {
   }
 }
 
-function normalizeSessionId(value) {
-  const v = asString(value);
-  if (!v) return '';
-  return v.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+function shouldUseAutoConfirmFlow() {
+  const raw = String(process.env.AUTO_CONFIRM_FLOW || '').trim().toLowerCase();
+  if (!raw) return true;
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
-function shouldUseMemoryV2() {
-  return String(process.env.CONCIERGE_MEMORY_V2 || 'true').toLowerCase() === 'true';
+function normalizeRole(value) {
+  const role = asString(value).toLowerCase();
+  return role === 'admin' ? 'admin' : 'user';
 }
 
-function estimateTokensFromText(input) {
-  const text = asString(input);
-  if (!text) return 0;
-  return Math.ceil(text.length / 4);
+function mapLeadStage(session = {}) {
+  const explicit = asString(session.leadStage);
+  if (explicit) return explicit;
+  if (Boolean(session.completed)) return 'completed';
+  if (Number(session.messageCount || 0) > 1) return 'in_progress';
+  return 'new';
 }
 
-function estimateTokensFromMessages(messages) {
-  return (Array.isArray(messages) ? messages : []).reduce((total, item) => total + estimateTokensFromText(item.content), 0);
-}
-
-function normalizeCountry(input) {
-  const value = asString(input).toLowerCase();
-  if (!value) return '';
-  if (value === 'usa' || value === 'us' || value.includes('united states')) return 'United States';
-  if (value === 'canada' || value === 'ca') return 'Canada';
-  return value
-    .split(' ')
-    .map((part) => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
-    .join(' ');
-}
-
-function normalizePackaging(value) {
-  const v = asString(value).toLowerCase();
-  if (!v) return '';
-  if (v.includes('bag')) return 'bags';
-  if (v.includes('tote')) return 'totes';
-  if (v.includes('drum')) return 'drums';
-  if (v.includes('bulk') || v.includes('tank') || v.includes('iso')) return 'bulk';
-  if (v.includes('not sure') || v === 'unknown') return 'not_sure';
-  return '';
-}
-
-function normalizeGrade(value) {
-  const v = asString(value).toLowerCase();
-  if (!v) return '';
-  if (v.includes('food')) return 'food';
-  if (v.includes('industrial') || v.includes('tech')) return 'industrial';
-  if (v.includes('pharma')) return 'pharma';
-  if (v === 'api' || v.includes('active pharmaceutical')) return 'api';
-  if (v.includes('drilling')) return 'drilling';
-  if (v.includes('not sure') || v === 'unknown') return 'not_sure';
-  return '';
-}
-
-function normalizeFrequency(value) {
-  const v = asString(value).toLowerCase();
-  if (!v) return '';
-  if (v.includes('one') || v.includes('single') || v.includes('spot')) return 'one_time';
-  if (v.includes('recurr') || v.includes('monthly') || v.includes('weekly') || v.includes('contract')) return 'recurring';
-  return '';
-}
-
-function normalizeNeededBy(value) {
-  const v = asString(value);
-  if (!v) return '';
-  if (/^asap$/i.test(v)) return 'ASAP';
-  if (/\d{4}-\d{2}-\d{2}/.test(v)) return v.match(/\d{4}-\d{2}-\d{2}/)?.[0] || v;
-  return v;
-}
-
-function normalizeQuantityUnit(input) {
-  const unit = asString(input).toLowerCase();
-  if (!unit) return '';
-  if (['kg', 'kilogram', 'kilograms'].includes(unit)) return 'kg';
-  if (['lb', 'lbs', 'pound', 'pounds'].includes(unit)) return 'lb';
-  if (['mt', 'metric ton', 'metric tons', 'tonne', 'tonnes'].includes(unit)) return 'mt';
-  if (['ton', 'tons'].includes(unit)) return 'ton';
-  if (['l', 'liter', 'liters', 'litre', 'litres'].includes(unit)) return 'l';
-  if (['bag', 'bags'].includes(unit)) return 'bags';
-  if (['tote', 'totes'].includes(unit)) return 'totes';
-  if (['drum', 'drums'].includes(unit)) return 'drums';
-  if (unit.includes('bulk')) return 'bulk';
-  return unit;
-}
-
-function toNumber(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const clean = asString(value).replace(/,/g, '');
-  if (!clean) return null;
-  const parsed = Number.parseFloat(clean);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseQuantityFromText(text) {
-  const message = asString(text);
-  if (!message) return {};
-
-  const match = message.match(/(\d+(?:[.,]\d+)?)\s*(kg|kilograms?|lbs?|pounds?|mt|metric\s*tons?|tons?|tonnes?|bags?|totes?|drums?|l|liters?|litres?)/i);
-  if (!match) {
-    if (/\b\d+(?:[.,]\d+)?\b/.test(message)) {
-      return { quantityRaw: message };
-    }
-    return {};
+async function authenticateRequest(req) {
+  const header = asString(req.headers?.authorization || req.headers?.Authorization);
+  if (!header.toLowerCase().startsWith('bearer ')) {
+    const err = new Error('Missing Bearer token');
+    err.status = 401;
+    throw err;
   }
 
-  const value = toNumber(match[1]);
-  const rawUnit = match[2];
-  const unit = normalizeQuantityUnit(rawUnit);
+  const idToken = header.slice(7).trim();
+  if (!idToken) {
+    const err = new Error('Missing Bearer token');
+    err.status = 401;
+    throw err;
+  }
 
-  return {
-    quantity: `${match[1]} ${rawUnit}`,
-    quantityRaw: match[0],
-    quantityValue: value,
-    quantityUnitNormalized: unit,
-  };
-}
-
-function parseEmailFromText(text) {
-  const match = asString(text).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-  if (!match) return '';
-  return normalizeEmail(match[0]);
-}
-
-function parseLocationFromText(text) {
-  const value = asString(text);
-  if (!value) return {};
-
-  const toPattern = value.match(/(?:to|deliver(?:ed)?\s+to)\s+([^,\n]+),\s*([^,\n]+)(?:,\s*([^,\n]+))?/i);
-  if (toPattern) {
+  try {
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const userSnap = await db.collection('users').doc(decoded.uid).get();
+    const userData = userSnap.data() || {};
     return {
-      locationCity: asString(toPattern[1]),
-      locationStateProvince: asString(toPattern[2]),
-      locationCountry: normalizeCountry(asString(toPattern[3]) || ''),
+      uid: decoded.uid,
+      email: asString(decoded.email) || asString(userData.email),
+      role: normalizeRole(userData.role),
     };
+  } catch (error) {
+    const err = new Error('Invalid authentication token');
+    err.status = 401;
+    err.cause = error;
+    throw err;
   }
-
-  const commaPattern = value.split(',').map((part) => asString(part)).filter(Boolean);
-  if (commaPattern.length >= 3) {
-    return {
-      locationCity: commaPattern[0],
-      locationStateProvince: commaPattern[1],
-      locationCountry: normalizeCountry(commaPattern[2]),
-    };
-  }
-
-  const lower = value.toLowerCase();
-  for (const [cityKey, normalized] of Object.entries(KNOWN_CITY_HINTS)) {
-    const pattern = new RegExp(`\\b${cityKey}\\b`, 'i');
-    if (pattern.test(lower)) {
-      return normalized;
-    }
-  }
-
-  return {};
 }
 
-function parseChemicalIdentityFromText(text) {
-  const value = asString(text);
-  if (!value) return '';
-
-  const casMatch = value.match(/\b\d{2,7}-\d{2}-\d\b/);
-  if (casMatch) return casMatch[0];
-
-  const concentrationMatch = value.match(/\b\d{1,3}(?:\.\d+)?\s*%\b/);
-  if (concentrationMatch) return concentrationMatch[0];
-
-  if (/\b(cas|sds|msds|coa|purity|concentration|assay|active ingredient|formula)\b/i.test(value)) {
-    return value.slice(0, 220);
+async function requireAdmin(req) {
+  const user = await authenticateRequest(req);
+  if (user.role !== 'admin') {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
   }
-
-  return '';
+  return user;
 }
 
-function parseChemicalNameFromText(text) {
-  const value = asString(text);
-  if (!value) return '';
-
-  const lower = value.toLowerCase();
-  if (isEmail(value)) return '';
-  if (value.includes('?')) return '';
-  if (/^\s*(yes|no|ok|okay|thanks|thank you|hello|hi)\s*$/i.test(value)) return '';
-  if (/\b(city|state|country|deliver|delivery|ship|shipping|email)\b/i.test(lower) && value.split(/\s+/).length <= 5) return '';
-  if (/^(water treatment|cleaning products?|food processing|pharma|pharmaceutical|manufacturing|oil and gas|agriculture|cosmetics)$/i.test(lower)) return '';
-
-  const patterns = [
-    /(?:need|looking for|quote|rfq|pricing for|source|sourcing)\s+(.+)/i,
-    /(?:chemical|product)\s*(?:is|:)\s*(.+)/i,
-  ];
-
-  let candidate = '';
-  for (const pattern of patterns) {
-    const match = value.match(pattern);
-    if (match?.[1]) {
-      candidate = asString(match[1]);
-      break;
-    }
-  }
-
-  if (!candidate) {
-    const words = value.split(/\s+/).filter(Boolean);
-    if (words.length <= 6) candidate = value;
-  }
-
-  if (!candidate) {
-    const afterQuantity = value.match(
-      /^(?:\d+(?:[.,]\d+)?\s*(?:kg|kilograms?|lbs?|lb|mt|tons?|tonnes?|bags?|totes?|drums?|l|liters?|litres?)\s*(?:of)?\s*)+(.+)$/i
-    );
-    if (afterQuantity?.[1]) candidate = asString(afterQuantity[1]);
-  }
-
-  if (!candidate) return '';
-  if (/^\d/.test(candidate) || /\b(bags?|totes?|drums?|kg|kilograms?|lbs?|lb|mt|tons?|tonnes?|liters?|litres?|l)\b/i.test(candidate)) {
-    candidate = candidate
-      .replace(/\b\d+(?:[.,]\d+)?\b/gi, ' ')
-      .replace(/\b(kg|kilograms?|lbs?|lb|mt|tons?|tonnes?|bags?|drums?|totes?|l|liters?|litres?|of|x)\b/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  candidate = candidate
-    .replace(/\b(for|to|in)\s+[a-z].*$/i, '')
-    .replace(/[,.!?;:]+$/g, '')
-    .trim();
-
-  if (!candidate) return '';
-  if (candidate.length < 2 || candidate.length > 80) return '';
-  if (/^\d+(\.\d+)?\s*(kg|lbs?|lb|mt|tons?|tonnes?|bags?|drums?|totes?|l|liters?|litres?)$/i.test(candidate)) return '';
-  if (/^(asap|today|tomorrow|this week|this month)$/i.test(candidate)) return '';
-
-  return candidate;
+function escapeHtml(text) {
+  return asString(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-function normalizeIndustryUse(value) {
-  const raw = asString(value);
-  if (!raw) return '';
-  const lower = raw.toLowerCase().replace(/[^a-z0-9\s/&-]/g, ' ');
-
-  const mappings = [
-    ['drilling fluids', ['drilling fluids', 'drilling fluid', 'drilling', 'drilling mud', 'drilling-fluid', 'ddrilling', 'barite']],
-    ['water treatment', ['water treatment', 'wastewater', 'municipal water', 'boiler water']],
-    ['cleaning products', ['cleaning', 'detergent', 'sanitation', 'household cleaner']],
-    ['food processing', ['food', 'beverage', 'food processing']],
-    ['pharma', ['pharma', 'pharmaceutical', 'drug', 'api']],
-    ['manufacturing', ['manufacturing', 'factory', 'production', 'industrial process']],
-    ['oil and gas', ['oil and gas', 'oil', 'gas', 'upstream', 'downstream']],
-    ['agriculture', ['agriculture', 'fertilizer', 'crop', 'agri']],
-    ['cosmetics', ['cosmetic', 'personal care', 'skin care', 'hair care']],
-  ];
-
-  for (const [canonical, patterns] of mappings) {
-    if (patterns.some((item) => lower.includes(item))) return canonical;
-  }
-
-  return raw.slice(0, 80);
-}
-
-function parseIndustryUseFromText(text) {
-  const value = asString(text);
-  if (!value) return '';
-
-  const lower = value.toLowerCase();
-  const explicitPattern = value.match(/\b(?:for|used for|industry|application)\s*[:\-]?\s*([a-z0-9 ,/&-]{3,80})/i);
-  if (explicitPattern?.[1]) return normalizeIndustryUse(explicitPattern[1]);
-
-  const industryMap = [
-    ['drilling fluids', ['drilling fluids', 'drilling fluid', 'drilling', 'drilling mud', 'ddrilling', 'barite']],
-    ['water treatment', ['water treatment', 'wastewater', 'municipal water', 'boiler water']],
-    ['cleaning products', ['cleaning', 'detergent', 'sanitation', 'household cleaner']],
-    ['food processing', ['food', 'beverage', 'food processing']],
-    ['pharma', ['pharma', 'pharmaceutical', 'drug', 'api']],
-    ['manufacturing', ['manufacturing', 'factory', 'production', 'industrial process']],
-    ['oil and gas', ['oil', 'gas', 'drilling', 'upstream', 'downstream']],
-    ['agriculture', ['agriculture', 'fertilizer', 'crop', 'agri']],
-    ['cosmetics', ['cosmetic', 'personal care', 'skin care', 'hair care']],
-  ];
-
-  for (const [industry, patterns] of industryMap) {
-    if (patterns.some((item) => lower.includes(item))) return industry;
-  }
-
-  return '';
-}
-
-function parseUserHints(message) {
-  const text = asString(message).toLowerCase();
-  const extracted = {};
-
-  const email = parseEmailFromText(message);
-  if (email) extracted.email = email;
-
-  Object.assign(extracted, parseQuantityFromText(message));
-  Object.assign(extracted, parseLocationFromText(message));
-
-  const packaging = normalizePackaging(text);
-  if (packaging) extracted.packagingPreference = packaging;
-
-  const grade = normalizeGrade(text);
-  if (grade) extracted.gradeSpec = grade;
-
-  const frequency = normalizeFrequency(text);
-  if (frequency) extracted.frequency = frequency;
-
-  const industryUse = parseIndustryUseFromText(message);
-  if (industryUse) extracted.industryUse = industryUse;
-
-  if (/\basap\b/i.test(text)) extracted.neededBy = 'ASAP';
-  const dateMatch = asString(message).match(/\b\d{4}-\d{2}-\d{2}\b/);
-  if (dateMatch) extracted.neededBy = dateMatch[0];
-
-  if (/\b(sds|coa|spec|specs|specification|requirements)\b/i.test(text)) {
-    extracted.specNotes = asString(message);
-  }
-
-  const chemicalName = parseChemicalNameFromText(message);
-  if (chemicalName) extracted.chemicalName = chemicalName;
-
-  const chemicalIdentity = parseChemicalIdentityFromText(message);
-  if (chemicalIdentity) extracted.chemicalIdentity = chemicalIdentity;
-
-  return extracted;
-}
-
-function isAmbiguousChemicalName(name) {
-  const value = asString(name).toLowerCase();
-  if (!value) return false;
-  if (AMBIGUOUS_CHEMICAL_TERMS.some((term) => new RegExp(`\\b${term}\\b`, 'i').test(value))) return true;
-  if (!value.includes(' ') && /^[a-z0-9-]+$/i.test(value)) return true;
-  return false;
-}
-
-function hasChemicalIdentitySignal(profile) {
-  const chemicalIdentity = asString(profile.chemicalIdentity);
-  const gradeSpec = asString(profile.gradeSpec);
-  const specNotes = asString(profile.specNotes);
-  const notes = asString(profile.notes);
-  const chemicalName = asString(profile.chemicalName);
-  const combined = [chemicalIdentity, gradeSpec, specNotes, notes, chemicalName].join(' ');
-  const ambiguousName = isAmbiguousChemicalName(chemicalName);
-
-  if (chemicalIdentity.length >= 6) return true;
-  if (specNotes.length >= 10) return true;
-  if (/\b\d{2,7}-\d{2}-\d\b/.test(combined)) return true;
-  if (/\b\d{1,3}(?:\.\d+)?\s*%\b/.test(combined)) return true;
-  if (!ambiguousName && gradeSpec && gradeSpec !== 'not_sure') return true;
-  return false;
-}
-
-function looksLikeSpecificChemicalName(name) {
-  const value = asString(name).toLowerCase();
-  if (!value) return false;
-  if (/\b\d{2,7}-\d{2}-\d\b/.test(value)) return true;
-  if (/[0-9()%/]/.test(value)) return true;
-  if (/\b(acid|hydroxide|chloride|carbonate|sulfate|sulphate|phosphate|nitrate|acetate|ethanol|methanol|isopropyl|glycol|ammonia|peroxide|benzene|xylene|toluene|resin|polymer)\b/.test(value)) {
-    return true;
-  }
-  if (value.includes(' ') && value.length >= 8 && !AMBIGUOUS_CHEMICAL_TERMS.includes(value)) return true;
-  return false;
-}
-
-function needsChemicalIdentity(profile) {
-  void profile;
-  return false;
-}
-
-function deriveSizeBucket(profile) {
-  const qty = toNumber(profile.quantityValue);
-  if (!qty) return '';
-
-  const unit = profile.quantityUnitNormalized || '';
-  const packaging = profile.packagingPreference || '';
-  const classifier = packaging || unit;
-
-  if (classifier === 'bags') {
-    if (qty < 20) return 'small';
-    if (qty <= 200) return 'mid';
-    return 'large';
-  }
-
-  if (classifier === 'totes') {
-    if (qty <= 4) return 'small';
-    if (qty <= 20) return 'mid';
-    return 'large';
-  }
-
-  if (classifier === 'bulk' || unit === 'l') {
-    if (qty < 10000) return 'small';
-    if (qty <= 50000) return 'mid';
-    return 'large';
-  }
-
-  return '';
-}
-
-function pickAllowedFields(input = {}) {
+function normalizeExtractedTurnState(input = {}) {
   const out = {};
-
-  for (const [key, rawValue] of Object.entries(input)) {
-    if (!PROFILE_FIELDS.includes(key)) continue;
-    if (key === 'assumedDefaults' && rawValue && typeof rawValue === 'object') {
-      out.assumedDefaults = rawValue;
+  for (const field of ALL_EXTRACTION_FIELDS) {
+    const raw = input[field];
+    if (field === 'confirm') {
+      if (typeof raw === 'boolean') out.confirm = raw;
+      else if (typeof raw === 'string') out.confirm = ['true', 'yes', 'confirmed', 'confirm'].includes(raw.trim().toLowerCase());
       continue;
     }
 
-    if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
-      out[key] = rawValue;
-      continue;
-    }
-
-    const value = asString(rawValue);
+    const value = asString(raw);
     if (!value) continue;
-    out[key] = value;
+    out[field] = field === 'email' ? normalizeEmail(value) : value;
   }
 
-  if (out.email) out.email = normalizeEmail(out.email);
-  if (out.locationCountry) out.locationCountry = normalizeCountry(out.locationCountry);
-  if (out.destinationCountry && !out.locationCountry) out.locationCountry = normalizeCountry(out.destinationCountry);
-
-  if (out.location && (!out.locationCity || !out.locationStateProvince || !out.locationCountry)) {
-    const parsed = parseLocationFromText(out.location);
-    out.locationCity = out.locationCity || parsed.locationCity || '';
-    out.locationStateProvince = out.locationStateProvince || parsed.locationStateProvince || '';
-    out.locationCountry = out.locationCountry || parsed.locationCountry || '';
-  }
-
-  const locationSeed = [out.locationCity, out.locationStateProvince, out.locationCountry, out.location].join(' ').trim();
-  if ((!out.locationCity || !out.locationStateProvince || !out.locationCountry) && locationSeed) {
-    const inferred = parseLocationFromText(locationSeed);
-    out.locationCity = out.locationCity || inferred.locationCity || '';
-    out.locationStateProvince = out.locationStateProvince || inferred.locationStateProvince || '';
-    out.locationCountry = out.locationCountry || inferred.locationCountry || '';
-  }
-
-  const normalizedPackaging = normalizePackaging(out.packagingPreference);
-  if (normalizedPackaging) out.packagingPreference = normalizedPackaging;
-
-  const normalizedGrade = normalizeGrade(out.gradeSpec);
-  if (normalizedGrade) out.gradeSpec = normalizedGrade;
-
-  const normalizedFrequency = normalizeFrequency(out.frequency);
-  if (normalizedFrequency) out.frequency = normalizedFrequency;
-
-  if (out.industryUse) out.industryUse = normalizeIndustryUse(out.industryUse);
-
-  if (out.neededBy) out.neededBy = normalizeNeededBy(out.neededBy);
-
-  if (out.quantityUnit) out.quantityUnitNormalized = normalizeQuantityUnit(out.quantityUnit);
-  if (out.quantityUnitNormalized) out.quantityUnitNormalized = normalizeQuantityUnit(out.quantityUnitNormalized);
-
-  if (out.quantityValue != null) {
-    const value = toNumber(out.quantityValue);
-    if (value != null) out.quantityValue = value;
-    else delete out.quantityValue;
-  }
-
-  if (out.quantity) {
-    const parsed = parseQuantityFromText(out.quantity);
-    out.quantityRaw = out.quantityRaw || parsed.quantityRaw || out.quantity;
-    if (parsed.quantityValue != null && out.quantityValue == null) out.quantityValue = parsed.quantityValue;
-    if (!out.quantityUnitNormalized && parsed.quantityUnitNormalized) out.quantityUnitNormalized = parsed.quantityUnitNormalized;
-  }
-
-  if (out.chemicalName) {
-    const normalizedChemicalName = parseChemicalNameFromText(out.chemicalName);
-    if (normalizedChemicalName) out.chemicalName = normalizedChemicalName;
-    else delete out.chemicalName;
-  }
-
-  if (out.email && !isEmail(out.email)) delete out.email;
-
+  if (typeof out.confirm !== 'boolean') out.confirm = false;
   return out;
 }
 
-function missingFields(profile, required) {
-  return required.filter((field) => !asString(profile[field]));
+function mergeEdits(extracted = {}, edits = {}) {
+  const base = normalizeExtractedTurnState(extracted || {});
+  const merged = {
+    ...base,
+    ...normalizeExtractedTurnState(edits || {}),
+  };
+  merged.confirm = Boolean(base.confirm);
+  return merged;
 }
 
-function profileCompleteness(profile) {
-  const required = [...REQUIRED_FIELDS];
-  if (needsChemicalIdentity(profile)) required.push('chemicalIdentity');
+function validateExtractedTurnState(extracted = {}) {
+  const normalized = normalizeExtractedTurnState(extracted || {});
+  const validationErrors = [];
+  const missingRequired = [];
 
-  const complete = required.filter((field) => {
-    if (field === 'chemicalIdentity') return hasChemicalIdentitySignal(profile);
-    return asString(profile[field]);
-  }).length;
-
-  return Number(((complete / required.length) * 100).toFixed(1));
-}
-
-function deriveIntakeStage(session, profile, missingRequired, missingPreferred, chemicalIdentityNeeded = false) {
-  if (session?.completed || asString(profile.intakeStage) === 'completed') return 'completed';
-
-  const missingCore = CORE_FIELDS.filter((field) => missingRequired.includes(field));
-  if (missingCore.length > 0) return 'collecting_core';
-
-  if (chemicalIdentityNeeded) return 'collecting_chemical_identity';
-
-  if (missingRequired.includes('email')) return 'awaiting_email';
-
-  const stillMissingPriceSensitive = missingPreferred.filter((field) => PRICE_SENSITIVE_PREFERRED.includes(field));
-  const prompted = Number(session?.preferencePromptCount || 0);
-
-  if (stillMissingPriceSensitive.length > 0 && prompted < 1) return 'collecting_preferences';
-
-  return 'ready_for_confirmation';
-}
-
-function questionForMissingField(field) {
-  if (field === 'chemicalName') {
-    return {
-      text: 'What chemical do you need quoted, and what industry/use is it for?',
-      quickChoices: [],
-    };
+  for (const field of REQUIRED_FIELDS) {
+    if (!asString(normalized[field])) {
+      missingRequired.push(field);
+      validationErrors.push({ field, message: `${field} is required` });
+    }
   }
 
-  if (field === 'industryUse') {
-    return {
-      text: 'What industry or application is this chemical for?',
-      quickChoices: [],
-    };
+  if (normalized.email && !isEmail(normalized.email)) {
+    validationErrors.push({ field: 'email', message: 'email must be valid' });
   }
 
-  if (field === 'quantity') {
-    return {
-      text: 'Roughly how many bags/totes or what total weight/volume?',
-      quickChoices: [],
-    };
-  }
-
-  if (field === 'locationCity' || field === 'locationStateProvince' || field === 'locationCountry') {
-    return {
-      text: 'What city, state/province, and country should this be delivered to?',
-      quickChoices: [],
-    };
-  }
-
-  if (field === 'email') {
-    return {
-      text: 'Perfect. Where should I email the quotes? (We\'ll only use it for this request + follow-up on pricing.)',
-      quickChoices: [],
-    };
-  }
-
-  if (field === 'packagingPreference') {
-    return {
-      text: 'Packaging preference: bags / totes / drums / bulk?',
-      quickChoices: [],
-    };
-  }
-
-  if (field === 'neededBy') {
-    return {
-      text: 'When do you need it by? (date or ASAP)',
-      quickChoices: [],
-    };
-  }
-
-  if (field === 'frequency') {
-    return {
-      text: 'Is this one-time or recurring?',
-      quickChoices: [],
-    };
-  }
+  const canConfirm = validationErrors.length === 0;
 
   return {
-    text: 'Tell me a bit more about your requirement.',
-    quickChoices: [],
+    normalized,
+    validationErrors,
+    missingRequired,
+    canConfirm,
+    readyToFinalize: canConfirm,
   };
 }
 
-function conciseSummary(profile) {
-  const quantity = asString(profile.quantity) || asString(profile.quantityRaw) || 'quantity not specified';
-  const chemical = asString(profile.chemicalName) || 'chemical';
-  const industry = asString(profile.industryUse);
-  const city = asString(profile.locationCity) || 'destination city';
-  const state = asString(profile.locationStateProvince);
-  const country = asString(profile.locationCountry);
-  const location = [city, state, country].filter(Boolean).join(', ');
-  return `${quantity} of ${chemical}${industry ? ` for ${industry}` : ''} to ${location}`;
+function computeCompletionFingerprint(extracted = {}) {
+  return REQUIRED_FIELDS.map((field) => asString(extracted[field]).toLowerCase()).join('|');
 }
 
-function containsAbusiveLanguage(message) {
+function looksLikeUserConfirmation(message) {
   const text = asString(message).toLowerCase();
   if (!text) return false;
-  const blocked = ['fuck', 'shit', 'bitch', 'asshole'];
-  return blocked.some((word) => text.includes(word));
-}
 
-function looksLikeQuestion(message) {
-  const text = asString(message);
-  if (!text) return false;
-  if (text.includes('?')) return true;
-  return /^(do|does|did|what|how|can|could|would|is|are|should|where|when|why)\b/i.test(text);
-}
-
-function sanitizeAssistantCopy(input) {
-  const text = asString(input);
-  if (!text) return '';
-
-  if (/guarantee|guaranteed|final price|locked in price/i.test(text)) {
-    return 'Thanks. I can help collect your request details and get supplier quotes quickly.';
+  if (/\b(do not|don't|dont|not yet|no)\s+(submit|confirm|proceed|send)\b/.test(text)) {
+    return false;
   }
 
-  return text;
+  return /\b(confirm|confirmed|proceed|submit|send it|go ahead|looks good|that's correct|that is correct|approved|approve)\b/.test(text);
 }
 
-function buildSystemPrompt() {
-  return [
-    'You are QuoteChem, a procurement concierge for bulk chemicals.',
-    'Keep tone calm, professional, fast, non-salesy.',
-    'Ask one concise question at a time and only for missing info.',
-    'If user asks a relevant chemical/procurement question, answer briefly first, then continue intake.',
-    'Use conversation history and profile state; do not forget earlier user details in the same session.',
-    'Collect industry/application early with chemical name (example: water treatment, cleaning, food processing).',
-    'If chemical name looks like a brand/proprietary term (example: "Fusion"), ask for one basic identifier (CAS, concentration, grade, or one-line composition) before completion.',
-    'Never promise final pricing or supplier guarantees.',
-    'Prefer short responses.',
-    'Return strict JSON only with keys: assistant_reply, extracted, confidence, next_missing_required, next_missing_preferred, field_confidence, completion_signal.',
-    'allowed extracted keys:',
-    PROFILE_FIELDS.join(', '),
-    'field_confidence must map field -> [0,1] confidence when possible.',
-    'completion_signal true when you believe required RFQ fields are complete.',
-  ].join(' ');
+function mapMessageDoc(docSnap) {
+  const data = docSnap.data() || {};
+  return {
+    id: docSnap.id,
+    role: data.role || 'user',
+    content: data.content || '',
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
+    model: data.model || '',
+  };
 }
 
-function normalizeMissingArray(input, allowed) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((item) => asString(item))
-    .filter((field) => allowed.includes(field));
+async function loadAllMessages(sessionId, maxMessages = 1200) {
+  const snap = await db
+    .collection(SESSION_COLLECTION)
+    .doc(sessionId)
+    .collection('messages')
+    .orderBy('createdAt', 'asc')
+    .limit(maxMessages)
+    .get();
+
+  return snap.docs.map(mapMessageDoc);
 }
 
-async function callOpenAI({ userMessage, context, profile, stage }) {
+function buildTranscript(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${asString(item.content)}`)
+    .join('\n');
+}
+
+async function ensureSession(sessionId, metadata = {}) {
+  const ref = db.collection(SESSION_COLLECTION).doc(sessionId);
+  const snap = await ref.get();
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  if (!snap.exists) {
+    await ref.set({
+      sessionId,
+      status: 'active',
+      completed: false,
+      leadStage: 'new',
+      assignedTo: '',
+      priority: 'medium',
+      internalNotes: '',
+      internalNotesUpdatedAt: null,
+      internalNotesUpdatedBy: '',
+      rfqId: null,
+      messageCount: 0,
+      completionFingerprint: '',
+      lastFinalizedExtracted: null,
+      emailSend: {
+        status: 'not_attempted',
+        attemptedAt: null,
+        sentAt: null,
+        error: '',
+        messageId: '',
+      },
+      metadata: {
+        locale: asString(metadata.locale),
+        referrer: asString(metadata.referrer),
+        userAgent: asString(metadata.userAgent),
+      },
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: now,
+    });
+
+    await ref.collection('messages').doc().set({
+      role: 'assistant',
+      content: INITIAL_ASSISTANT_MESSAGE,
+      model: 'system-seed',
+      createdAt: now,
+    });
+
+    await ref.set(
+      {
+        messageCount: admin.firestore.FieldValue.increment(1),
+      },
+      { merge: true }
+    );
+
+    logger.info('public_session_created', { sessionId });
+  }
+
+  return ref;
+}
+
+async function callOpenAIExtractionTurn({ transcript }) {
   const apiKey = readSecret(OPENAI_API_KEY);
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
-  if (!apiKey) {
-    return {
-      assistant_reply: '',
-      extracted: {},
-      confidence: 0.2,
-      next_missing_required: [],
-      next_missing_preferred: [],
-      field_confidence: {},
-      completion_signal: false,
-      model: 'fallback-no-openai-key',
-    };
-  }
+  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
 
   const prompt = [
-    'Current stage:',
-    stage,
-    'Memory mode:',
-    context?.mode || 'full',
-    'Conversation token estimate:',
-    String(context?.tokenEstimate || 0),
-    'Current intake profile JSON:',
-    JSON.stringify(profile || {}),
-    context?.historyText || 'Conversation history:\n(none)',
-    'Latest user message:',
-    userMessage,
+    'Extract a strict JSON object from this procurement transcript.',
+    'Allowed keys only:',
+    ALL_EXTRACTION_FIELDS.join(', '),
+    'Required fields:',
+    REQUIRED_FIELDS.join(', '),
+    'Optional fields should be included only if the user explicitly provided them in the transcript.',
+    'Use additionalNotes to capture other important context not covered by other fields; concise summary is preferred.',
+    'Set confirm=true only if the user clearly confirms proceeding/submitting.',
+    'No markdown. No extra keys.',
+    'Transcript:',
+    transcript || '(none)',
   ].join('\n');
-
-  const body = {
-    model,
-    temperature: 0.2,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: buildSystemPrompt() },
-      { role: 'user', content: prompt },
-    ],
-  };
 
   const response = await fetch(OPENAI_URL, {
     method: 'POST',
@@ -822,12 +333,24 @@ async function callOpenAI({ userMessage, context, profile, stage }) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a strict extraction engine. Return JSON only with allowed keys. Keep values concise and faithful to transcript.',
+        },
+        { role: 'user', content: prompt },
+      ],
+    }),
   });
 
   if (!response.ok) {
     const failureText = await response.text();
-    throw new Error(`OpenAI request failed: ${response.status} ${failureText}`);
+    throw new Error(`OpenAI extraction request failed: ${response.status} ${failureText}`);
   }
 
   const data = await response.json();
@@ -841,20 +364,99 @@ async function callOpenAI({ userMessage, context, profile, stage }) {
   }
 
   return {
-    assistant_reply: sanitizeAssistantCopy(parsed.assistant_reply),
-    extracted: pickAllowedFields(parsed.extracted || {}),
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
-    next_missing_required: normalizeMissingArray(parsed.next_missing_required, REQUIRED_FIELDS),
-    next_missing_preferred: normalizeMissingArray(parsed.next_missing_preferred, PREFERRED_FIELDS),
-    field_confidence: normalizeFieldConfidenceMap(parsed.field_confidence || {}),
-    completion_signal: Boolean(parsed.completion_signal),
+    extracted: normalizeExtractedTurnState(parsed || {}),
     model,
   };
 }
 
-async function sendEmail({ toEmail, fromEmail, subject, text, html }) {
+async function callOpenAIConversation({ transcript, userMessage, extracted, missingRequired, confirmRequested }) {
+  const apiKey = readSecret(OPENAI_API_KEY);
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+  if (!apiKey) {
+    return {
+      reply: 'Thanks. Please continue with your requirement details.',
+      model: 'fallback-no-openai-key',
+      error: 'Missing OPENAI_API_KEY',
+    };
+  }
+
+  const prompt = [
+    'Conversation transcript so far:',
+    transcript || '(none)',
+    'Latest user message:',
+    userMessage,
+    'Current extracted snapshot:',
+    JSON.stringify(extracted || {}),
+    `Missing required fields: ${(missingRequired || []).join(', ') || 'none'}`,
+    `User requested confirm: ${confirmRequested ? 'true' : 'false'}`,
+    'Reply as QuoteChem.',
+    'If user asks an informational question (examples: what chemicals are used in drilling fluids, what grade is typical), answer it clearly first.',
+    'After answering, continue intake naturally: ask at most one concise follow-up only when it fits.',
+    'Do not force a follow-up question in every message.',
+    'Keep replies short: maximum 2 brief sentences.',
+    'If required fields are missing, prefer the most important next field but keep the tone consultative.',
+    'If all required fields are complete and user has not confirmed, ask only for email confirmation in one short sentence.',
+  ].join('\n');
+
+  try {
+    const response = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are QuoteChem, concise procurement concierge. Be helpful and informative. Answer user questions directly when asked, then guide intake step-by-step. Ask at most one follow-up question when appropriate. Keep each reply to at most 2 short sentences. Do not output JSON.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const failureText = await response.text();
+      throw new Error(`OpenAI conversation request failed: ${response.status} ${failureText}`);
+    }
+
+    const data = await response.json();
+    const reply = asString(data?.choices?.[0]?.message?.content) || 'Please continue with the remaining details.';
+
+    return { reply, model, error: '' };
+  } catch (error) {
+    return {
+      reply: 'Please continue with the remaining details.',
+      model,
+      error: asString(error?.message || String(error)),
+    };
+  }
+}
+
+function buildMissingFieldsPrompt(missingRequired) {
+  if (!Array.isArray(missingRequired) || missingRequired.length === 0) return '';
+  const labelMap = {
+    chemicalName: 'chemical name/type',
+    industryUse: 'industry/use',
+    quantity: 'quantity',
+    deliveryLocation: 'delivery location',
+    email: 'email',
+  };
+
+  const first = labelMap[missingRequired[0]] || missingRequired[0];
+  return `Before I finalize, I still need your ${first}.`;
+}
+
+async function sendEmail({ toEmail, subject, text, html }) {
   const apiKey = readSecret(SENDGRID_API_KEY);
   if (!apiKey) throw new Error('Missing SENDGRID_API_KEY');
+
+  const fromEmail = readSecret(QUOTECHEM_FROM_EMAIL) || 'noreply@quotechem.com';
 
   const payload = {
     personalizations: [{ to: [{ email: toEmail }] }],
@@ -885,494 +487,10 @@ async function sendEmail({ toEmail, fromEmail, subject, text, html }) {
   };
 }
 
-function mapMessageDoc(docSnap) {
-  const data = docSnap.data() || {};
-  return {
-    id: docSnap.id,
-    role: data.role || 'user',
-    content: data.content || '',
-    quickReplies: Array.isArray(data.quickReplies) ? data.quickReplies : [],
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
-  };
-}
-
-async function loadRecentMessages(sessionId, limit = 60) {
-  const snap = await db
-    .collection(SESSION_COLLECTION)
-    .doc(sessionId)
-    .collection('messages')
-    .orderBy('createdAt', 'asc')
-    .limitToLast(limit)
-    .get();
-
-  return snap.docs.map(mapMessageDoc);
-}
-
-async function loadAllMessages(sessionId, maxMessages = CONTEXT_MAX_MESSAGES) {
-  const snap = await db
-    .collection(SESSION_COLLECTION)
-    .doc(sessionId)
-    .collection('messages')
-    .orderBy('createdAt', 'asc')
-    .limit(maxMessages)
-    .get();
-
-  return snap.docs.map(mapMessageDoc);
-}
-
-function compactHistoryText(messages, label = 'Conversation history') {
-  return [
-    `${label}:`,
-    messages.map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.content}`).join('\n') || '(none)',
-  ].join('\n');
-}
-
-async function buildConversationContext({ sessionId, sessionDoc, tokenBudget = CONTEXT_TOKEN_SOFT_LIMIT }) {
-  const fullMessages = await loadAllMessages(sessionId);
-  const fullTokenEstimate = estimateTokensFromMessages(fullMessages);
-  const hasSummary = asString(sessionDoc?.memory?.summary);
-  const factsSnapshot = sessionDoc?.profile || {};
-
-  if (fullTokenEstimate <= tokenBudget || !shouldUseMemoryV2()) {
-    return {
-      mode: 'full',
-      fullMessages,
-      recentMessages: fullMessages.slice(-CONTEXT_RECENT_TURNS),
-      historyText: compactHistoryText(fullMessages),
-      summaryText: hasSummary || '',
-      tokenEstimate: fullTokenEstimate,
-      factsSnapshot,
-    };
-  }
-
-  const recentMessages = fullMessages.slice(-CONTEXT_RECENT_TURNS);
-  const summaryText = hasSummary || '(summary unavailable)';
-  const historyText = [
-    'Conversation summary:',
-    summaryText,
-    compactHistoryText(recentMessages, 'Recent turns'),
-    'Known facts snapshot:',
-    JSON.stringify(factsSnapshot),
-  ].join('\n');
-
-  return {
-    mode: 'summarized',
-    fullMessages,
-    recentMessages,
-    historyText,
-    summaryText,
-    tokenEstimate: fullTokenEstimate,
-    factsSnapshot,
-  };
-}
-
-async function ensureSession(sessionId, metadata = {}) {
-  const ref = db.collection(SESSION_COLLECTION).doc(sessionId);
-  const snap = await ref.get();
-  const now = admin.firestore.FieldValue.serverTimestamp();
-
-  if (!snap.exists) {
-    await ref.set({
-      sessionId,
-      status: 'active',
-      profile: {
-        intakeStage: 'collecting_core',
-      },
-      metadata: {
-        locale: asString(metadata.locale),
-        referrer: asString(metadata.referrer),
-        userAgent: asString(metadata.userAgent),
-      },
-      missingRequired: [...REQUIRED_FIELDS],
-      missingPreferred: [...PREFERRED_FIELDS],
-      messageCount: 0,
-      preferencePromptCount: 0,
-      completed: false,
-      email1Sent: false,
-      email1Pending: false,
-      memory: {
-        summary: '',
-        modeLastUsed: 'full',
-      },
-      ai: {
-        lastCompletionSignal: false,
-      },
-      createdAt: now,
-      updatedAt: now,
-      lastMessageAt: now,
-    });
-
-    logger.info('session_created', { sessionId });
-  }
-
-  return ref;
-}
-
-function normalizeFieldConfidenceMap(input = {}) {
-  const out = {};
-  for (const field of FACT_FIELDS) {
-    const raw = input?.[field];
-    if (typeof raw === 'number' && Number.isFinite(raw)) {
-      out[field] = Math.max(0, Math.min(1, raw));
-    }
-  }
-  return out;
-}
-
-function buildRequiredFieldConfidences({ requiredFieldConfidences, mergedProfile, baseProfile, aiConfidence }) {
-  const out = {};
-  for (const field of REQUIRED_FIELDS) {
-    if (typeof requiredFieldConfidences?.[field] === 'number') {
-      out[field] = requiredFieldConfidences[field];
-      continue;
-    }
-
-    const changed = asString(baseProfile?.[field]) !== asString(mergedProfile?.[field]);
-    out[field] = changed ? (typeof aiConfidence === 'number' ? aiConfidence : 0.5) : 1;
-  }
-  return out;
-}
-
-function findClarificationField(requiredFieldConfidences, profile) {
-  for (const field of REQUIRED_FIELDS) {
-    if (!asString(profile?.[field])) continue;
-    if ((requiredFieldConfidences?.[field] ?? 1) < LOW_CONFIDENCE_THRESHOLD) return field;
-  }
-  return '';
-}
-
-function normalizedFactValue(field, profile) {
-  const value = profile?.[field];
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return asString(value);
-}
-
-async function upsertFactsFromProfile({
-  sessionRef,
-  previousProfile,
-  nextProfile,
-  fieldConfidences,
-  sourceMessageId,
-  sourceRole = 'user',
-  sourceTurn = 0,
-}) {
-  const factsRef = sessionRef.collection('facts');
-  const changedFields = FACT_FIELDS.filter(
-    (field) => normalizedFactValue(field, previousProfile) !== normalizedFactValue(field, nextProfile)
-  );
-
-  if (changedFields.length === 0) return;
-
-  const activeSnap = await factsRef.where('status', '==', 'active').get();
-  const activeByField = {};
-  activeSnap.docs.forEach((docSnap) => {
-    const data = docSnap.data() || {};
-    const field = asString(data.field);
-    if (field && !activeByField[field]) activeByField[field] = docSnap;
-  });
-
-  for (const field of changedFields) {
-    const nextValue = normalizedFactValue(field, nextProfile);
-    if (!nextValue) continue;
-
-    const confidence = typeof fieldConfidences?.[field] === 'number' ? fieldConfidences[field] : 0.5;
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    const prior = activeByField[field];
-    const newFactRef = factsRef.doc();
-
-    if (prior) {
-      const priorData = prior.data() || {};
-      if (asString(priorData.normalizedValue) === nextValue) {
-        await prior.ref.set(
-          {
-            value: nextValue,
-            normalizedValue: nextValue,
-            confidence,
-            sourceMessageId: sourceMessageId || '',
-            sourceRole,
-            sourceTurn,
-            updatedAt: now,
-          },
-          { merge: true }
-        );
-        continue;
-      }
-
-      await prior.ref.set(
-        {
-          status: 'superseded',
-          supersededByFactId: newFactRef.id,
-          updatedAt: now,
-        },
-        { merge: true }
-      );
-    }
-
-    await newFactRef.set({
-      field,
-      value: nextValue,
-      normalizedValue: nextValue,
-      confidence,
-      sourceMessageId: sourceMessageId || '',
-      sourceRole,
-      sourceTurn,
-      isRequired: REQUIRED_FIELDS.includes(field),
-      status: 'active',
-      supersededByFactId: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-}
-
-async function summarizeConversationIfNeeded({
-  sessionRef,
-  context,
-  mergedProfile,
-  missingRequired,
-  stage,
-  assistantReply,
-  requiredFieldConfidences,
-  aiCompletionSignal,
-}) {
-  const now = admin.firestore.FieldValue.serverTimestamp();
-  const summaryBase =
-    context?.mode === 'summarized' && asString(context?.summaryText)
-      ? asString(context.summaryText)
-      : context?.fullMessages
-          ?.slice(-16)
-          .map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.content}`)
-          .join('\n') || '';
-
-  const summary = [
-    'Stable summary:',
-    summaryBase,
-    'Current profile:',
-    JSON.stringify({
-      chemicalName: mergedProfile.chemicalName || '',
-      industryUse: mergedProfile.industryUse || '',
-      chemicalIdentity: mergedProfile.chemicalIdentity || '',
-      quantity: mergedProfile.quantity || '',
-      locationCity: mergedProfile.locationCity || '',
-      locationStateProvince: mergedProfile.locationStateProvince || '',
-      locationCountry: mergedProfile.locationCountry || '',
-      email: mergedProfile.email || '',
-    }),
-    `Missing required: ${missingRequired.join(', ') || 'none'}`,
-    `Stage: ${stage}`,
-    `Assistant last reply: ${assistantReply}`,
-  ].join('\n');
-
-  await sessionRef.set(
-    {
-      memory: {
-        summary,
-        modeLastUsed: context?.mode || 'full',
-        updatedAt: now,
-      },
-      ai: {
-        lastCompletionSignal: Boolean(aiCompletionSignal),
-        requiredFieldConfidences,
-        updatedAt: now,
-      },
-    },
-    { merge: true }
-  );
-}
-
-function escapeHtml(text) {
-  return asString(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function buildSummaryItems(profile) {
-  return [
-    ['Chemical', profile.chemicalName],
-    ['Industry / Use', profile.industryUse],
-    ['Chemical Details', profile.chemicalIdentity],
-    ['Quantity', profile.quantity || profile.quantityRaw],
-    ['Delivery', [profile.locationCity, profile.locationStateProvince, profile.locationCountry].filter(Boolean).join(', ')],
-    ['Packaging', profile.packagingPreference],
-    ['Grade', profile.gradeSpec],
-    ['Needed By', profile.neededBy],
-    ['Frequency', profile.frequency],
-    ['Notes', profile.specNotes],
-  ].filter(([, value]) => asString(value));
-}
-
-function shouldUseEmail1Ai() {
-  return String(process.env.EMAIL1_AI_ENABLED || 'false').toLowerCase() === 'true';
-}
-
-function getEmailModel() {
-  return process.env.OPENAI_EMAIL_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-}
-
-function buildFallbackEmailSummary(profile) {
-  const quantity = asString(profile.quantity) || asString(profile.quantityRaw) || 'your requested quantity';
-  const chemical = asString(profile.chemicalName) || 'your requested chemical';
-  const destination = [profile.locationCity, profile.locationStateProvince, profile.locationCountry].filter(Boolean).join(', ') || 'your destination';
-
-  return `We received your request for ${quantity} of ${chemical} to ${destination}. Our team is preparing supplier outreach and will follow up with quote options shortly.`;
-}
-
-function canShowProviderExamples(profile, requiredFieldConfidences = {}) {
-  if (!asString(profile.chemicalName)) {
-    return { include: false, reason: 'missing_chemical_name' };
-  }
-  if (!asString(profile.locationCity)) {
-    return { include: false, reason: 'missing_location_city' };
-  }
-  if (!asString(profile.locationStateProvince) && !asString(profile.locationCountry)) {
-    return { include: false, reason: 'missing_location_region' };
-  }
-
-  const confidenceChecks = ['chemicalName', 'locationCity'];
-  if (asString(profile.locationStateProvince)) confidenceChecks.push('locationStateProvince');
-  if (!asString(profile.locationStateProvince) && asString(profile.locationCountry)) confidenceChecks.push('locationCountry');
-
-  for (const field of confidenceChecks) {
-    const confidence = requiredFieldConfidences?.[field];
-    if (typeof confidence === 'number' && confidence < EMAIL_PROVIDER_CONFIDENCE_THRESHOLD) {
-      return { include: false, reason: `low_confidence_${field}` };
-    }
-  }
-
-  return { include: true, reason: 'included' };
-}
-
-function normalizeEmailProviderExamples(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .slice(0, 3)
-    .map((item) => ({
-      name: asString(item?.name).slice(0, 120),
-      city: asString(item?.city).slice(0, 80),
-      state_or_province: asString(item?.state_or_province).slice(0, 80),
-      why_relevant: asString(item?.why_relevant).slice(0, 240),
-    }))
-    .filter((item) => item.name && item.why_relevant);
-}
-
-async function callOpenAIForEmail1({ profile, includeProviderExamples }) {
-  const fallbackSummary = buildFallbackEmailSummary(profile);
-  const model = getEmailModel();
-  const aiEnabled = shouldUseEmail1Ai();
-  if (!aiEnabled) {
-    return {
-      shortSummary: fallbackSummary,
-      providerExamples: [],
-      aiGenerated: false,
-      model: 'email-ai-disabled',
-      error: '',
-    };
-  }
-
-  const apiKey = readSecret(OPENAI_API_KEY);
-  if (!apiKey) {
-    return {
-      shortSummary: fallbackSummary,
-      providerExamples: [],
-      aiGenerated: false,
-      model: 'email-ai-missing-key',
-      error: 'Missing OPENAI_API_KEY',
-    };
-  }
-
-  const payload = {
-    chemicalName: asString(profile.chemicalName),
-    industryUse: asString(profile.industryUse),
-    chemicalIdentity: asString(profile.chemicalIdentity),
-    quantity: asString(profile.quantity) || asString(profile.quantityRaw),
-    locationCity: asString(profile.locationCity),
-    locationStateProvince: asString(profile.locationStateProvince),
-    locationCountry: asString(profile.locationCountry),
-    packagingPreference: asString(profile.packagingPreference),
-    gradeSpec: asString(profile.gradeSpec),
-    neededBy: asString(profile.neededBy),
-    frequency: asString(profile.frequency),
-    specNotes: asString(profile.specNotes),
-  };
-
-  const prompt = [
-    'Generate a short customer email section for a chemical RFQ acknowledgment.',
-    'Return strict JSON with keys: short_summary, provider_examples.',
-    'short_summary: 2-3 sentences, concise, professional, no hype, no guarantees.',
-    'provider_examples: array with max 3 objects. Each object keys:',
-    'name, city, state_or_province, why_relevant.',
-    includeProviderExamples
-      ? 'Provider examples may be hypothetical suggestions near the customer location, and must avoid claiming confirmed stock or pricing.'
-      : 'Set provider_examples to an empty array.',
-    'Do not include markdown. Do not include extra keys.',
-    `RFQ profile JSON: ${JSON.stringify(payload)}`,
-  ].join('\n');
-
-  try {
-    const response = await fetch(OPENAI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You write safe, concise procurement email copy. Never promise final pricing, availability, regulatory approval, or guaranteed supplier fit.',
-          },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const failureText = await response.text();
-      throw new Error(`OpenAI request failed: ${response.status} ${failureText}`);
-    }
-
-    const data = await response.json();
-    const raw = data?.choices?.[0]?.message?.content || '{}';
-
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      parsed = {};
-    }
-
-    const shortSummary = asString(parsed?.short_summary).slice(0, 500) || fallbackSummary;
-    const providerExamples = includeProviderExamples ? normalizeEmailProviderExamples(parsed?.provider_examples) : [];
-
-    return {
-      shortSummary,
-      providerExamples,
-      aiGenerated: true,
-      model,
-      error: '',
-    };
-  } catch (error) {
-    return {
-      shortSummary: fallbackSummary,
-      providerExamples: [],
-      aiGenerated: false,
-      model,
-      error: asString(error?.message || String(error)),
-    };
-  }
-}
-
 function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
   const safeTitle = escapeHtml(title);
   const safePreheader = escapeHtml(preheader);
-  const logoUrl = escapeHtml(EMAIL_BRAND_LOGO_URL);
+  const logoUrl = escapeHtml(asString(process.env.EMAIL_BRAND_LOGO_URL) || 'https://quotechemfb.web.app/assets/quotechem-logo.png');
 
   const html = [
     '<!doctype html>',
@@ -1393,7 +511,6 @@ function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
     `<tr><td style="padding:24px 22px 10px;"><h1 style="margin:0;font-size:24px;line-height:1.3;color:#0f172a;">${safeTitle}</h1></td></tr>`,
     `<tr><td style="padding:0 22px 18px;">${contentHtml}</td></tr>`,
     '<tr><td style="padding:16px 22px;background:#f8fafc;border-top:1px solid #e2e8f0;">',
-    '<p style="margin:0 0 8px;font-size:12px;line-height:1.45;color:#475569;">QuoteChem Procurement Concierge</p>',
     '<p style="margin:0;font-size:12px;line-height:1.45;color:#64748b;">Information in this email is provided for quote preparation and should be confirmed before purchase.</p>',
     '</td></tr>',
     '</table>',
@@ -1410,87 +527,53 @@ function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
     '',
     contentText,
     '',
-    'QuoteChem Procurement Concierge',
     'Information in this email is provided for quote preparation and should be confirmed before purchase.',
   ].join('\n');
 
   return { html, text };
 }
 
-async function buildCustomerEmail(profile, requiredFieldConfidences = {}) {
-  const chemical = asString(profile.chemicalName) || 'Chemical Request';
-  const city = asString(profile.locationCity) || 'your destination';
-  const subject = `QuoteChem Request Received — ${chemical} to ${city}`;
+function buildCustomerEmail(extracted) {
+  const chemical = asString(extracted.chemicalName) || 'Chemical Request';
+  const location = asString(extracted.deliveryLocation) || 'your destination';
+  const subject = `QuoteChem Request Received — ${chemical} to ${location}`;
 
-  const providerDecision = canShowProviderExamples(profile, requiredFieldConfidences);
-  const aiContent = await callOpenAIForEmail1({
-    profile,
-    includeProviderExamples: providerDecision.include,
-  });
+  const summaryRows = [
+    ['Chemical', extracted.chemicalName],
+    ['Industry / Use', extracted.industryUse],
+    ['Quantity', extracted.quantity],
+    ['Delivery', extracted.deliveryLocation],
+    ['Email', extracted.email],
+    ['Contact Name', extracted.contactName],
+    ['Company Name', extracted.companyName],
+    ['Phone', extracted.phone],
+    ['Job Title', extracted.jobTitle],
+    ['Website', extracted.website],
+    ['Company Address', extracted.companyAddress],
+    ['Packaging', extracted.packagingPreference],
+    ['Needed By', extracted.neededBy],
+    ['Frequency', extracted.frequency],
+    ['Additional Notes', extracted.additionalNotes],
+    ['Chemical Details', extracted.chemicalIdentity],
+    ['Notes', extracted.specNotes],
+  ].filter(([, value]) => asString(value));
 
-  const summaryItems = buildSummaryItems(profile);
-  const summaryRows = summaryItems.map(([label, value]) => `- ${label}: ${value}`).join('\n');
-  const htmlRows = summaryItems
+  const htmlRows = summaryRows
     .map(([label, value]) => `<tr><td style="padding:6px 10px;border:1px solid #d1d5db"><strong>${escapeHtml(label)}</strong></td><td style="padding:6px 10px;border:1px solid #d1d5db">${escapeHtml(value)}</td></tr>`)
     .join('');
 
-  const providerExamples = providerDecision.include ? aiContent.providerExamples : [];
-  const providerExamplesIncluded = providerExamples.length > 0;
-  const providerReason = providerExamplesIncluded
-    ? 'included'
-    : providerDecision.include
-      ? aiContent.error
-        ? 'ai_generation_failed'
-        : 'ai_returned_none'
-      : providerDecision.reason;
-
-  const providerHtml = providerExamplesIncluded
-    ? [
-        '<h3 style="margin:18px 0 8px;font-size:17px;color:#0f172a;">Nearby Provider Examples</h3>',
-        '<p style="margin:0 0 8px;font-size:14px;line-height:1.55;color:#334155;">Provider examples are suggestions to verify; availability not confirmed.</p>',
-        '<ul style="padding-left:20px;margin:8px 0 0;">',
-        ...providerExamples.map((item) => {
-          const location = [item.city, item.state_or_province].filter(Boolean).join(', ');
-          return `<li style="margin:0 0 8px;"><strong>${escapeHtml(item.name)}</strong>${location ? ` (${escapeHtml(location)})` : ''}: ${escapeHtml(item.why_relevant)}</li>`;
-        }),
-        '</ul>',
-      ].join('')
-    : '';
-
-  const providerText = providerExamplesIncluded
-    ? [
-        'Nearby provider examples (suggestions to verify; availability not confirmed):',
-        ...providerExamples.map((item) => {
-          const location = [item.city, item.state_or_province].filter(Boolean).join(', ');
-          return `- ${item.name}${location ? ` (${location})` : ''}: ${item.why_relevant}`;
-        }),
-      ].join('\n')
-    : '';
-
   const contentHtml = [
-    '<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#1e293b;">Thanks for your request. We received your RFQ and are contacting suppliers now.</p>',
-    `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#1e293b;">${escapeHtml(aiContent.shortSummary)}</p>`,
+    '<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#1e293b;">Thanks for your request. We received your RFQ and started supplier outreach.</p>',
     '<h3 style="margin:14px 0 8px;font-size:17px;color:#0f172a;">Request Summary</h3>',
     `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:14px;color:#0f172a;">${htmlRows}</table>`,
-    providerHtml,
-    '<h3 style="margin:18px 0 8px;font-size:17px;color:#0f172a;">What Happens Next</h3>',
-    '<ul style="padding-left:20px;margin:8px 0;"><li style="margin:0 0 6px;">We are reaching out to 3-5 verified suppliers.</li><li style="margin:0;">You will receive quote options shortly by email.</li></ul>',
-    '<p style="margin:10px 0 0;font-size:13px;line-height:1.55;color:#64748b;"><em>Final pricing depends on grade, packaging, freight, and lead time.</em></p>',
+    '<p style="margin:12px 0 0;font-size:13px;line-height:1.55;color:#64748b;"><em>Final pricing depends on grade, packaging, freight, and lead time.</em></p>',
   ].join('');
 
   const contentText = [
-    'Thanks for your request. We received your RFQ and are contacting suppliers now.',
+    'Thanks for your request. We received your RFQ and started supplier outreach.',
     '',
-    aiContent.shortSummary,
-    '',
-    'Request summary:',
-    summaryRows,
-    providerText ? `\n${providerText}\n` : '',
-    'What happens next:',
-    '- We are reaching out to 3-5 verified suppliers.',
-    '- You will receive quote options shortly by email.',
-    '',
-    'Final pricing depends on grade, packaging, freight, and lead time.',
+    'Request Summary:',
+    ...summaryRows.map(([label, value]) => `- ${label}: ${value}`),
   ].join('\n');
 
   const shell = buildEmailBrandShell({
@@ -1504,158 +587,43 @@ async function buildCustomerEmail(profile, requiredFieldConfidences = {}) {
     subject,
     text: shell.text,
     html: shell.html,
-    meta: {
-      aiGenerated: aiContent.aiGenerated,
-      aiModel: aiContent.model,
-      aiError: aiContent.error,
-      providerExamplesIncluded,
-      providerExamplesReason: providerReason,
-    },
   };
 }
 
-function buildOpsEmail(profile, sessionId, rfqId, sizeBucket) {
-  const chemical = asString(profile.chemicalName) || 'Unknown chemical';
-  const quantity = asString(profile.quantity) || asString(profile.quantityRaw) || 'Unknown qty';
-  const city = asString(profile.locationCity) || 'Unknown city';
-  const subject = `New RFQ — ${chemical} / ${quantity} / ${city}`;
-
-  const summaryRows = buildSummaryItems(profile)
-    .map(([label, value]) => `${label}: ${value}`)
-    .join('\n');
-
-  const text = [
-    'New public RFQ received.',
-    `RFQ ID: ${rfqId}`,
-    `Session ID: ${sessionId}`,
-    `Size bucket: ${sizeBucket || 'unknown'}`,
-    '',
-    summaryRows,
-    '',
-    `Chat Session ID: ${sessionId}`,
-  ].join('\n');
-
-  const html = [
-    '<h2>New QuoteChem RFQ</h2>',
-    `<p><strong>RFQ ID:</strong> ${escapeHtml(rfqId)}<br/><strong>Session ID:</strong> ${escapeHtml(sessionId)}<br/><strong>Size bucket:</strong> ${escapeHtml(sizeBucket || 'unknown')}</p>`,
-    `<pre style="background:#f8fafc;padding:10px;border:1px solid #e2e8f0">${escapeHtml(summaryRows)}</pre>`,
-  ].join('');
-
-  return { subject, text, html };
-}
-
-function computeCompletionFingerprint(profile) {
-  return [
-    asString(profile.chemicalName).toLowerCase(),
-    asString(profile.quantity).toLowerCase(),
-    asString(profile.locationCity).toLowerCase(),
-    asString(profile.locationStateProvince).toLowerCase(),
-    asString(profile.locationCountry).toLowerCase(),
-    asString(profile.email).toLowerCase(),
-  ].join('|');
-}
-
-async function finalizeRfqIfReady({ sessionRef, session, profile, history }) {
-  const missingRequired = missingFields(profile, REQUIRED_FIELDS);
-  if (missingRequired.length > 0 || needsChemicalIdentity(profile)) {
-    return { completed: false, rfqId: asString(session.rfqId) };
+async function finalizeFromExtracted({ sessionRef, sessionId, sessionDoc, extracted, transcript }) {
+  const validation = validateExtractedTurnState(extracted);
+  if (!validation.canConfirm) {
+    return {
+      confirmed: false,
+      blocked: true,
+      missingRequired: validation.missingRequired,
+      validationErrors: validation.validationErrors,
+      readyToFinalize: false,
+      rfqId: asString(sessionDoc?.rfqId),
+      emailStatus: sessionDoc?.emailSend?.status || 'not_attempted',
+    };
   }
 
-  const fingerprint = computeCompletionFingerprint(profile);
-  const nowIso = new Date().toISOString();
-  const sessionSnapshot = await sessionRef.get();
-  const currentSession = sessionSnapshot.data() || {};
+  const normalized = validation.normalized;
+  const fingerprint = computeCompletionFingerprint(normalized);
+  const alreadySent = asString(sessionDoc?.completionFingerprint) === fingerprint && asString(sessionDoc?.emailSend?.status) === 'sent';
 
-  if (currentSession.email1Sent && asString(currentSession.completionFingerprint) === fingerprint) {
-    return { completed: true, rfqId: asString(currentSession.rfqId) };
+  if (alreadySent) {
+    logger.info('public_idempotent_skip', { sessionId, rfqId: asString(sessionDoc?.rfqId) });
+    return {
+      confirmed: true,
+      blocked: false,
+      missingRequired: [],
+      validationErrors: [],
+      readyToFinalize: true,
+      rfqId: asString(sessionDoc?.rfqId),
+      emailStatus: 'sent',
+      idempotent: true,
+    };
   }
 
-  const pendingStartedAt = currentSession.email1PendingAt?.toMillis ? currentSession.email1PendingAt.toMillis() : null;
-  if (currentSession.email1Pending && pendingStartedAt && Date.now() - pendingStartedAt < 10 * 60 * 1000) {
-    return { completed: false, rfqId: asString(currentSession.rfqId) };
-  }
-
-  const rfqId = asString(currentSession.rfqId) || randomUUID();
-  const fromEmail = readSecret(QUOTECHEM_FROM_EMAIL) || 'noreply@quotechem.com';
-  const salesEmail = readSecret(QUOTECHEM_SALES_EMAIL);
-
-  await sessionRef.set(
-    {
-      rfqId,
-      completionFingerprint: fingerprint,
-      email1Pending: true,
-      email1PendingAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  const customerEmail = await buildCustomerEmail(profile, currentSession?.ai?.requiredFieldConfidences || {});
-  const opsEmail = buildOpsEmail(profile, asString(currentSession.sessionId) || asString(session.sessionId), rfqId, profile.sizeBucket);
-
-  logger.info('email1_ai_generated', {
-    rfqId,
-    sessionId: currentSession.sessionId || session.sessionId || '',
-    enabled: shouldUseEmail1Ai(),
-    generated: Boolean(customerEmail?.meta?.aiGenerated),
-    model: asString(customerEmail?.meta?.aiModel) || 'unknown',
-    fallbackUsed: !customerEmail?.meta?.aiGenerated,
-    error: asString(customerEmail?.meta?.aiError),
-  });
-
-  logger.info('email1_provider_examples_included', {
-    rfqId,
-    sessionId: currentSession.sessionId || session.sessionId || '',
-    included: Boolean(customerEmail?.meta?.providerExamplesIncluded),
-    reason: asString(customerEmail?.meta?.providerExamplesReason) || 'unknown',
-  });
-
-  let customerMessageId = '';
-  let opsMessageId = '';
-
-  try {
-    const customerResult = await sendEmail({
-      toEmail: profile.email,
-      fromEmail,
-      subject: customerEmail.subject,
-      text: customerEmail.text,
-      html: customerEmail.html,
-    });
-
-    customerMessageId = customerResult.messageId;
-    logger.info('email1_sent', { rfqId, sessionId: currentSession.sessionId, messageId: customerMessageId });
-
-    if (salesEmail && isEmail(salesEmail)) {
-      const opsResult = await sendEmail({
-        toEmail: salesEmail,
-        fromEmail,
-        subject: opsEmail.subject,
-        text: opsEmail.text,
-        html: opsEmail.html,
-      });
-
-      opsMessageId = opsResult.messageId;
-      logger.info('ops_notified', { rfqId, sessionId: currentSession.sessionId, messageId: opsMessageId });
-    }
-  } catch (error) {
-    logger.error('error_sendgrid', { rfqId, sessionId: currentSession.sessionId, error: error?.message || String(error) });
-
-    await sessionRef.set(
-      {
-        email1Pending: false,
-        email1Error: asString(error?.message || String(error)),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    throw error;
-  }
-
+  const rfqId = asString(sessionDoc?.rfqId) || randomUUID();
   const now = admin.firestore.FieldValue.serverTimestamp();
-  const transcript = history
-    .map((msg) => `${msg.role === 'assistant' ? 'assistant' : 'user'}: ${asString(msg.content)}`)
-    .join('\n');
 
   await db
     .collection(RFQ_COLLECTION)
@@ -1663,16 +631,14 @@ async function finalizeRfqIfReady({ sessionRef, session, profile, history }) {
     .set(
       {
         rfqId,
-        sessionId: currentSession.sessionId,
+        sessionId,
         status: 'submitted',
         source: 'public_chat',
-        profile,
-        chatSummary: transcript,
-        quote2Status: 'pending_human_quote',
-        email1SentAt: now,
-        email1MessageId: customerMessageId,
-        opsNotifiedAt: opsMessageId ? now : null,
-        opsMessageId,
+        extracted: normalized,
+        customerEmailNormalized: normalizeEmail(normalized.email),
+        confirmSource: 'ai_transcript',
+        transcript,
+        emailStatus: 'pending',
         createdAt: now,
         updatedAt: now,
       },
@@ -1683,109 +649,124 @@ async function finalizeRfqIfReady({ sessionRef, session, profile, history }) {
     {
       completed: true,
       status: 'completed',
+      leadStage: 'completed',
       rfqId,
-      email1Pending: false,
-      email1Sent: true,
       completionFingerprint: fingerprint,
-      completedAt: now,
+      lastFinalizedExtracted: normalized,
+      finalizedAt: now,
       updatedAt: now,
-      profile: {
-        ...profile,
-        intakeStage: 'completed',
-        intakeCompleteAt: nowIso,
-        customerEmailConfirmedAt: nowIso,
+      emailSend: {
+        status: 'pending',
+        attemptedAt: now,
+        sentAt: null,
+        error: '',
+        messageId: '',
       },
     },
     { merge: true }
   );
 
-  logger.info('rfq_completed', { rfqId, sessionId: currentSession.sessionId });
+  logger.info('public_finalize_saved', { sessionId, rfqId });
 
-  return { completed: true, rfqId };
-}
+  logger.info('public_email_attempted', { sessionId, rfqId });
 
-function shouldUseConcierge() {
-  return String(process.env.CONCIERGE_V1 || 'true').toLowerCase() === 'true';
-}
+  try {
+    const customerEmail = buildCustomerEmail(normalized);
+    const emailResult = await sendEmail({
+      toEmail: normalized.email,
+      subject: customerEmail.subject,
+      text: customerEmail.text,
+      html: customerEmail.html,
+    });
 
-function mergeProfiles(existing, modelExtracted, parsedHints) {
-  const merged = {
-    ...pickAllowedFields(existing),
-    ...pickAllowedFields(modelExtracted),
-    ...pickAllowedFields(parsedHints),
-  };
+    await sessionRef.set(
+      {
+        updatedAt: now,
+        emailSend: {
+          status: 'sent',
+          attemptedAt: now,
+          sentAt: now,
+          error: '',
+          messageId: emailResult.messageId,
+        },
+      },
+      { merge: true }
+    );
 
-  if (!merged.chemicalName && asString(modelExtracted?.useCase)) {
-    merged.chemicalName = asString(modelExtracted.useCase);
-  }
+    await db.collection(RFQ_COLLECTION).doc(rfqId).set(
+      {
+        emailStatus: 'sent',
+        emailMessageId: emailResult.messageId,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
 
-  if (!merged.chemicalIdentity) {
-    merged.chemicalIdentity =
-      asString(modelExtracted?.chemicalIdentity) ||
-      asString(modelExtracted?.casNumber) ||
-      asString(modelExtracted?.composition) ||
-      '';
-  }
+    logger.info('public_email_sent', { sessionId, rfqId, messageId: emailResult.messageId });
 
-  if (!merged.quantity && merged.quantityRaw) merged.quantity = merged.quantityRaw;
-
-  if (!merged.locationCountry && merged.destinationCountry) {
-    merged.locationCountry = normalizeCountry(merged.destinationCountry);
-  }
-
-  if (merged.gradeSpec === 'not_sure') {
-    merged.assumedDefaults = {
-      ...(merged.assumedDefaults || {}),
-      gradeApplied: true,
-      gradeOriginal: 'not_sure',
+    return {
+      confirmed: true,
+      blocked: false,
+      missingRequired: [],
+      validationErrors: [],
+      readyToFinalize: true,
+      rfqId,
+      emailStatus: 'sent',
+      idempotent: false,
     };
-    merged.gradeSpec = 'industrial';
+  } catch (error) {
+    const errorText = asString(error?.message || String(error));
+
+    await sessionRef.set(
+      {
+        updatedAt: now,
+        emailSend: {
+          status: 'failed',
+          attemptedAt: now,
+          sentAt: null,
+          error: errorText,
+          messageId: '',
+        },
+      },
+      { merge: true }
+    );
+
+    await db.collection(RFQ_COLLECTION).doc(rfqId).set(
+      {
+        emailStatus: 'failed',
+        emailError: errorText,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    logger.error('public_email_failed', { sessionId, rfqId, error: errorText });
+
+    return {
+      confirmed: true,
+      blocked: false,
+      missingRequired: [],
+      validationErrors: [],
+      readyToFinalize: true,
+      rfqId,
+      emailStatus: 'failed',
+      idempotent: false,
+    };
   }
-
-  if (merged.email && !isEmail(merged.email)) {
-    delete merged.email;
-  }
-
-  merged.sizeBucket = deriveSizeBucket(merged);
-
-  return merged;
 }
 
-function assistantReplyForState({ stage, missingRequired, missingPreferred, aiReply, profile, allowSideAnswer }) {
-  const answerPlusQuestion = (questionText) => {
-    const helpful = sanitizeAssistantCopy(aiReply);
-    if (!helpful) return questionText;
-    const normalizedHelpful = helpful.replace(/\s+/g, ' ').trim();
-    if (!normalizedHelpful) return questionText;
-    if (normalizedHelpful.toLowerCase() === questionText.toLowerCase()) return questionText;
-    return `${normalizedHelpful} ${questionText}`;
+function buildStateResponse({ extracted, validation, confirmed, rfqId, emailStatus }) {
+  return {
+    extracted: {
+      ...validation.normalized,
+      confirm: Boolean(extracted?.confirm),
+    },
+    missingRequired: validation.missingRequired,
+    readyToFinalize: validation.readyToFinalize,
+    confirmed: Boolean(confirmed),
+    emailStatus: asString(emailStatus),
+    rfqId: asString(rfqId),
   };
-
-  const shouldBlendHelp = Boolean(allowSideAnswer);
-
-  if (stage === 'collecting_core') {
-    const questionText = questionForMissingField(missingRequired[0]).text;
-    return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
-  }
-
-  if (stage === 'awaiting_email') {
-    const questionText = questionForMissingField('email').text;
-    return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
-  }
-
-  if (stage === 'collecting_preferences') {
-    const field = missingPreferred.find((item) => PRICE_SENSITIVE_PREFERRED.includes(item));
-    if (field) {
-      const questionText = questionForMissingField(field).text;
-      return shouldBlendHelp ? answerPlusQuestion(questionText) : questionText;
-    }
-  }
-
-  if (stage === 'ready_for_confirmation') {
-    return `Got it — ${conciseSummary(profile)}. I\'m sending your confirmation email now. We\'re contacting 3-5 suppliers and will follow up with quotes soon after.`;
-  }
-
-  return sanitizeAssistantCopy(aiReply) || 'Thanks. Please continue with your request details.';
 }
 
 export const createPublicSession = onRequest({ region: REGION }, async (req, res) => {
@@ -1799,24 +780,7 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
     const sessionRef = await ensureSession(sessionId, req.body?.metadata || {});
     const sessionSnap = await sessionRef.get();
     const session = sessionSnap.data() || {};
-    const profile = pickAllowedFields(session.profile || {});
-    const messages = await loadRecentMessages(sessionId);
-
-    const missingRequired = missingFields(profile, REQUIRED_FIELDS);
-    const missingPreferred = missingFields(profile, PREFERRED_FIELDS);
-    const chemicalIdentityNeeded = needsChemicalIdentity(profile);
-    const stage = deriveIntakeStage(session, profile, missingRequired, missingPreferred, chemicalIdentityNeeded);
-    const missingFieldsForUi = chemicalIdentityNeeded ? [...missingRequired, 'chemicalIdentity'] : missingRequired;
-
-    if (messages.length === 0) {
-      messages.push({
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: INITIAL_ASSISTANT_MESSAGE,
-        quickReplies: [],
-        createdAt: null,
-      });
-    }
+    const messages = await loadAllMessages(sessionId, 200);
 
     setCors(res);
     res.status(200).json({
@@ -1824,26 +788,15 @@ export const createPublicSession = onRequest({ region: REGION }, async (req, res
       sessionId,
       session: {
         status: session.status || 'active',
-        profile: {
-          ...profile,
-          intakeStage: stage,
-        },
-        messages,
-        missingFields: missingFieldsForUi,
-        missingRequired,
-        missingPreferred,
-        intakeStage: stage,
-        profileCompleteness: profileCompleteness(profile),
-        readyForEmail:
-          !chemicalIdentityNeeded && CORE_FIELDS.every((field) => !missingRequired.includes(field)) && missingRequired.includes('email'),
-        completed: stage === 'completed' || Boolean(session.completed),
+        leadStage: mapLeadStage(session),
+        completed: Boolean(session.completed),
         rfqId: asString(session.rfqId),
-        memoryMode: asString(session?.memory?.modeLastUsed) || 'full',
-        aiCompletionSignal: Boolean(session?.ai?.lastCompletionSignal),
-        requiredFieldConfidences: session?.ai?.requiredFieldConfidences || {},
-        clarificationNeeded: false,
-        clarificationField: '',
-        chemicalIdentityNeeded,
+        emailStatus: asString(session?.emailSend?.status || 'not_attempted'),
+        latestExtractedState: session?.latestExtractedState || {},
+        missingRequired: Array.isArray(session?.missingRequired) ? session.missingRequired : [],
+        readyToFinalize: Boolean(session?.readyToFinalize),
+        lastFinalizedExtracted: session?.lastFinalizedExtracted || {},
+        messages,
       },
     });
   } catch (error) {
@@ -1856,7 +809,7 @@ export const chatPublicAssistant = onRequest(
   {
     region: REGION,
     timeoutSeconds: 60,
-    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY, QUOTECHEM_FROM_EMAIL, QUOTECHEM_SALES_EMAIL],
+    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY, QUOTECHEM_FROM_EMAIL],
   },
   async (req, res) => {
     if (preflight(req, res)) return;
@@ -1874,263 +827,164 @@ export const chatPublicAssistant = onRequest(
       const session = sessionSnap.data() || {};
       const now = admin.firestore.FieldValue.serverTimestamp();
 
-      const userMessageRef = sessionRef.collection('messages').doc();
-      await userMessageRef.set({
+      await sessionRef.collection('messages').doc().set({
         role: 'user',
         content: userMessage,
         createdAt: now,
       });
 
-      const context = await buildConversationContext({ sessionId, sessionDoc: session, tokenBudget: CONTEXT_TOKEN_SOFT_LIMIT });
-      const history = context.fullMessages;
-      const baseProfile = pickAllowedFields(session.profile || {});
+      const messages = await loadAllMessages(sessionId);
+      const transcript = buildTranscript(messages);
 
-      if (containsAbusiveLanguage(userMessage)) {
-        const safeReply = 'I can help with bulk chemical quote requests. Please share chemical, quantity, and delivery location.';
-        await sessionRef.collection('messages').doc().set({
-          role: 'assistant',
-          content: safeReply,
-          quickReplies: [],
-          createdAt: now,
-          confidence: 1,
-          model: 'safety-fallback',
-        });
-
-        await sessionRef.set(
-          {
-            updatedAt: now,
-            lastMessageAt: now,
-            messageCount: admin.firestore.FieldValue.increment(2),
-          },
-          { merge: true }
-        );
-
-        setCors(res);
-        const baseMissingRequired = missingFields(baseProfile, REQUIRED_FIELDS);
-        const baseChemicalIdentityNeeded = needsChemicalIdentity(baseProfile);
-        const baseMissingFieldsForUi = baseChemicalIdentityNeeded ? [...baseMissingRequired, 'chemicalIdentity'] : baseMissingRequired;
-        return res.status(200).json({
-          ok: true,
+      let extracted = { confirm: false };
+      let extractionModel = '';
+      try {
+        const extraction = await callOpenAIExtractionTurn({ transcript });
+        extracted = extraction.extracted;
+        extractionModel = extraction.model;
+      } catch (error) {
+        logger.error('public_openai_error', {
           sessionId,
-          assistant: { reply: safeReply, quickReplies: [] },
-          profile: baseProfile,
-          missingFields: baseMissingFieldsForUi,
-          missingRequired: baseMissingRequired,
-          missingPreferred: missingFields(baseProfile, PREFERRED_FIELDS),
-          intakeStage: asString(baseProfile.intakeStage) || (baseChemicalIdentityNeeded ? 'collecting_chemical_identity' : 'collecting_core'),
-          profileCompleteness: profileCompleteness(baseProfile),
-          readyForEmail: false,
-          completed: false,
-          rfqId: asString(session.rfqId),
-          quickChoices: [],
-          memoryMode: context.mode,
-          aiCompletionSignal: false,
-          requiredFieldConfidences: {},
-          clarificationNeeded: false,
-          clarificationField: '',
-          chemicalIdentityNeeded: baseChemicalIdentityNeeded,
+          stage: 'turn_extraction',
+          error: error?.message || String(error),
         });
       }
 
-      let ai = {
-        assistant_reply: '',
-        extracted: {},
-        confidence: 0.2,
-        next_missing_required: [],
-        next_missing_preferred: [],
-        field_confidence: {},
-        completion_signal: false,
-        model: 'deterministic-fallback',
+      const validation = validateExtractedTurnState(extracted);
+      const aiConfirmRequested = Boolean(extracted.confirm);
+      const userConfirmRequested = looksLikeUserConfirmation(userMessage);
+      const confirmRequested = aiConfirmRequested || userConfirmRequested;
+
+      // Keep latest extracted snapshot visible on the session root doc for observability.
+      const turnSnapshot = {
+        ...validation.normalized,
+        confirm: confirmRequested,
+      };
+      const turnPatch = {
+        latestExtractedState: turnSnapshot,
+        missingRequired: validation.missingRequired,
+        readyToFinalize: validation.readyToFinalize,
+        extractionUpdatedAt: now,
+      };
+      for (const field of REQUIRED_FIELDS) {
+        const value = asString(validation.normalized[field]);
+        if (value) turnPatch[field] = value;
+      }
+      await sessionRef.set(turnPatch, { merge: true });
+
+      logger.info('public_turn_extraction_generated', {
+        sessionId,
+        model: extractionModel || 'unknown',
+        confirm: confirmRequested,
+        confirmSource: {
+          ai: aiConfirmRequested,
+          user: userConfirmRequested,
+        },
+        missingRequired: validation.missingRequired,
+      });
+
+      let finalizeResult = {
+        confirmed: false,
+        blocked: false,
+        missingRequired: validation.missingRequired,
+        validationErrors: validation.validationErrors,
+        readyToFinalize: validation.readyToFinalize,
+        rfqId: asString(session.rfqId),
+        emailStatus: asString(session?.emailSend?.status || 'not_attempted'),
+        idempotent: false,
       };
 
-      if (shouldUseConcierge()) {
-        try {
-          ai = await callOpenAI({
-            userMessage,
-            context,
-            profile: baseProfile,
-            stage: asString(baseProfile.intakeStage) || 'collecting_core',
+      const autoConfirmEnabled = shouldUseAutoConfirmFlow();
+
+      if (autoConfirmEnabled && confirmRequested) {
+        logger.info('public_confirm_detected', { sessionId, autoConfirmEnabled: true });
+        if (validation.canConfirm) {
+          finalizeResult = await finalizeFromExtracted({
+            sessionRef,
+            sessionId,
+            sessionDoc: session,
+            extracted: { ...validation.normalized, confirm: true },
+            transcript,
           });
-        } catch (error) {
-          logger.error('error_openai', { sessionId, error: error?.message || String(error) });
+        } else {
+          logger.info('public_finalize_blocked_missing_fields', {
+            sessionId,
+            missingRequired: validation.missingRequired,
+          });
+          finalizeResult = {
+            ...finalizeResult,
+            blocked: true,
+          };
         }
       }
 
-      const parsedHints = parseUserHints(userMessage);
-      const mergedProfile = mergeProfiles(baseProfile, ai.extracted, parsedHints);
-      const requiredFieldConfidences = buildRequiredFieldConfidences({
-        requiredFieldConfidences: ai.field_confidence,
-        mergedProfile,
-        baseProfile,
-        aiConfidence: ai.confidence,
-      });
-      const allowSideAnswer = looksLikeQuestion(userMessage) && Boolean(asString(ai.assistant_reply));
-
-      const missingRequired = missingFields(mergedProfile, REQUIRED_FIELDS);
-      const missingPreferred = missingFields(mergedProfile, PREFERRED_FIELDS);
-      const chemicalIdentityNeeded = needsChemicalIdentity(mergedProfile);
-      let stage = deriveIntakeStage(session, mergedProfile, missingRequired, missingPreferred, chemicalIdentityNeeded);
-      const missingFieldsForUi = chemicalIdentityNeeded ? [...missingRequired, 'chemicalIdentity'] : missingRequired;
-
-      logger.info('intake_progress_debug', {
-        sessionId,
-        stage,
-        missingRequired,
-        chemicalIdentityNeeded,
-        parsedChemicalName: asString(parsedHints.chemicalName),
-        parsedChemicalIdentity: asString(parsedHints.chemicalIdentity),
-        parsedIndustryUse: asString(parsedHints.industryUse),
-        mergedChemicalName: asString(mergedProfile.chemicalName),
-        mergedChemicalIdentity: asString(mergedProfile.chemicalIdentity),
-        mergedIndustryUse: asString(mergedProfile.industryUse),
-      });
-
-      const readyForEmail =
-        !chemicalIdentityNeeded && CORE_FIELDS.every((field) => !missingRequired.includes(field)) && missingRequired.includes('email');
-
-      let completed = false;
-      let rfqId = asString(session.rfqId);
-      let preferencePromptIncrement = 0;
-      const aiCompletionSignal = Boolean(ai.completion_signal);
-
-      if (stage === 'collecting_preferences') {
-        preferencePromptIncrement = 1;
-      }
-
-      if (!chemicalIdentityNeeded && missingRequired.length === 0 && (aiCompletionSignal || stage === 'ready_for_confirmation')) {
-        const completion = await finalizeRfqIfReady({
-          sessionRef,
-          session: {
-            ...session,
-            sessionId,
-          },
-          profile: mergedProfile,
-          history,
+      let assistantReply = '';
+      if (autoConfirmEnabled && confirmRequested && !validation.canConfirm) {
+        assistantReply = buildMissingFieldsPrompt(validation.missingRequired) || 'Before I finalize, I still need a few details.';
+      } else if (finalizeResult.confirmed) {
+        assistantReply =
+          finalizeResult.emailStatus === 'sent'
+            ? 'Confirmed. Your request is submitted and your confirmation email was sent.'
+            : 'Confirmed. Your request is submitted, but email could not be sent yet.';
+      } else if (validation.canConfirm && !confirmRequested) {
+        const email = asString(validation.normalized.email);
+        assistantReply = email
+          ? `Ready to send your confirmation to ${email}?`
+          : 'Ready to send your confirmation email?';
+      } else {
+        const conversation = await callOpenAIConversation({
+          transcript,
+          userMessage,
+          extracted: validation.normalized,
+          missingRequired: validation.missingRequired,
+          confirmRequested,
         });
-        completed = completion.completed;
-        rfqId = completion.rfqId || rfqId;
-        if (completed) stage = 'completed';
+
+        if (conversation.error) {
+          logger.error('public_openai_error', {
+            sessionId,
+            stage: 'conversation',
+            error: conversation.error,
+          });
+        }
+
+        assistantReply = asString(conversation.reply) || 'Please continue with your requirement details.';
       }
 
-      const clarificationField = findClarificationField(requiredFieldConfidences, mergedProfile);
-      const clarificationNeeded = Boolean(clarificationField) && !completed && missingRequired.length === 0 && !chemicalIdentityNeeded;
-
-      const assistantReply =
-        stage === 'completed'
-          ? `Got it — ${conciseSummary(mergedProfile)}. I\'m sending your confirmation email now. We\'re contacting 3-5 suppliers and will follow up with quotes soon after.`
-          : clarificationNeeded
-            ? `Quick check: ${questionForMissingField(clarificationField).text}`
-          : assistantReplyForState({
-              stage,
-              missingRequired,
-              missingPreferred,
-              aiReply: ai.assistant_reply,
-              profile: mergedProfile,
-              allowSideAnswer,
-            });
-
-      const quickChoices = [];
-
-      const assistantMessageRef = sessionRef.collection('messages').doc();
-      await assistantMessageRef.set({
+      await sessionRef.collection('messages').doc().set({
         role: 'assistant',
         content: assistantReply,
-        quickReplies: quickChoices,
+        model: extractionModel || process.env.OPENAI_MODEL || 'gpt-4o-mini',
         createdAt: now,
-        confidence: ai.confidence,
-        model: ai.model,
       });
-
-      const profileForSave = {
-        ...mergedProfile,
-        intakeStage: stage,
-      };
-
-      await upsertFactsFromProfile({
-        sessionRef,
-        previousProfile: baseProfile,
-        nextProfile: profileForSave,
-        fieldConfidences: {
-          ...ai.field_confidence,
-          ...requiredFieldConfidences,
-        },
-        sourceMessageId: userMessageRef.id,
-        sourceRole: 'user',
-        sourceTurn: Number(session.messageCount || 0) + 1,
-      });
-
-      if (shouldUseMemoryV2()) {
-        await summarizeConversationIfNeeded({
-          sessionRef,
-          context,
-          mergedProfile: profileForSave,
-          missingRequired: missingFieldsForUi,
-          stage,
-          assistantReply,
-          requiredFieldConfidences,
-          aiCompletionSignal,
-        });
-      }
 
       await sessionRef.set(
         {
-          profile: profileForSave,
-          missingFields: missingFieldsForUi,
-          missingRequired,
-          missingPreferred,
+          leadStage: finalizeResult.confirmed ? 'completed' : (mapLeadStage(session) === 'new' ? 'in_progress' : mapLeadStage(session)),
           updatedAt: now,
           lastMessageAt: now,
           messageCount: admin.firestore.FieldValue.increment(2),
-          preferencePromptCount: admin.firestore.FieldValue.increment(preferencePromptIncrement),
-          completed,
-          rfqId: rfqId || null,
-          'memory.modeLastUsed': context.mode,
-          'ai.lastCompletionSignal': aiCompletionSignal,
-          'ai.requiredFieldConfidences': requiredFieldConfidences,
         },
         { merge: true }
       );
 
-      if (readyForEmail) {
-        logger.info('email_requested', { sessionId });
-      }
-
-      logger.info('field_extracted', {
-        sessionId,
-        stage,
-        missingRequired,
-        chemicalIdentityNeeded,
-        missingPreferred,
-        completeness: profileCompleteness(mergedProfile),
-        memoryMode: context.mode,
-        clarificationNeeded,
-        clarificationField,
-      });
-
       setCors(res);
-      res.status(200).json({
+      return res.status(200).json({
         ok: true,
         sessionId,
         assistant: {
           reply: assistantReply,
-          quickReplies: quickChoices,
+          quickReplies: [],
         },
-        profile: profileForSave,
-        missingFields: missingFieldsForUi,
-        missingRequired,
-        missingPreferred,
-        intakeStage: stage,
-        profileCompleteness: profileCompleteness(mergedProfile),
-        readyForEmail,
-        completed,
-        rfqId,
-        quickChoices,
-        memoryMode: context.mode,
-        aiCompletionSignal,
-        requiredFieldConfidences,
-        clarificationNeeded,
-        clarificationField,
-        chemicalIdentityNeeded,
+        state: buildStateResponse({
+          extracted: { ...validation.normalized, confirm: confirmRequested },
+          validation,
+          confirmed: finalizeResult.confirmed,
+          rfqId: finalizeResult.rfqId,
+          emailStatus: finalizeResult.emailStatus,
+        }),
+        completed: Boolean(finalizeResult.confirmed),
+        rfqId: asString(finalizeResult.rfqId),
       });
     } catch (error) {
       logger.error('[chatPublicAssistant] failed', { sessionId, error: error?.message || String(error) });
@@ -2139,7 +993,7 @@ export const chatPublicAssistant = onRequest(
   }
 );
 
-export const sendTestEmail = onRequest(
+export const finalizePublicSession = onRequest(
   {
     region: REGION,
     timeoutSeconds: 60,
@@ -2149,64 +1003,455 @@ export const sendTestEmail = onRequest(
     if (preflight(req, res)) return;
     if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
-    const targetEmail = normalizeEmail(req.body?.email);
-    const template = asString(req.body?.template) || 'basic';
+    const sessionId = normalizeSessionId(req.body?.sessionId);
+    const action = asString(req.body?.action).toLowerCase();
 
-    if (!targetEmail) return jsonError(res, 400, 'email is required');
+    if (!sessionId) return jsonError(res, 400, 'sessionId is required');
+    if (action !== 'preview' && action !== 'confirm') return jsonError(res, 400, 'action must be preview or confirm');
 
     try {
-      const fromEmail = readSecret(QUOTECHEM_FROM_EMAIL) || 'noreply@quotechem.com';
+      const sessionRef = await ensureSession(sessionId, req.body?.metadata || {});
+      const sessionSnap = await sessionRef.get();
+      const session = sessionSnap.data() || {};
+      const messages = await loadAllMessages(sessionId);
+      const transcript = buildTranscript(messages);
 
-      const templates = {
-        basic: {
-          subject: 'QuoteChem test email: basic',
-          text: 'This is a basic SendGrid test from QuoteChem.',
-          html: '<h2>QuoteChem</h2><p>This is a <strong>basic</strong> SendGrid test email.</p>',
-        },
-        quote_status: {
-          subject: 'QuoteChem test email: quote status',
-          text: 'Your quote request is in review. We will contact you shortly.',
-          html: '<h2>QuoteChem Quote Update</h2><p>Your quote request is in review. We will contact you shortly.</p>',
-        },
-      };
-
-      let selected = templates[template] || templates.basic;
-      if (template === 'email1_preview') {
-        selected = await buildCustomerEmail(
-          {
-            chemicalName: 'Sodium Hydroxide',
-            quantity: '20,000 kg',
-            locationCity: 'Houston',
-            locationStateProvince: 'Texas',
-            locationCountry: 'United States',
-            packagingPreference: 'totes',
-            gradeSpec: 'industrial',
-            neededBy: 'ASAP',
-            frequency: 'one_time',
-            specNotes: 'COA preferred',
-          },
-          {
-            chemicalName: 1,
-            locationCity: 1,
-            locationStateProvince: 1,
-          }
-        );
+      let extraction;
+      try {
+        extraction = await callOpenAIExtractionTurn({ transcript });
+      } catch (error) {
+        logger.error('public_openai_error', {
+          sessionId,
+          stage: 'manual_finalize_extraction',
+          error: error?.message || String(error),
+        });
+        return jsonError(res, 500, 'Failed to extract structured fields');
       }
 
-      await sendEmail({
-        toEmail: targetEmail,
-        fromEmail,
-        subject: selected.subject,
-        text: selected.text,
-        html: selected.html,
+      const extracted = extraction.extracted;
+
+      if (action === 'preview') {
+        const validation = validateExtractedTurnState(extracted);
+        logger.info('public_finalize_preview_generated', {
+          sessionId,
+          model: extraction.model,
+          canConfirm: validation.canConfirm,
+          validationErrorCount: validation.validationErrors.length,
+        });
+
+        setCors(res);
+        return res.status(200).json({
+          ok: true,
+          action: 'preview',
+          extracted: {
+            ...validation.normalized,
+            confirm: Boolean(extracted.confirm),
+          },
+          validationErrors: validation.validationErrors,
+          missingRequired: validation.missingRequired,
+          canConfirm: validation.canConfirm,
+        });
+      }
+
+      const merged = mergeEdits(extracted, req.body?.edits || {});
+      const finalizeResult = await finalizeFromExtracted({
+        sessionRef,
+        sessionId,
+        sessionDoc: session,
+        extracted: merged,
+        transcript,
       });
 
+      if (finalizeResult.blocked) {
+        logger.info('public_finalize_validation_failed', {
+          sessionId,
+          validationErrorCount: finalizeResult.validationErrors.length,
+        });
+
+        setCors(res);
+        return res.status(200).json({
+          ok: false,
+          action: 'confirm',
+          validationErrors: finalizeResult.validationErrors,
+          missingRequired: finalizeResult.missingRequired,
+        });
+      }
+
       setCors(res);
-      const knownTemplate = template in templates || template === 'email1_preview';
-      res.status(200).json({ ok: true, sent: true, template: knownTemplate ? template : 'basic' });
+      return res.status(200).json({
+        ok: true,
+        action: 'confirm',
+        saved: true,
+        rfqId: finalizeResult.rfqId,
+        emailStatus: finalizeResult.emailStatus,
+        idempotent: Boolean(finalizeResult.idempotent),
+      });
     } catch (error) {
-      logger.error('[sendTestEmail] failed', { targetEmail, error: error?.message || String(error) });
-      return jsonError(res, 500, 'Failed to send test email');
+      logger.error('[finalizePublicSession] failed', { sessionId, error: error?.message || String(error) });
+      return jsonError(res, 500, 'Failed to finalize session');
     }
   }
 );
+
+function toIso(value) {
+  if (!value) return null;
+  if (value?.toDate) return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return null;
+}
+
+function normalizeLeadStageInput(value) {
+  const stage = asString(value).toLowerCase();
+  if (stage === 'new' || stage === 'in_progress' || stage === 'completed') return stage;
+  return '';
+}
+
+function normalizePriorityInput(value) {
+  const priority = asString(value).toLowerCase();
+  if (priority === 'low' || priority === 'medium' || priority === 'high') return priority;
+  return '';
+}
+
+function mapLeadSummary(docSnap) {
+  const data = docSnap.data() || {};
+  const latest = data.latestExtractedState || {};
+  const normalizedEmail = normalizeEmail(latest.email || data.email);
+  return {
+    sessionId: docSnap.id,
+    status: asString(data.status) || 'active',
+    leadStage: mapLeadStage(data),
+    completed: Boolean(data.completed),
+    chemicalName: asString(data.chemicalName || latest.chemicalName),
+    quantity: asString(data.quantity || latest.quantity),
+    deliveryLocation: asString(data.deliveryLocation || latest.deliveryLocation),
+    email: normalizedEmail,
+    emailStatus: asString(data?.emailSend?.status || 'not_attempted'),
+    assignedTo: asString(data.assignedTo),
+    priority: asString(data.priority || 'medium'),
+    messageCount: Number(data.messageCount || 0),
+    updatedAt: toIso(data.updatedAt),
+    createdAt: toIso(data.createdAt),
+  };
+}
+
+function leadMatchesSearch(lead, searchTerm) {
+  if (!searchTerm) return true;
+  const haystack = [
+    lead.sessionId,
+    lead.chemicalName,
+    lead.quantity,
+    lead.deliveryLocation,
+    lead.email,
+    lead.assignedTo,
+  ]
+    .map((v) => asString(v).toLowerCase())
+    .join(' ');
+  return haystack.includes(searchTerm);
+}
+
+export const adminDashboardSummary = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    await requireAdmin(req);
+
+    const sessionsRef = db.collection(SESSION_COLLECTION);
+    const rfqsRef = db.collection(RFQ_COLLECTION);
+    const [newCountSnap, inProgressCountSnap, completedCountSnap, recentSessionsSnap, recentRfqsSnap] = await Promise.all([
+      sessionsRef.where('leadStage', '==', 'new').count().get(),
+      sessionsRef.where('leadStage', '==', 'in_progress').count().get(),
+      sessionsRef.where('leadStage', '==', 'completed').count().get(),
+      sessionsRef.orderBy('updatedAt', 'desc').limit(8).get(),
+      rfqsRef.orderBy('updatedAt', 'desc').limit(120).get(),
+    ]);
+
+    const uniqueCustomers = new Set();
+    for (const doc of recentRfqsSnap.docs) {
+      const data = doc.data() || {};
+      const email = normalizeEmail(data.customerEmailNormalized || data?.extracted?.email);
+      if (email) uniqueCustomers.add(email);
+    }
+
+    const recentActivity = recentSessionsSnap.docs.map(mapLeadSummary);
+
+    setCors(res);
+    res.status(200).json({
+      ok: true,
+      summary: {
+        newLeads: newCountSnap.data().count || 0,
+        inProgressLeads: inProgressCountSnap.data().count || 0,
+        completedLeads: completedCountSnap.data().count || 0,
+        uniqueCustomers: uniqueCustomers.size,
+        recentActivity,
+      },
+    });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminDashboardSummary] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to load dashboard');
+  }
+});
+
+export const adminListLeads = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await requireAdmin(req);
+    const stage = normalizeLeadStageInput(req.body?.stage);
+    const search = asString(req.body?.search).toLowerCase();
+    const pageSize = Math.min(Math.max(Number(req.body?.pageSize || 25), 1), 100);
+    const cursor = asString(req.body?.cursor);
+
+    let query = db.collection(SESSION_COLLECTION).orderBy('updatedAt', 'desc').limit(pageSize * 3);
+
+    if (cursor) {
+      const cursorSnap = await db.collection(SESSION_COLLECTION).doc(cursor).get();
+      if (cursorSnap.exists) query = query.startAfter(cursorSnap);
+    }
+
+    const snap = await query.get();
+    const leads = snap.docs
+      .map(mapLeadSummary)
+      .filter((item) => (stage ? item.leadStage === stage : true))
+      .filter((item) => leadMatchesSearch(item, search))
+      .slice(0, pageSize);
+    const nextCursor = snap.docs.length === pageSize ? snap.docs[snap.docs.length - 1].id : '';
+
+    setCors(res);
+    res.status(200).json({
+      ok: true,
+      items: leads,
+      nextCursor,
+      hasMore: Boolean(nextCursor),
+    });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminListLeads] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list leads');
+  }
+});
+
+export const adminGetLeadDetail = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    await requireAdmin(req);
+    const sessionId = normalizeSessionId(req.body?.sessionId);
+    if (!sessionId) return jsonError(res, 400, 'sessionId is required');
+
+    const sessionRef = db.collection(SESSION_COLLECTION).doc(sessionId);
+    const [sessionSnap, messagesSnap] = await Promise.all([
+      sessionRef.get(),
+      sessionRef.collection('messages').orderBy('createdAt', 'desc').limit(200).get(),
+    ]);
+
+    if (!sessionSnap.exists) return jsonError(res, 404, 'Session not found');
+    const sessionData = sessionSnap.data() || {};
+    const messages = messagesSnap.docs
+      .map(mapMessageDoc)
+      .reverse();
+
+    setCors(res);
+    res.status(200).json({
+      ok: true,
+      lead: {
+        ...mapLeadSummary(sessionSnap),
+        rfqId: asString(sessionData.rfqId),
+        missingRequired: Array.isArray(sessionData.missingRequired) ? sessionData.missingRequired : [],
+        readyToFinalize: Boolean(sessionData.readyToFinalize),
+        latestExtractedState: sessionData.latestExtractedState || {},
+        lastFinalizedExtracted: sessionData.lastFinalizedExtracted || {},
+        emailSend: sessionData.emailSend || {},
+        internalNotes: asString(sessionData.internalNotes),
+        internalNotesUpdatedAt: toIso(sessionData.internalNotesUpdatedAt),
+        internalNotesUpdatedBy: asString(sessionData.internalNotesUpdatedBy),
+        messages,
+      },
+    });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminGetLeadDetail] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to load lead');
+  }
+});
+
+export const adminUpdateLead = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    const adminUser = await requireAdmin(req);
+    const sessionId = normalizeSessionId(req.body?.sessionId);
+    if (!sessionId) return jsonError(res, 400, 'sessionId is required');
+
+    const leadStage = normalizeLeadStageInput(req.body?.leadStage);
+    const priority = normalizePriorityInput(req.body?.priority);
+    const assignedTo = asString(req.body?.assignedTo);
+    const internalNotes = asString(req.body?.internalNotes);
+
+    const patch = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (leadStage) patch.leadStage = leadStage;
+    if (priority) patch.priority = priority;
+    if (assignedTo || req.body?.assignedTo === '') patch.assignedTo = assignedTo;
+    if (internalNotes || req.body?.internalNotes === '') {
+      patch.internalNotes = internalNotes;
+      patch.internalNotesUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+      patch.internalNotesUpdatedBy = adminUser.uid;
+    }
+
+    await db.collection(SESSION_COLLECTION).doc(sessionId).set(patch, { merge: true });
+    const updatedSnap = await db.collection(SESSION_COLLECTION).doc(sessionId).get();
+    if (!updatedSnap.exists) return jsonError(res, 404, 'Session not found');
+
+    setCors(res);
+    res.status(200).json({ ok: true, lead: mapLeadSummary(updatedSnap) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminUpdateLead] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to update lead');
+  }
+});
+
+export const adminAddLeadNote = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    const adminUser = await requireAdmin(req);
+    const sessionId = normalizeSessionId(req.body?.sessionId);
+    const note = asString(req.body?.note);
+    if (!sessionId) return jsonError(res, 400, 'sessionId is required');
+    if (!note) return jsonError(res, 400, 'note is required');
+
+    const sessionRef = db.collection(SESSION_COLLECTION).doc(sessionId);
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const noteRef = sessionRef.collection('adminNotes').doc();
+    await noteRef.set({
+      text: note,
+      authorUid: adminUser.uid,
+      authorEmail: adminUser.email,
+      createdAt: now,
+    });
+
+    await sessionRef.set(
+      {
+        internalNotes: note,
+        internalNotesUpdatedAt: now,
+        internalNotesUpdatedBy: adminUser.uid,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    setCors(res);
+    res.status(200).json({
+      ok: true,
+      note: {
+        noteId: noteRef.id,
+        text: note,
+        authorUid: adminUser.uid,
+        authorEmail: adminUser.email,
+      },
+    });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminAddLeadNote] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to add note');
+  }
+});
+
+export const adminListCustomers = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    await requireAdmin(req);
+    const search = asString(req.body?.search).toLowerCase();
+    const pageSize = Math.min(Math.max(Number(req.body?.pageSize || 25), 1), 100);
+    const cursor = asString(req.body?.cursor);
+
+    let query = db.collection(RFQ_COLLECTION).orderBy('updatedAt', 'desc').limit(Math.max(pageSize * 8, 120));
+    if (cursor) {
+      const cursorSnap = await db.collection(RFQ_COLLECTION).doc(cursor).get();
+      if (cursorSnap.exists) query = query.startAfter(cursorSnap);
+    }
+
+    const snap = await query.get();
+    const grouped = new Map();
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      const extracted = data.extracted || {};
+      const email = normalizeEmail(data.customerEmailNormalized || extracted.email);
+      if (!email) continue;
+      if (search && !email.includes(search)) continue;
+
+      const current = grouped.get(email) || {
+        email,
+        companyName: asString(extracted.companyName),
+        contactName: asString(extracted.contactName),
+        submissions: 0,
+        latestSubmissionAt: null,
+      };
+      current.submissions += 1;
+      const ts = toIso(data.updatedAt || data.createdAt);
+      if (!current.latestSubmissionAt || (ts && ts > current.latestSubmissionAt)) current.latestSubmissionAt = ts;
+      if (!current.companyName) current.companyName = asString(extracted.companyName);
+      if (!current.contactName) current.contactName = asString(extracted.contactName);
+      grouped.set(email, current);
+      if (grouped.size >= pageSize) break;
+    }
+
+    const items = Array.from(grouped.values()).sort((a, b) => (a.latestSubmissionAt < b.latestSubmissionAt ? 1 : -1));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1].id : '';
+    setCors(res);
+    res.status(200).json({
+      ok: true,
+      items,
+      nextCursor,
+      hasMore: Boolean(nextCursor),
+    });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminListCustomers] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list customers');
+  }
+});
+
+export const adminGetCustomerTimeline = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    await requireAdmin(req);
+    const email = normalizeEmail(req.body?.email);
+    if (!email) return jsonError(res, 400, 'email is required');
+
+    const snap = await db
+      .collection(RFQ_COLLECTION)
+      .where('customerEmailNormalized', '==', email)
+      .orderBy('updatedAt', 'desc')
+      .limit(100)
+      .get();
+
+    const timeline = snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      const extracted = data.extracted || {};
+      return {
+        rfqId: doc.id,
+        sessionId: asString(data.sessionId),
+        chemicalName: asString(extracted.chemicalName),
+        quantity: asString(extracted.quantity),
+        deliveryLocation: asString(extracted.deliveryLocation),
+        emailStatus: asString(data.emailStatus),
+        updatedAt: toIso(data.updatedAt),
+        createdAt: toIso(data.createdAt),
+      };
+    });
+
+    setCors(res);
+    res.status(200).json({ ok: true, email, timeline });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminGetCustomerTimeline] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to load customer timeline');
+  }
+});

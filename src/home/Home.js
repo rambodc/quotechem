@@ -1,15 +1,15 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import './Home2.css';
+import './Home.css';
 
 const INITIAL_PROMPT =
-  "Hey — I'm QuoteChem V2. Tell me what chemical you need, what industry/use it's for, quantity, and delivery location.";
+  "Hey — I'm QuoteChem. Tell me what chemical you need, what industry/use it's for, quantity, and delivery location.";
 const ROTATING_HEADLINES = [
   'Source Bulk Chemicals Smarter',
   'Verified Suppliers. Competitive Pricing.',
   'Quotes in Minutes, Not Days.',
 ];
 
-const SHOW_MANUAL_FINALIZE = String(process.env.REACT_APP_HOME2_SHOW_MANUAL_FINALIZE || 'false').toLowerCase() === 'true';
+const SHOW_MANUAL_FINALIZE = String(process.env.REACT_APP_SHOW_MANUAL_FINALIZE || 'false').toLowerCase() === 'true';
 
 const EXTRACTED_FIELDS = [
   'chemicalName',
@@ -99,7 +99,7 @@ function toFieldLabel(field) {
   return labels[field] || field;
 }
 
-export default function Home2() {
+export default function Home() {
   const [sessionId, setSessionId] = useState('');
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -137,7 +137,7 @@ export default function Home2() {
       },
     };
 
-    const data = await postJson('createPublicSessionV2', payload);
+    const data = await postJson('createPublicSession', payload);
     setSessionId(data.sessionId);
 
     const restored = Array.isArray(data?.session?.messages) ? data.session.messages.map(normalizeMessage) : [];
@@ -168,7 +168,7 @@ export default function Home2() {
         await bootSession();
       } catch (err) {
         if (!active) return;
-        setError(err?.message || 'Unable to initialize Home2 session.');
+        setError(err?.message || 'Unable to initialize session.');
       }
     };
 
@@ -216,7 +216,7 @@ export default function Home2() {
     setLoading(true);
 
     try {
-      const data = await postJson('chatPublicAssistantV2', { sessionId, message: value });
+      const data = await postJson('chatPublicAssistant', { sessionId, message: value });
       setAssistantMessage({
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -237,7 +237,7 @@ export default function Home2() {
 
     try {
       const data = await postJson(
-        'finalizePublicSessionV2',
+        'finalizePublicSession',
         {
           sessionId,
           action: 'confirm',
@@ -369,7 +369,7 @@ export default function Home2() {
 
         {completed ? (
           <div className="completion-card">
-            <h2>Request Submitted (Home2)</h2>
+            <h2>Request Submitted</h2>
             <p>
               {emailStatus === 'sent'
                 ? 'Your request was saved and confirmation email was sent.'

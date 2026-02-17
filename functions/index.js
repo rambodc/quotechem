@@ -1,13 +1,27 @@
 import { runStartupDiagnostics } from './runStartupDiagnostics.js';
-import { createPublicSession, chatPublicAssistant, sendTestEmail } from './publicQuoteChat.js';
-import { createPublicSessionV2, chatPublicAssistantV2, finalizePublicSessionV2 } from './publicQuoteChatV2.js';
+import {
+  createPublicSession,
+  chatPublicAssistant,
+  finalizePublicSession,
+  adminDashboardSummary,
+  adminListLeads,
+  adminGetLeadDetail,
+  adminUpdateLead,
+  adminAddLeadNote,
+  adminListCustomers,
+  adminGetCustomerTimeline,
+} from './publicQuoteChat.js';
 
 export {
   runStartupDiagnostics,
   createPublicSession,
   chatPublicAssistant,
-  sendTestEmail,
-  createPublicSessionV2,
-  chatPublicAssistantV2,
-  finalizePublicSessionV2,
+  finalizePublicSession,
+  adminDashboardSummary,
+  adminListLeads,
+  adminGetLeadDetail,
+  adminUpdateLead,
+  adminAddLeadNote,
+  adminListCustomers,
+  adminGetCustomerTimeline,
 };
