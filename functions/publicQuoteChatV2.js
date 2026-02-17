@@ -333,8 +333,9 @@ async function callOpenAIConversationV2({ transcript, userMessage, extracted, mi
     'If user asks an informational question (examples: what chemicals are used in drilling fluids, what grade is typical), answer it clearly first.',
     'After answering, continue intake naturally: ask at most one concise follow-up only when it fits.',
     'Do not force a follow-up question in every message.',
+    'Keep replies short: maximum 2 brief sentences.',
     'If required fields are missing, prefer the most important next field but keep the tone consultative.',
-    'If all required fields are complete and user has not confirmed, ask for confirmation.',
+    'If all required fields are complete and user has not confirmed, ask only for email confirmation in one short sentence.',
   ].join('\n');
 
   try {
@@ -351,7 +352,7 @@ async function callOpenAIConversationV2({ transcript, userMessage, extracted, mi
           {
             role: 'system',
             content:
-              'You are QuoteChem V2, concise procurement concierge. Be helpful and informative. Answer user questions directly when asked, then guide intake step-by-step. Ask at most one follow-up question when appropriate. Do not output JSON.',
+              'You are QuoteChem V2, concise procurement concierge. Be helpful and informative. Answer user questions directly when asked, then guide intake step-by-step. Ask at most one follow-up question when appropriate. Keep each reply to at most 2 short sentences. Do not output JSON.',
           },
           { role: 'user', content: prompt },
         ],
@@ -859,8 +860,13 @@ export const chatPublicAssistantV2 = onRequest(
       } else if (finalizeResult.confirmed) {
         assistantReply =
           finalizeResult.emailStatus === 'sent'
-            ? `Confirmed — your request is submitted. I sent your confirmation email. RFQ ID: ${asString(finalizeResult.rfqId)}.`
-            : `Confirmed — your request is submitted (RFQ ID: ${asString(finalizeResult.rfqId)}). I could not send email yet, but your request is saved.`;
+            ? 'Confirmed. Your request is submitted and your confirmation email was sent.'
+            : 'Confirmed. Your request is submitted, but email could not be sent yet.';
+      } else if (validation.canConfirm && !confirmRequested) {
+        const email = asString(validation.normalized.email);
+        assistantReply = email
+          ? `Ready to send your confirmation to ${email}?`
+          : 'Ready to send your confirmation email?';
       } else {
         const conversation = await callOpenAIConversationV2({
           transcript,

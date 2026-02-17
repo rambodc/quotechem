@@ -264,8 +264,8 @@ export default function Home2() {
         role: 'assistant',
         content:
           data.emailStatus === 'sent'
-            ? `Confirmed — request submitted and email sent. RFQ ID: ${data.rfqId || ''}`
-            : `Request submitted. Email status: ${data.emailStatus || 'unknown'}. RFQ ID: ${data.rfqId || ''}`,
+            ? 'Confirmed. Request submitted and email sent.'
+            : `Confirmed. Request submitted. Email status: ${data.emailStatus || 'unknown'}.`,
       });
     } catch (err) {
       setError(err?.message || 'Manual finalize failed.');
@@ -375,7 +375,6 @@ export default function Home2() {
                 ? 'Your request was saved and confirmation email was sent.'
                 : 'Your request was saved. Email is pending/failed; please check logs.'}
             </p>
-            {rfqId ? <p className="rfq-id">RFQ ID: {rfqId}</p> : null}
             <p className="status-text">Email status: {emailStatus || 'unknown'}</p>
           </div>
         ) : null}
