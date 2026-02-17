@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import './Home2.css';
 
 const INITIAL_PROMPT =
-  "Hey — I'm QuoteChem V2. Tell me what chemical you need, what industry/use it's for, quantity, delivery location, and email.";
+  "Hey — I'm QuoteChem V2. Tell me what chemical you need, what industry/use it's for, quantity, and delivery location.";
 const ROTATING_HEADLINES = [
   'Source Bulk Chemicals Smarter',
   'Verified Suppliers. Competitive Pricing.',

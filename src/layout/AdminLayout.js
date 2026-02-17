@@ -9,7 +9,7 @@ export default function AdminLayout({ user, children }) {
 
   const onLogout = async () => {
     await signOut(auth);
-    navigate('/home', { replace: true });
+    navigate('/', { replace: true });
   };
 
   return (

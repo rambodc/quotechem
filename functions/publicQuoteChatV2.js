@@ -31,7 +31,7 @@ const OPTIONAL_FIELDS = [
 const ALL_EXTRACTION_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS, 'confirm'];
 
 const INITIAL_ASSISTANT_MESSAGE =
-  "Hey — I'm QuoteChem V2. Tell me what chemical you need, what industry/use it's for, quantity, delivery location, and email.";
+  "Hey — I'm QuoteChem V2. Tell me what chemical you need, what industry/use it's for, quantity, and delivery location.";
 
 function setCors(res) {
   res.set('Access-Control-Allow-Origin', '*');

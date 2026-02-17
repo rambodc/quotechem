@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import Home from './home/Home';
 import Home2 from './home/Home2';
 import Login from './auth/Login';
 import ForgotPassword from './auth/ForgotPassword';
@@ -116,9 +115,9 @@ function App() {
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={<Navigate to="/home" replace />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/home2" element={<Home2 />} />
+          <Route path="/" element={<Home2 />} />
+          <Route path="/home" element={<Navigate to="/" replace />} />
+          <Route path="/home2" element={<Navigate to="/" replace />} />
           <Route
             path="/signin"
             element={firebaseUser ? <Navigate to="/more" replace /> : <Login />}
@@ -179,7 +178,7 @@ function App() {
             }
           />
 
-          <Route path="*" element={<Navigate to="/home" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </UserContext.Provider>
     </Router>
