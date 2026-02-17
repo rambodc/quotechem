@@ -33,6 +33,12 @@ function AdminRoute({ user, checking, role, children }) {
   return role === 'admin' ? children : <Navigate to="/user/home" replace />;
 }
 
+function UserRoute({ user, checking, role, children }) {
+  if (checking) return null;
+  if (!user) return <Navigate to="/signin" replace />;
+  return role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : children;
+}
+
 function PortalRedirect({ role }) {
   return <Navigate to={role === 'admin' ? '/admin/dashboard' : '/user/home'} replace />;
 }
@@ -200,41 +206,41 @@ function App() {
           <Route
             path="/user/home"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
                 <PortalLayout user={contextValue} role="user">
                   <UserHome />
                 </PortalLayout>
-              </ProtectedRoute>
+              </UserRoute>
             }
           />
           <Route
             path="/user/account"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
                 <PortalLayout user={contextValue} role="user">
                   <Account />
                 </PortalLayout>
-              </ProtectedRoute>
+              </UserRoute>
             }
           />
           <Route
             path="/user/account/email"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
                 <PortalLayout user={contextValue} role="user">
                   <ChangeEmail />
                 </PortalLayout>
-              </ProtectedRoute>
+              </UserRoute>
             }
           />
           <Route
             path="/user/account/password"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
                 <PortalLayout user={contextValue} role="user">
                   <ChangePassword />
                 </PortalLayout>
-              </ProtectedRoute>
+              </UserRoute>
             }
           />
 
