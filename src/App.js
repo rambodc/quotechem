@@ -5,11 +5,11 @@ import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/fires
 import { auth, db } from './firebase';
 import Home from './home/Home';
 import Login from './auth/Login';
+import Signup from './auth/Signup';
 import ForgotPassword from './auth/ForgotPassword';
 import Account from './account/Account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
-import EditUsername from './account/EditUsername';
 import PortalLayout from './layout/PortalLayout';
 import Dashboard from './admin/Dashboard';
 import Leads from './admin/Leads';
@@ -43,22 +43,6 @@ function App() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const profileUnsubRef = useRef(null);
 
-  const normalizeUsername = (value) =>
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, '')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 24);
-
-  const deriveUsername = (data, user) => {
-    const existing = typeof data.username === 'string' ? data.username.trim() : '';
-    if (existing) return existing;
-    const emailPart = (user?.email || '').split('@')[0] || '';
-    const candidate = normalizeUsername(emailPart || user?.uid || 'user');
-    if (candidate.length >= 3) return candidate;
-    return `user_${(user?.uid || '').slice(0, 6) || '000001'}`;
-  };
-
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setFirebaseUser(u);
@@ -80,7 +64,6 @@ function App() {
 
         if (!snap.exists()) {
           const now = serverTimestamp();
-          const generatedUsername = deriveUsername({}, u);
           await setDoc(
             userRef,
             {
@@ -89,8 +72,6 @@ function App() {
               firstName: '',
               lastName: '',
               role: 'user',
-              username: generatedUsername,
-              usernameNormalized: normalizeUsername(generatedUsername),
               primaryAuthUid: u.uid,
               createdAt: now,
               updatedAt: now,
@@ -101,7 +82,6 @@ function App() {
 
         profileUnsubRef.current = onSnapshot(userRef, (profileSnap) => {
           const data = profileSnap.exists() ? profileSnap.data() || {} : {};
-          const finalUsername = deriveUsername(data, u);
 
           setAppUser({
             id: u.uid,
@@ -110,11 +90,6 @@ function App() {
             role: normalizeRole(data.role),
             firstName: typeof data.firstName === 'string' ? data.firstName : '',
             lastName: typeof data.lastName === 'string' ? data.lastName : '',
-            username: typeof data.username === 'string' ? data.username : finalUsername,
-            usernameNormalized:
-              typeof data.usernameNormalized === 'string'
-                ? data.usernameNormalized
-                : normalizeUsername(finalUsername),
           });
         });
       } catch {
@@ -140,6 +115,10 @@ function App() {
           <Route
             path="/signin"
             element={firebaseUser ? <Navigate to="/portal" replace /> : <Login />}
+          />
+          <Route
+            path="/signup"
+            element={firebaseUser ? <Navigate to="/portal" replace /> : <Signup />}
           />
           <Route
             path="/forgot"
@@ -217,16 +196,6 @@ function App() {
               </AdminRoute>
             }
           />
-          <Route
-            path="/admin/account/username"
-            element={
-              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="admin">
-                  <EditUsername />
-                </PortalLayout>
-              </AdminRoute>
-            }
-          />
 
           <Route
             path="/user/home"
@@ -264,16 +233,6 @@ function App() {
               <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
                 <PortalLayout user={contextValue} role="user">
                   <ChangePassword />
-                </PortalLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/user/account/username"
-            element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
-                <PortalLayout user={contextValue} role="user">
-                  <EditUsername />
                 </PortalLayout>
               </ProtectedRoute>
             }

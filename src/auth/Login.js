@@ -70,6 +70,9 @@ export default function Login() {
           <Link to="/forgot">Forgot password</Link>
         </p>
         <p className="auth-link">
+          <Link to="/signup">Create account</Link>
+        </p>
+        <p className="auth-link">
           <Link to="/">Back to public home</Link>
         </p>
       </form>

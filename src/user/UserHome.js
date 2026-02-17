@@ -19,7 +19,6 @@ export default function UserHome() {
       <article className="panel">
         <h2 style={{ marginTop: 0 }}>Profile</h2>
         <p className="meta">Email: {appUser?.email || '—'}</p>
-        <p className="meta">Username: {appUser?.username || '—'}</p>
       </article>
 
       <article className="panel">

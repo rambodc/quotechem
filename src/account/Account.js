@@ -1,6 +1,6 @@
 import React, { useContext, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiChevronRight, FiKey, FiMail, FiUser } from 'react-icons/fi';
+import { FiChevronRight, FiKey, FiMail } from 'react-icons/fi';
 import { UserContext } from '../App';
 import { accountBaseForRole } from './routeUtils';
 import './Account.css';
@@ -35,11 +35,6 @@ export default function Account() {
           icon={FiKey}
           title="Change password"
           onClick={() => navigate(`${base}/password`)}
-        />
-        <AccountAction
-          icon={FiUser}
-          title="Edit username"
-          onClick={() => navigate(`${base}/username`)}
         />
       </div>
     </section>
