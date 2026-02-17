@@ -19,6 +19,7 @@ const OPTIONAL_FIELDS = [
   'neededBy',
   'frequency',
   'specNotes',
+  'additionalNotes',
   'chemicalIdentity',
   'contactName',
   'companyName',
@@ -258,6 +259,7 @@ async function callOpenAIExtractionTurnV2({ transcript }) {
     'Required fields:',
     REQUIRED_FIELDS.join(', '),
     'Optional fields should be included only if the user explicitly provided them in the transcript.',
+    'Use additionalNotes to capture other important context not covered by other fields; concise summary is preferred.',
     'Set confirm=true only if the user clearly confirms proceeding/submitting.',
     'No markdown. No extra keys.',
     'Transcript:',
@@ -489,6 +491,7 @@ function buildCustomerEmailV2(extracted) {
     ['Packaging', extracted.packagingPreference],
     ['Needed By', extracted.neededBy],
     ['Frequency', extracted.frequency],
+    ['Additional Notes', extracted.additionalNotes],
     ['Chemical Details', extracted.chemicalIdentity],
     ['Notes', extracted.specNotes],
   ].filter(([, value]) => asString(value));

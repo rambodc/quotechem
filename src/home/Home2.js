@@ -26,6 +26,7 @@ const EXTRACTED_FIELDS = [
   'packagingPreference',
   'neededBy',
   'frequency',
+  'additionalNotes',
   'specNotes',
   'chemicalIdentity',
 ];
@@ -91,6 +92,7 @@ function toFieldLabel(field) {
     packagingPreference: 'Packaging Preference',
     neededBy: 'Needed By',
     frequency: 'Frequency',
+    additionalNotes: 'Additional Notes',
     specNotes: 'Spec Notes',
     chemicalIdentity: 'Chemical Identity',
   };
