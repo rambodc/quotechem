@@ -280,7 +280,7 @@ export default function Home() {
 
       <header className="home-topbar">
         <div className="home-brand">
-          <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="home-logo" />
+          <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo 1000 White.png`} alt="QuoteChem" className="home-logo" />
         </div>
       </header>
 

@@ -30,7 +30,7 @@ export default function PortalLayout({ user, role, children }) {
     <div className="portal-shell">
       <aside className="portal-sidebar">
         <div className="portal-brand">
-          <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" />
+          <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo 200.png`} alt="QuoteChem" />
           <div>
             <strong>QuoteChem</strong>
             <span>{role === 'admin' ? 'Admin Console' : 'User Portal'}</span>
