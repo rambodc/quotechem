@@ -11,7 +11,6 @@ const RFQ_COLLECTION = 'publicRfqs';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
-const QUOTECHEM_FROM_EMAIL = defineSecret('QUOTECHEM_FROM_EMAIL');
 
 const REQUIRED_FIELDS = ['chemicalName', 'industryUse', 'quantity', 'deliveryLocation', 'email'];
 const OPTIONAL_FIELDS = [
@@ -456,11 +455,12 @@ async function sendEmail({ toEmail, subject, text, html }) {
   const apiKey = readSecret(SENDGRID_API_KEY);
   if (!apiKey) throw new Error('Missing SENDGRID_API_KEY');
 
-  const fromEmail = readSecret(QUOTECHEM_FROM_EMAIL) || 'noreply@quotechem.com';
+  const fromEmail = 'noreply@quotechem.com';
+  const fromName = 'QuoteChem';
 
   const payload = {
     personalizations: [{ to: [{ email: toEmail }] }],
-    from: { email: fromEmail },
+    from: { email: fromEmail, name: fromName },
     subject,
     content: [
       { type: 'text/plain', value: text },
@@ -809,7 +809,7 @@ export const chatPublicAssistant = onRequest(
   {
     region: REGION,
     timeoutSeconds: 60,
-    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY, QUOTECHEM_FROM_EMAIL],
+    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY],
   },
   async (req, res) => {
     if (preflight(req, res)) return;
@@ -997,7 +997,7 @@ export const finalizePublicSession = onRequest(
   {
     region: REGION,
     timeoutSeconds: 60,
-    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY, QUOTECHEM_FROM_EMAIL],
+    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY],
   },
   async (req, res) => {
     if (preflight(req, res)) return;
