@@ -219,6 +219,37 @@
   cursor: not-allowed;
 }
 
+.action-input-row {
+  width: min(760px, 100%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.action-choice {
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: rgba(14, 165, 233, 0.2);
+  color: #e0f2fe;
+  font-size: 0.98rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease, opacity 160ms ease;
+}
+
+.action-choice:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.35);
+  transform: translateY(-1px);
+}
+
+.action-choice:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .chat-helper-actions {
   display: grid;
   gap: 8px;
@@ -389,6 +420,14 @@
   .chat-input-row button {
     width: 100%;
     height: 54px;
+  }
+
+  .action-input-row {
+    justify-content: stretch;
+  }
+
+  .action-choice {
+    width: 100%;
   }
 
   .home-brand span {

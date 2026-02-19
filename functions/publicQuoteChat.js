@@ -31,6 +31,11 @@ const ALL_EXTRACTION_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS, 'confirm'
 
 const INITIAL_ASSISTANT_MESSAGE =
   "Hey — I'm QuoteChem. Tell me what chemical you need, what industry/use it's for, quantity, and delivery location.";
+const INPUT_MODE_TEXT = 'text';
+const INPUT_MODE_ACTION = 'action';
+const MAX_ACTION_COUNT = 3;
+const MIN_ACTION_COUNT = 2;
+const MAX_ACTION_TEXT_LENGTH = 60;
 
 function setCors(res) {
   res.set('Access-Control-Allow-Origin', '*');
@@ -220,14 +225,77 @@ function looksLikeUserConfirmation(message) {
   return /\b(confirm|confirmed|proceed|submit|send it|go ahead|looks good|that's correct|that is correct|approved|approve)\b/.test(text);
 }
 
+function normalizeAssistantActions(actions) {
+  if (!Array.isArray(actions)) return [];
+
+  const out = [];
+  const seen = new Set();
+  for (const item of actions) {
+    if (!item || typeof item !== 'object') continue;
+
+    const label = asString(item.label).slice(0, MAX_ACTION_TEXT_LENGTH);
+    const value = asString(item.value).slice(0, MAX_ACTION_TEXT_LENGTH);
+    if (!label || !value) continue;
+
+    const dedupeKey = `${label.toLowerCase()}::${value.toLowerCase()}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push({ label, value });
+  }
+
+  return out;
+}
+
+function looksLikeAssistantConfirmationPrompt(reply) {
+  const text = asString(reply).toLowerCase();
+  if (!text) return false;
+  return /\b(confirm|confirmation|proceed|submit|send|ready)\b/.test(text);
+}
+
+function buildTextAssistantUi(reply) {
+  const value = asString(reply) || 'Please continue with your requirement details.';
+  return {
+    reply: value,
+    inputMode: INPUT_MODE_TEXT,
+    actions: [],
+  };
+}
+
+function sanitizeAssistantUi(input = {}) {
+  const reply = asString(input.reply) || 'Please continue with your requirement details.';
+  const rawMode = asString(input.inputMode).toLowerCase();
+  if (rawMode !== INPUT_MODE_ACTION && rawMode !== INPUT_MODE_TEXT) {
+    return buildTextAssistantUi(reply);
+  }
+
+  if (rawMode === INPUT_MODE_TEXT) return buildTextAssistantUi(reply);
+
+  const actions = normalizeAssistantActions(input.actions).slice(0, MAX_ACTION_COUNT);
+  if (actions.length < MIN_ACTION_COUNT) return buildTextAssistantUi(reply);
+  if (!looksLikeAssistantConfirmationPrompt(reply)) return buildTextAssistantUi(reply);
+
+  return {
+    reply,
+    inputMode: INPUT_MODE_ACTION,
+    actions,
+  };
+}
+
 function mapMessageDoc(docSnap) {
   const data = docSnap.data() || {};
+  const ui = sanitizeAssistantUi({
+    reply: data.content || '',
+    inputMode: data.inputMode,
+    actions: data.actions,
+  });
   return {
     id: docSnap.id,
     role: data.role || 'user',
     content: data.content || '',
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
     model: data.model || '',
+    inputMode: data.role === 'assistant' ? ui.inputMode : INPUT_MODE_TEXT,
+    actions: data.role === 'assistant' ? ui.actions : [],
   };
 }
 
@@ -290,6 +358,8 @@ async function ensureSession(sessionId, metadata = {}) {
       role: 'assistant',
       content: INITIAL_ASSISTANT_MESSAGE,
       model: 'system-seed',
+      inputMode: INPUT_MODE_TEXT,
+      actions: [],
       createdAt: now,
     });
 
@@ -368,13 +438,13 @@ async function callOpenAIExtractionTurn({ transcript }) {
   };
 }
 
-async function callOpenAIConversation({ transcript, userMessage, extracted, missingRequired, confirmRequested }) {
+async function callOpenAIConversation({ transcript, userMessage, extracted, missingRequired, confirmRequested, readyToFinalize }) {
   const apiKey = readSecret(OPENAI_API_KEY);
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
   if (!apiKey) {
     return {
-      reply: 'Thanks. Please continue with your requirement details.',
+      ui: buildTextAssistantUi('Thanks. Please continue with your requirement details.'),
       model: 'fallback-no-openai-key',
       error: 'Missing OPENAI_API_KEY',
     };
@@ -389,13 +459,18 @@ async function callOpenAIConversation({ transcript, userMessage, extracted, miss
     JSON.stringify(extracted || {}),
     `Missing required fields: ${(missingRequired || []).join(', ') || 'none'}`,
     `User requested confirm: ${confirmRequested ? 'true' : 'false'}`,
+    `Ready to finalize: ${readyToFinalize ? 'true' : 'false'}`,
     'Reply as QuoteChem.',
     'If user asks an informational question (examples: what chemicals are used in drilling fluids, what grade is typical), answer it clearly first.',
     'After answering, continue intake naturally: ask at most one concise follow-up only when it fits.',
     'Do not force a follow-up question in every message.',
     'Keep replies short: maximum 2 brief sentences.',
     'If required fields are missing, prefer the most important next field but keep the tone consultative.',
-    'If all required fields are complete and user has not confirmed, ask only for email confirmation in one short sentence.',
+    'Output strict JSON only, with keys: reply, inputMode, actions.',
+    'inputMode must be text or action.',
+    'Use action mode only for confirmation decisions.',
+    'If inputMode is action, include 2-3 actions with {label, value} such as Yes, No, Learn more.',
+    'If not asking for confirmation, use text mode and actions must be an empty array.',
   ].join('\n');
 
   try {
@@ -408,11 +483,12 @@ async function callOpenAIConversation({ transcript, userMessage, extracted, miss
       body: JSON.stringify({
         model,
         temperature: 0.2,
+        response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
             content:
-              'You are QuoteChem, concise procurement concierge. Be helpful and informative. Answer user questions directly when asked, then guide intake step-by-step. Ask at most one follow-up question when appropriate. Keep each reply to at most 2 short sentences. Do not output JSON.',
+              'You are QuoteChem, concise procurement concierge. Return JSON only with reply/inputMode/actions. Default to text mode. Use action mode only for explicit confirmation decisions.',
           },
           { role: 'user', content: prompt },
         ],
@@ -425,12 +501,23 @@ async function callOpenAIConversation({ transcript, userMessage, extracted, miss
     }
 
     const data = await response.json();
-    const reply = asString(data?.choices?.[0]?.message?.content) || 'Please continue with the remaining details.';
+    const raw = data?.choices?.[0]?.message?.content || '{}';
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = {};
+    }
+    const ui = sanitizeAssistantUi({
+      reply: asString(parsed?.reply) || 'Please continue with the remaining details.',
+      inputMode: parsed?.inputMode,
+      actions: parsed?.actions,
+    });
 
-    return { reply, model, error: '' };
+    return { ui, model, error: '' };
   } catch (error) {
     return {
-      reply: 'Please continue with the remaining details.',
+      ui: buildTextAssistantUi('Please continue with the remaining details.'),
       model,
       error: asString(error?.message || String(error)),
     };
@@ -918,19 +1005,18 @@ export const chatPublicAssistant = onRequest(
         }
       }
 
-      let assistantReply = '';
+      let assistantUi = buildTextAssistantUi('');
+      let assistantModel = extractionModel || process.env.OPENAI_MODEL || 'gpt-4o-mini';
       if (autoConfirmEnabled && confirmRequested && !validation.canConfirm) {
-        assistantReply = buildMissingFieldsPrompt(validation.missingRequired) || 'Before I finalize, I still need a few details.';
+        assistantUi = buildTextAssistantUi(
+          buildMissingFieldsPrompt(validation.missingRequired) || 'Before I finalize, I still need a few details.'
+        );
       } else if (finalizeResult.confirmed) {
-        assistantReply =
+        assistantUi = buildTextAssistantUi(
           finalizeResult.emailStatus === 'sent'
             ? 'Confirmed. Your request is submitted and your confirmation email was sent.'
-            : 'Confirmed. Your request is submitted, but email could not be sent yet.';
-      } else if (validation.canConfirm && !confirmRequested) {
-        const email = asString(validation.normalized.email);
-        assistantReply = email
-          ? `Ready to send your confirmation to ${email}?`
-          : 'Ready to send your confirmation email?';
+            : 'Confirmed. Your request is submitted, but email could not be sent yet.'
+        );
       } else {
         const conversation = await callOpenAIConversation({
           transcript,
@@ -938,8 +1024,10 @@ export const chatPublicAssistant = onRequest(
           extracted: validation.normalized,
           missingRequired: validation.missingRequired,
           confirmRequested,
+          readyToFinalize: validation.readyToFinalize,
         });
 
+        assistantModel = asString(conversation.model) || assistantModel;
         if (conversation.error) {
           logger.error('public_openai_error', {
             sessionId,
@@ -948,13 +1036,15 @@ export const chatPublicAssistant = onRequest(
           });
         }
 
-        assistantReply = asString(conversation.reply) || 'Please continue with your requirement details.';
+        assistantUi = sanitizeAssistantUi(conversation.ui);
       }
 
       await sessionRef.collection('messages').doc().set({
         role: 'assistant',
-        content: assistantReply,
-        model: extractionModel || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        content: assistantUi.reply,
+        inputMode: assistantUi.inputMode,
+        actions: assistantUi.actions,
+        model: assistantModel,
         createdAt: now,
       });
 
@@ -973,8 +1063,9 @@ export const chatPublicAssistant = onRequest(
         ok: true,
         sessionId,
         assistant: {
-          reply: assistantReply,
-          quickReplies: [],
+          reply: assistantUi.reply,
+          inputMode: assistantUi.inputMode,
+          actions: assistantUi.actions,
         },
         state: buildStateResponse({
           extracted: { ...validation.normalized, confirm: confirmRequested },
@@ -1455,3 +1546,9 @@ export const adminGetCustomerTimeline = onRequest({ region: REGION }, async (req
     return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to load customer timeline');
   }
 });
+
+export const __testables = {
+  sanitizeAssistantUi,
+  buildTextAssistantUi,
+  looksLikeAssistantConfirmationPrompt,
+};

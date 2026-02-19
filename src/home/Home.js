@@ -10,6 +10,8 @@ const ROTATING_HEADLINES = [
 ];
 
 const SHOW_MANUAL_FINALIZE = String(process.env.REACT_APP_SHOW_MANUAL_FINALIZE || 'false').toLowerCase() === 'true';
+const INPUT_MODE_TEXT = 'text';
+const INPUT_MODE_ACTION = 'action';
 
 const EXTRACTED_FIELDS = [
   'chemicalName',
@@ -63,16 +65,29 @@ async function postJson(path, payload, options = {}) {
 }
 
 function normalizeMessage(message) {
+  const rawMode = typeof message.inputMode === 'string' ? message.inputMode.trim().toLowerCase() : '';
+  const inputMode = rawMode === INPUT_MODE_ACTION ? INPUT_MODE_ACTION : INPUT_MODE_TEXT;
+  const actions = Array.isArray(message.actions)
+    ? message.actions
+        .map((item) => ({
+          label: typeof item?.label === 'string' ? item.label.trim() : '',
+          value: typeof item?.value === 'string' ? item.value.trim() : '',
+        }))
+        .filter((item) => item.label && item.value)
+    : [];
+
   return {
     id: message.id || `msg-${Date.now()}-${Math.random()}`,
     role: message.role || 'assistant',
     content: message.content || '',
+    inputMode: inputMode === INPUT_MODE_ACTION && actions.length >= 2 ? INPUT_MODE_ACTION : INPUT_MODE_TEXT,
+    actions: inputMode === INPUT_MODE_ACTION && actions.length >= 2 ? actions.slice(0, 3) : [],
   };
 }
 
 function getLatestAssistant(messages) {
   const latest = [...messages].reverse().find((item) => item.role === 'assistant');
-  if (!latest) return { id: 'initial', role: 'assistant', content: INITIAL_PROMPT };
+  if (!latest) return { id: 'initial', role: 'assistant', content: INITIAL_PROMPT, inputMode: INPUT_MODE_TEXT, actions: [] };
   return latest;
 }
 
@@ -109,6 +124,8 @@ export default function Home() {
     id: 'initial',
     role: 'assistant',
     content: INITIAL_PROMPT,
+    inputMode: INPUT_MODE_TEXT,
+    actions: [],
   });
 
   const [completed, setCompleted] = useState(false);
@@ -221,6 +238,8 @@ export default function Home() {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: data.assistant?.reply || 'Please continue with your requirement details.',
+        inputMode: typeof data.assistant?.inputMode === 'string' ? data.assistant.inputMode.toLowerCase() : INPUT_MODE_TEXT,
+        actions: Array.isArray(data.assistant?.actions) ? data.assistant.actions : [],
       });
       applyStateFromResponse(data);
     } catch (err) {
@@ -266,6 +285,8 @@ export default function Home() {
           data.emailStatus === 'sent'
             ? 'Confirmed. Request submitted and email sent.'
             : `Confirmed. Request submitted. Email status: ${data.emailStatus || 'unknown'}.`,
+        inputMode: INPUT_MODE_TEXT,
+        actions: [],
       });
     } catch (err) {
       setError(err?.message || 'Manual finalize failed.');
@@ -273,6 +294,12 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  const normalizedAssistantMessage = normalizeMessage(assistantMessage);
+  const showActionInput =
+    normalizedAssistantMessage.inputMode === INPUT_MODE_ACTION
+    && normalizedAssistantMessage.actions.length >= 2
+    && !completed;
 
   return (
     <section className="public-home">
@@ -301,30 +328,46 @@ export default function Home() {
           )}
         </div>
 
-        <form
-          className="chat-input-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            sendMessage(draft);
-          }}
-        >
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage(draft);
-              }
+        {showActionInput ? (
+          <div className="action-input-row" role="group" aria-label="Response options">
+            {normalizedAssistantMessage.actions.map((action) => (
+              <button
+                key={`${action.label}-${action.value}`}
+                type="button"
+                className="action-choice"
+                disabled={!sessionId || loading || completed}
+                onClick={() => sendMessage(action.value)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <form
+            className="chat-input-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendMessage(draft);
             }}
-            placeholder="Type what you need..."
-            disabled={!sessionId || loading || completed}
-            rows={2}
-          />
-          <button type="submit" disabled={!sessionId || loading || !draft.trim() || completed}>
-            Send
-          </button>
-        </form>
+          >
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  sendMessage(draft);
+                }
+              }}
+              placeholder="Type what you need..."
+              disabled={!sessionId || loading || completed}
+              rows={2}
+            />
+            <button type="submit" disabled={!sessionId || loading || !draft.trim() || completed}>
+              Send
+            </button>
+          </form>
+        )}
 
         <div className="chat-helper-actions">
           <button
