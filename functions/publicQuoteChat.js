@@ -490,7 +490,9 @@ async function sendEmail({ toEmail, subject, text, html }) {
 function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
   const safeTitle = escapeHtml(title);
   const safePreheader = escapeHtml(preheader);
-  const logoUrl = escapeHtml(asString(process.env.EMAIL_BRAND_LOGO_URL) || 'https://quotechemfb.web.app/assets/quotechem-logo.png');
+  const logoUrl = escapeHtml(
+    asString(process.env.EMAIL_BRAND_LOGO_URL) || 'https://quotechemfb.web.app/assets/QuoteChem%20Logo%201000%20White.png'
+  );
 
   const html = [
     '<!doctype html>',
@@ -500,18 +502,20 @@ function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     `<title>${safeTitle}</title>`,
     '</head>',
-    '<body style="margin:0;padding:0;background:#f3f6fb;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;">',
+    '<body style="margin:0;padding:0;background:#ecf3ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;">',
     `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${safePreheader}</div>`,
-    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f6fb;padding:22px 10px;">',
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ecf3ff;padding:24px 10px;">',
     '<tr><td align="center">',
-    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border-radius:16px;border:1px solid #dbe7ff;overflow:hidden;">',
-    '<tr><td style="padding:18px 22px;background:#0f2a56;">',
-    `<img src="${logoUrl}" alt="QuoteChem" style="display:block;height:34px;width:auto;max-width:180px;" />`,
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:700px;background:#ffffff;border-radius:20px;border:1px solid #cfe0ff;overflow:hidden;box-shadow:0 16px 44px rgba(15,42,86,0.12);">',
+    '<tr><td style="padding:28px 28px 22px;background:linear-gradient(135deg,#0f2a56 0%,#143e7d 100%);">',
+    `<img src="${logoUrl}" alt="QuoteChem" style="display:block;height:56px;width:auto;max-width:280px;" />`,
+    '<p style="margin:12px 0 0;font-size:12px;line-height:1.4;color:#dbeafe;letter-spacing:.08em;text-transform:uppercase;">Procurement Confirmation</p>',
     '</td></tr>',
-    `<tr><td style="padding:24px 22px 10px;"><h1 style="margin:0;font-size:24px;line-height:1.3;color:#0f172a;">${safeTitle}</h1></td></tr>`,
-    `<tr><td style="padding:0 22px 18px;">${contentHtml}</td></tr>`,
-    '<tr><td style="padding:16px 22px;background:#f8fafc;border-top:1px solid #e2e8f0;">',
-    '<p style="margin:0;font-size:12px;line-height:1.45;color:#64748b;">Information in this email is provided for quote preparation and should be confirmed before purchase.</p>',
+    `<tr><td style="padding:24px 28px 8px;"><h1 style="margin:0;font-size:28px;line-height:1.25;color:#0f172a;">${safeTitle}</h1></td></tr>`,
+    `<tr><td style="padding:0 28px 22px;">${contentHtml}</td></tr>`,
+    '<tr><td style="padding:18px 28px;background:#f7faff;border-top:1px solid #dde8ff;">',
+    '<p style="margin:0;font-size:12px;line-height:1.55;color:#64748b;">Information in this email is provided for quote preparation and should be confirmed before purchase.</p>',
+    '<p style="margin:8px 0 0;font-size:12px;line-height:1.55;color:#64748b;">QuoteChem, Calgary AB</p>',
     '</td></tr>',
     '</table>',
     '</td></tr>',
@@ -553,20 +557,31 @@ function buildCustomerEmail(extracted) {
     ['Packaging', extracted.packagingPreference],
     ['Needed By', extracted.neededBy],
     ['Frequency', extracted.frequency],
-    ['Additional Notes', extracted.additionalNotes],
     ['Chemical Details', extracted.chemicalIdentity],
     ['Notes', extracted.specNotes],
   ].filter(([, value]) => asString(value));
 
   const htmlRows = summaryRows
-    .map(([label, value]) => `<tr><td style="padding:6px 10px;border:1px solid #d1d5db"><strong>${escapeHtml(label)}</strong></td><td style="padding:6px 10px;border:1px solid #d1d5db">${escapeHtml(value)}</td></tr>`)
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding:10px 12px;border:1px solid #dbe7ff;background:#f8fbff;width:38%;font-size:13px;line-height:1.45;color:#1e3a5f;"><strong>${escapeHtml(
+          label
+        )}</strong></td><td style="padding:10px 12px;border:1px solid #dbe7ff;font-size:14px;line-height:1.5;color:#0f172a;">${escapeHtml(value)}</td></tr>`
+    )
     .join('');
 
   const contentHtml = [
-    '<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#1e293b;">Thanks for your request. We received your RFQ and started supplier outreach.</p>',
-    '<h3 style="margin:14px 0 8px;font-size:17px;color:#0f172a;">Request Summary</h3>',
-    `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:14px;color:#0f172a;">${htmlRows}</table>`,
-    '<p style="margin:12px 0 0;font-size:13px;line-height:1.55;color:#64748b;"><em>Final pricing depends on grade, packaging, freight, and lead time.</em></p>',
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;margin-bottom:14px;">',
+    '<tr>',
+    '<td style="padding:14px 16px;border:1px solid #cfe0ff;border-radius:12px;background:#f2f8ff;">',
+    '<p style="margin:0 0 5px;font-size:12px;line-height:1.4;color:#1d4e89;letter-spacing:.04em;text-transform:uppercase;font-weight:700;">Status</p>',
+    '<p style="margin:0;font-size:15px;line-height:1.5;color:#0f172a;">Your request is received and our sourcing team has started supplier outreach.</p>',
+    '</td>',
+    '</tr>',
+    '</table>',
+    '<h3 style="margin:0 0 10px;font-size:18px;line-height:1.35;color:#0f172a;">Request Summary</h3>',
+    `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #dbe7ff;border-radius:12px;overflow:hidden;">${htmlRows}</table>`,
+    '<p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Final pricing depends on grade, packaging, freight lane, and lead time availability.</p>',
   ].join('');
 
   const contentText = [

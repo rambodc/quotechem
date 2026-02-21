@@ -26,7 +26,6 @@ const EXTRACTED_FIELDS = [
   'packagingPreference',
   'neededBy',
   'frequency',
-  'additionalNotes',
   'specNotes',
   'chemicalIdentity',
 ];
