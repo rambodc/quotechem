@@ -1,10 +1,10 @@
 import { auth } from '../firebase';
 
 export function endpointBase() {
-  const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE;
+  const explicit = process.env.REACT_APP_QUOTECHEM_API_BASE?.trim();
   if (explicit) return explicit.replace(/\/$/, '');
 
-  const projectId = process.env.REACT_APP_FIREBASE_PROJECT_ID;
+  const projectId = process.env.REACT_APP_FIREBASE_PROJECT_ID?.trim();
   if (projectId) return `https://us-central1-${projectId}.cloudfunctions.net`;
 
   return '';

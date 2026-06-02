@@ -455,7 +455,7 @@ async function sendEmail({ toEmail, subject, text, html }) {
   const apiKey = readSecret(SENDGRID_API_KEY);
   if (!apiKey) throw new Error('Missing SENDGRID_API_KEY');
 
-  const fromEmail = 'noreply@quotechem.com';
+  const fromEmail = asString(process.env.QUOTECHEM_FROM_EMAIL) || 'noreply@quotechem.com';
   const fromName = 'QuoteChem';
 
   const payload = {
