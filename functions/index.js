@@ -1,4 +1,5 @@
 import { runStartupDiagnostics } from './runStartupDiagnostics.js';
+import { ciDeploySmokeTest } from './ciDeploySmokeTest.js';
 import {
   createPublicSession,
   chatPublicAssistant,
@@ -14,6 +15,7 @@ import {
 
 export {
   runStartupDiagnostics,
+  ciDeploySmokeTest,
   createPublicSession,
   chatPublicAssistant,
   finalizePublicSession,
