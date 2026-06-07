@@ -12,6 +12,8 @@ build/
 
 # Firebase
 .firebase/
+firebase-debug.log*
+functions/firebase-debug.log*
 
 # Env files
 .env*

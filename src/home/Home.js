@@ -111,7 +111,6 @@ export default function Home() {
   });
 
   const [completed, setCompleted] = useState(false);
-  const [rfqId, setRfqId] = useState('');
   const [emailStatus, setEmailStatus] = useState('not_attempted');
 
   const [headlineIndex, setHeadlineIndex] = useState(0);
@@ -143,7 +142,6 @@ export default function Home() {
     setAssistantMessage(getLatestAssistant(restored));
 
     setCompleted(Boolean(data?.session?.completed));
-    setRfqId(data?.session?.rfqId || '');
     setEmailStatus(data?.session?.emailStatus || 'not_attempted');
 
     if (data?.session?.latestExtractedState && typeof data.session.latestExtractedState === 'object') {
@@ -202,7 +200,6 @@ export default function Home() {
 
     const confirmed = Boolean(state.confirmed) || Boolean(data?.completed);
     setCompleted(confirmed);
-    setRfqId(state.rfqId || data?.rfqId || '');
     if (state.emailStatus) setEmailStatus(state.emailStatus);
   };
 
@@ -254,7 +251,6 @@ export default function Home() {
       }
 
       setCompleted(Boolean(data.saved));
-      setRfqId(data.rfqId || '');
       setEmailStatus(data.emailStatus || 'sent');
       setMissingRequired([]);
       setReadyToFinalize(true);
