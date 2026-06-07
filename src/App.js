@@ -3,7 +3,9 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import Home from './home/Home';
+import ChatPage from './home/Home';
+import CatalogHome from './home/CatalogHome';
+import ProductPage from './home/ProductPage';
 import Login from './auth/Login';
 import Signup from './auth/Signup';
 import ForgotPassword from './auth/ForgotPassword';
@@ -116,7 +118,9 @@ function App() {
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<CatalogHome />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chemicals/:slug" element={<ProductPage />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route
             path="/signin"
