@@ -1,4 +1,4 @@
-name: Validate Firebase Functions on PR
+name: 'PR: Firebase Functions Validation'
 
 on:
   pull_request:

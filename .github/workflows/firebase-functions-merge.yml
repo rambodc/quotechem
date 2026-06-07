@@ -1,4 +1,4 @@
-name: Deploy Firebase Functions on production push
+name: 'Production: Firebase Functions'
 
 on:
   push:
