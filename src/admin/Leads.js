@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { postJson } from '../lib/api';
 import './AdminConsole.css';
 
@@ -19,7 +19,7 @@ export default function Leads() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -30,11 +30,11 @@ export default function Leads() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, tab]);
 
   useEffect(() => {
     load();
-  }, [tab]);
+  }, [load]);
 
   const openDetail = async (sessionId) => {
     setSelected(sessionId);

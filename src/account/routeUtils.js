@@ -1,3 +1,3 @@
-export function accountBaseForRole(role) {
-  return role === 'admin' ? '/admin/account' : '/user/account';
+export function accountBaseForRole() {
+  return '/apps/account';
 }

@@ -13,10 +13,11 @@ import Account from './account/Account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
 import PortalLayout from './layout/PortalLayout';
+import AppLauncher from './apps/AppLauncher';
+import { canAccessMiniApp, getMiniApp } from './apps/miniApps';
 import Dashboard from './admin/Dashboard';
 import Leads from './admin/Leads';
 import Customers from './admin/Customers';
-import UserHome from './user/UserHome';
 
 export const UserContext = createContext(null);
 
@@ -29,20 +30,20 @@ function ProtectedRoute({ user, checking, children }) {
   return user ? children : <Navigate to="/signin" replace />;
 }
 
-function AdminRoute({ user, checking, role, children }) {
+function MiniAppRoute({ user, checking, role, appId, appPath, children }) {
   if (checking) return null;
   if (!user) return <Navigate to="/signin" replace />;
-  return role === 'admin' ? children : <Navigate to="/user/home" replace />;
-}
 
-function UserRoute({ user, checking, role, children }) {
-  if (checking) return null;
-  if (!user) return <Navigate to="/signin" replace />;
-  return role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : children;
-}
+  const app = getMiniApp(appId);
+  if (!canAccessMiniApp(app, role)) return <Navigate to="/portal" replace />;
 
-function PortalRedirect({ role }) {
-  return <Navigate to={role === 'admin' ? '/admin/dashboard' : '/user/home'} replace />;
+  if (!appPath) return <Navigate to={app.defaultPath} replace />;
+
+  return (
+    <PortalLayout user={user} app={app}>
+      {children}
+    </PortalLayout>
+  );
 }
 
 function App() {
@@ -54,7 +55,6 @@ function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setFirebaseUser(u);
-      setCheckingAuth(false);
 
       if (profileUnsubRef.current) {
         profileUnsubRef.current();
@@ -63,6 +63,7 @@ function App() {
 
       if (!u) {
         setAppUser(null);
+        setCheckingAuth(false);
         return;
       }
 
@@ -99,15 +100,17 @@ function App() {
             firstName: typeof data.firstName === 'string' ? data.firstName : '',
             lastName: typeof data.lastName === 'string' ? data.lastName : '',
           });
+          setCheckingAuth(false);
         });
       } catch {
         setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, role: 'user' });
+        setCheckingAuth(false);
       }
     });
 
     return () => {
       if (profileUnsubRef.current) profileUnsubRef.current();
-      unsub();
+      if (typeof unsub === 'function') unsub();
     };
   }, []);
 
@@ -139,7 +142,9 @@ function App() {
             path="/portal"
             element={
               <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
-                <PortalRedirect role={role} />
+                <PortalLayout user={contextValue}>
+                  <AppLauncher role={role} />
+                </PortalLayout>
               </ProtectedRoute>
             }
           />
@@ -147,106 +152,64 @@ function App() {
           <Route path="/account/*" element={<Navigate to="/portal" replace />} />
 
           <Route
-            path="/admin/dashboard"
+            path="/apps/quotes"
             element={
-              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="admin">
-                  <Dashboard />
-                </PortalLayout>
-              </AdminRoute>
+              <MiniAppRoute user={firebaseUser} checking={checkingAuth} role={role} appId="quotes" />
             }
           />
           <Route
-            path="/admin/leads"
+            path="/apps/quotes/dashboard"
             element={
-              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="admin">
-                  <Leads />
-                </PortalLayout>
-              </AdminRoute>
+              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="quotes" appPath="dashboard">
+                <Dashboard />
+              </MiniAppRoute>
             }
           />
           <Route
-            path="/admin/customers"
+            path="/apps/quotes/leads"
             element={
-              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="admin">
-                  <Customers />
-                </PortalLayout>
-              </AdminRoute>
+              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="quotes" appPath="leads">
+                <Leads />
+              </MiniAppRoute>
             }
           />
           <Route
-            path="/admin/account"
+            path="/apps/quotes/customers"
             element={
-              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="admin">
-                  <Account />
-                </PortalLayout>
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/admin/account/email"
-            element={
-              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="admin">
-                  <ChangeEmail />
-                </PortalLayout>
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/admin/account/password"
-            element={
-              <AdminRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="admin">
-                  <ChangePassword />
-                </PortalLayout>
-              </AdminRoute>
+              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="quotes" appPath="customers">
+                <Customers />
+              </MiniAppRoute>
             }
           />
 
           <Route
-            path="/user/home"
+            path="/apps/account"
             element={
-              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="user">
-                  <UserHome />
-                </PortalLayout>
-              </UserRoute>
+              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="account" appPath="overview">
+                <Account />
+              </MiniAppRoute>
             }
           />
           <Route
-            path="/user/account"
+            path="/apps/account/email"
             element={
-              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="user">
-                  <Account />
-                </PortalLayout>
-              </UserRoute>
+              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="account" appPath="email">
+                <ChangeEmail />
+              </MiniAppRoute>
             }
           />
           <Route
-            path="/user/account/email"
+            path="/apps/account/password"
             element={
-              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="user">
-                  <ChangeEmail />
-                </PortalLayout>
-              </UserRoute>
+              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="account" appPath="password">
+                <ChangePassword />
+              </MiniAppRoute>
             }
           />
-          <Route
-            path="/user/account/password"
-            element={
-              <UserRoute user={firebaseUser} checking={checkingAuth} role={role}>
-                <PortalLayout user={contextValue} role="user">
-                  <ChangePassword />
-                </PortalLayout>
-              </UserRoute>
-            }
-          />
+
+          <Route path="/admin/*" element={<Navigate to="/portal" replace />} />
+          <Route path="/user/*" element={<Navigate to="/portal" replace />} />
+          <Route path="/apps/*" element={<Navigate to="/portal" replace />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
