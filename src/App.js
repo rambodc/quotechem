@@ -7,7 +7,6 @@ import ChatPage from './home/Home';
 import CatalogHome from './home/CatalogHome';
 import ProductPage from './home/ProductPage';
 import Login from './auth/Login';
-import Signup from './auth/Signup';
 import ForgotPassword from './auth/ForgotPassword';
 import Account from './account/Account';
 import ChangeEmail from './account/ChangeEmail';
@@ -18,6 +17,8 @@ import { canAccessMiniApp, getMiniApp } from './apps/miniApps';
 import Dashboard from './admin/Dashboard';
 import Leads from './admin/Leads';
 import Customers from './admin/Customers';
+import DrillingFluidsReport from './apps/DrillingFluidsReport';
+import UserAccess from './admin/UserAccess';
 
 export const UserContext = createContext(null);
 
@@ -30,12 +31,12 @@ function ProtectedRoute({ user, checking, children }) {
   return user ? children : <Navigate to="/signin" replace />;
 }
 
-function MiniAppRoute({ user, checking, role, appId, appPath, children }) {
+function MiniAppRoute({ user, checking, appId, appPath, children }) {
   if (checking) return null;
   if (!user) return <Navigate to="/signin" replace />;
 
   const app = getMiniApp(appId);
-  if (!canAccessMiniApp(app, role)) return <Navigate to="/portal" replace />;
+  if (!canAccessMiniApp(app, user.role, user.enabledMiniApps)) return <Navigate to="/portal" replace />;
 
   if (!appPath) return <Navigate to={app.defaultPath} replace />;
 
@@ -99,6 +100,7 @@ function App() {
             role: normalizeRole(data.role),
             firstName: typeof data.firstName === 'string' ? data.firstName : '',
             lastName: typeof data.lastName === 'string' ? data.lastName : '',
+            enabledMiniApps: Array.isArray(data.enabledMiniApps) ? data.enabledMiniApps : null,
           });
           setCheckingAuth(false);
         });
@@ -115,7 +117,6 @@ function App() {
   }, []);
 
   const contextValue = useMemo(() => appUser, [appUser]);
-  const role = normalizeRole(appUser?.role);
 
   return (
     <Router>
@@ -131,7 +132,7 @@ function App() {
           />
           <Route
             path="/signup"
-            element={firebaseUser ? <Navigate to="/portal" replace /> : <Signup />}
+            element={<Navigate to={firebaseUser ? '/portal' : '/signin'} replace />}
           />
           <Route
             path="/forgot"
@@ -143,7 +144,7 @@ function App() {
             element={
               <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
                 <PortalLayout user={contextValue}>
-                  <AppLauncher role={role} />
+                  <AppLauncher user={contextValue} />
                 </PortalLayout>
               </ProtectedRoute>
             }
@@ -154,13 +155,13 @@ function App() {
           <Route
             path="/apps/quotes"
             element={
-              <MiniAppRoute user={firebaseUser} checking={checkingAuth} role={role} appId="quotes" />
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" />
             }
           />
           <Route
             path="/apps/quotes/dashboard"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="quotes" appPath="dashboard">
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="dashboard">
                 <Dashboard />
               </MiniAppRoute>
             }
@@ -168,7 +169,7 @@ function App() {
           <Route
             path="/apps/quotes/leads"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="quotes" appPath="leads">
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="leads">
                 <Leads />
               </MiniAppRoute>
             }
@@ -176,8 +177,26 @@ function App() {
           <Route
             path="/apps/quotes/customers"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="quotes" appPath="customers">
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="customers">
                 <Customers />
+              </MiniAppRoute>
+            }
+          />
+
+          <Route
+            path="/apps/drilling-fluids-report"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="drilling-fluids-report" appPath="overview">
+                <DrillingFluidsReport />
+              </MiniAppRoute>
+            }
+          />
+
+          <Route
+            path="/apps/user-access"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="user-access" appPath="overview">
+                <UserAccess />
               </MiniAppRoute>
             }
           />
@@ -185,7 +204,7 @@ function App() {
           <Route
             path="/apps/account"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="account" appPath="overview">
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="account" appPath="overview">
                 <Account />
               </MiniAppRoute>
             }
@@ -193,7 +212,7 @@ function App() {
           <Route
             path="/apps/account/email"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="account" appPath="email">
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="account" appPath="email">
                 <ChangeEmail />
               </MiniAppRoute>
             }
@@ -201,7 +220,7 @@ function App() {
           <Route
             path="/apps/account/password"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} role={role} appId="account" appPath="password">
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="account" appPath="password">
                 <ChangePassword />
               </MiniAppRoute>
             }

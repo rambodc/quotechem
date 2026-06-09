@@ -2,7 +2,7 @@ import React from 'react';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 
 let mockAuthUser = null;
-let mockProfile = { role: 'user', firstName: '', lastName: '' };
+let mockProfile = { role: 'user', firstName: '', lastName: '', enabledMiniApps: null };
 
 jest.mock('./firebase', () => ({
   auth: {},
@@ -64,13 +64,25 @@ beforeEach(() => {
     }
     if (path === 'adminListLeads') return Promise.resolve({ items: [] });
     if (path === 'adminListCustomers') return Promise.resolve({ items: [] });
+    if (path === 'adminListUsers') {
+      return Promise.resolve({
+        items: [
+          {
+            uid: 'user-1',
+            email: 'user@example.com',
+            role: 'user',
+            enabledMiniApps: ['drilling-fluids-report'],
+          },
+        ],
+      });
+    }
     return Promise.resolve({});
   });
 });
 
-function renderAt(path, role = 'user') {
+function renderAt(path, role = 'user', enabledMiniApps = null) {
   mockAuthUser = { uid: `${role}-1`, email: `${role}@example.com` };
-  mockProfile = { role, firstName: '', lastName: '' };
+  mockProfile = { role, firstName: '', lastName: '', enabledMiniApps };
   window.history.pushState({}, '', path);
   const App = require('./App').default;
   return render(<App />);
@@ -90,14 +102,26 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes/dashboard');
+    expect(screen.getByRole('link', { name: /Drilling Fluids Report/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
+    expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
-  test('basic users only see Account on the launcher', async () => {
+  test('basic users see default user mini apps on the launcher', async () => {
     renderAt('/portal', 'user');
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /User Access/i })).not.toBeTruthy();
+    expect(screen.getByRole('link', { name: /Drilling Fluids Report/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
+    expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
+  });
+
+  test('basic users only see explicitly enabled managed mini apps plus Account', async () => {
+    renderAt('/portal', 'user', []);
+
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Drilling Fluids Report/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
@@ -122,6 +146,23 @@ describe('mini-app portal routing', () => {
     expect(window.location.pathname).toBe('/portal');
   });
 
+  test('basic users are redirected away from disabled mini apps', async () => {
+    renderAt('/apps/drilling-fluids-report', 'user', []);
+
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Drilling Fluids Report' })).not.toBeTruthy();
+    expect(window.location.pathname).toBe('/portal');
+  });
+
+  test('admin users can open User Access and Drilling Fluids Report mini apps', async () => {
+    renderAt('/apps/user-access', 'admin');
+    expect(await screen.findByRole('heading', { name: 'User Access' })).toBeTruthy();
+
+    cleanup();
+    renderAt('/apps/drilling-fluids-report', 'admin');
+    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+  });
+
   test('admin and basic users can open the Account mini app', async () => {
     renderAt('/apps/account', 'admin');
     expect(await screen.findByRole('heading', { name: 'Account' })).toBeTruthy();
@@ -134,7 +175,14 @@ describe('mini-app portal routing', () => {
   test('signed-out users visiting portal routes are sent to sign in', async () => {
     renderSignedOutAt('/apps/account');
 
-    expect(await screen.findByRole('heading', { name: /Admin Sign in/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /^Sign in$/i })).toBeTruthy();
+    await waitFor(() => expect(window.location.pathname).toBe('/signin'));
+  });
+
+  test('signed-out users visiting signup are sent to sign in', async () => {
+    renderSignedOutAt('/signup');
+
+    expect(await screen.findByRole('heading', { name: /^Sign in$/i })).toBeTruthy();
     await waitFor(() => expect(window.location.pathname).toBe('/signin'));
   });
 });

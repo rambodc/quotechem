@@ -1,0 +1,43 @@
+.drilling-report-page {
+  min-height: calc(100vh - 156px);
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: #000000;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.drilling-report-card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 28px;
+}
+
+.drilling-report-icon {
+  width: 92px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  background: #111827;
+  color: #38bdf8;
+  box-shadow: 0 28px 80px rgba(56, 189, 248, 0.18);
+}
+
+.drilling-report-card p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.drilling-report-card h1 {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 4.4rem);
+  line-height: 1;
+}

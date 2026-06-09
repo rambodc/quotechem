@@ -51,6 +51,14 @@
   background: linear-gradient(145deg, #334155, #0f766e);
 }
 
+.mini-app-icon.drilling-fluids-report {
+  background: linear-gradient(145deg, #020617, #0ea5e9);
+}
+
+.mini-app-icon.user-access {
+  background: linear-gradient(145deg, #4f46e5, #9333ea);
+}
+
 .mini-app-tile:hover .mini-app-icon {
   transform: translateY(-2px);
   box-shadow: 0 18px 34px rgba(15, 42, 86, 0.24);

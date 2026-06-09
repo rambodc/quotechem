@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { visibleMiniAppsForRole } from './miniApps';
+import { visibleMiniAppsForUser } from './miniApps';
 import './AppLauncher.css';
 
-export default function AppLauncher({ role }) {
-  const apps = visibleMiniAppsForRole(role);
+export default function AppLauncher({ user }) {
+  const apps = visibleMiniAppsForUser(user);
 
   return (
     <section className="launcher-page" aria-labelledby="launcher-title">

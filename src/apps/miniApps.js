@@ -1,4 +1,4 @@
-import { FiClipboard, FiUser } from 'react-icons/fi';
+import { FiClipboard, FiDroplet, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
   {
@@ -6,7 +6,8 @@ export const MINI_APPS = [
     label: 'Quotes',
     description: 'Manage quote leads, customers, and activity.',
     icon: FiClipboard,
-    roles: ['admin'],
+    adminOnly: true,
+    defaultVisibleForRoles: ['admin'],
     defaultPath: '/apps/quotes/dashboard',
     navItems: [
       { path: '/apps/quotes/dashboard', label: 'Dashboard' },
@@ -15,11 +16,33 @@ export const MINI_APPS = [
     ],
   },
   {
+    id: 'drilling-fluids-report',
+    label: 'Drilling Fluids Report',
+    description: 'Placeholder report workspace for drilling fluids workflows.',
+    icon: FiDroplet,
+    adminOnly: false,
+    defaultVisibleForRoles: ['admin', 'user'],
+    defaultPath: '/apps/drilling-fluids-report',
+    navItems: [],
+  },
+  {
+    id: 'user-access',
+    label: 'User Access',
+    description: 'Create users and control visible mini apps.',
+    icon: FiShield,
+    adminOnly: true,
+    defaultVisibleForRoles: ['admin'],
+    defaultPath: '/apps/user-access',
+    navItems: [],
+  },
+  {
     id: 'account',
     label: 'Account',
     description: 'Manage profile and sign-in settings.',
     icon: FiUser,
-    roles: ['admin', 'user'],
+    adminOnly: false,
+    alwaysVisible: true,
+    defaultVisibleForRoles: ['admin', 'user'],
     defaultPath: '/apps/account',
     navItems: [
       { path: '/apps/account', label: 'Overview' },
@@ -29,15 +52,32 @@ export const MINI_APPS = [
   },
 ];
 
+export const ACCESS_MANAGED_MINI_APPS = MINI_APPS.filter((app) => !app.adminOnly && !app.alwaysVisible);
+
 export function getMiniApp(appId) {
   return MINI_APPS.find((app) => app.id === appId) || null;
 }
 
-export function canAccessMiniApp(app, role) {
-  if (!app) return false;
-  return app.roles.includes(role);
+export function defaultMiniAppIdsForRole(role) {
+  return MINI_APPS.filter((app) => app.defaultVisibleForRoles.includes(role)).map((app) => app.id);
 }
 
-export function visibleMiniAppsForRole(role) {
-  return MINI_APPS.filter((app) => canAccessMiniApp(app, role));
+function normalizeEnabledMiniApps(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : null;
+}
+
+export function canAccessMiniApp(app, role, enabledMiniApps) {
+  if (!app) return false;
+  if (app.alwaysVisible) return true;
+  if (role === 'admin' && app.adminOnly) return true;
+  if (app.adminOnly) return false;
+
+  const explicit = normalizeEnabledMiniApps(enabledMiniApps);
+  if (explicit) return explicit.includes(app.id);
+  return app.defaultVisibleForRoles.includes(role);
+}
+
+export function visibleMiniAppsForUser(user) {
+  const role = user?.role || 'user';
+  return MINI_APPS.filter((app) => canAccessMiniApp(app, role, user?.enabledMiniApps));
 }

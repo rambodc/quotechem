@@ -38,7 +38,7 @@ export default function Login() {
     <div className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
         <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
-        <h1>Admin Sign in</h1>
+        <h1>Sign in</h1>
 
         {error ? <p className="auth-error">{error}</p> : null}
 
@@ -68,9 +68,6 @@ export default function Login() {
 
         <p className="auth-link">
           <Link to="/forgot">Forgot password</Link>
-        </p>
-        <p className="auth-link">
-          <Link to="/signup">Create account</Link>
         </p>
         <p className="auth-link">
           <Link to="/">Back to public home</Link>

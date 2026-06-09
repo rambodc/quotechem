@@ -140,6 +140,37 @@ async function requireAdmin(req) {
   return user;
 }
 
+const MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'user-access', 'account'];
+const ACCESS_MANAGED_MINI_APP_IDS = ['drilling-fluids-report'];
+
+function normalizeMiniAppIds(value) {
+  if (!Array.isArray(value)) return null;
+  const seen = new Set();
+  for (const item of value) {
+    const id = asString(item);
+    if (ACCESS_MANAGED_MINI_APP_IDS.includes(id)) seen.add(id);
+  }
+  return Array.from(seen);
+}
+
+function defaultEnabledMiniAppsForRole(role) {
+  return role === 'admin' ? [...ACCESS_MANAGED_MINI_APP_IDS] : ['drilling-fluids-report'];
+}
+
+function mapUserDoc(doc) {
+  const data = doc.data() || {};
+  const role = normalizeRole(data.role);
+  return {
+    uid: asString(data.uid) || doc.id,
+    email: asString(data.email),
+    role,
+    enabledMiniApps: normalizeMiniAppIds(data.enabledMiniApps) || defaultEnabledMiniAppsForRole(role),
+    createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt),
+    createdBy: asString(data.createdBy),
+  };
+}
+
 function escapeHtml(text) {
   return asString(text)
     .replace(/&/g, '&amp;')
@@ -1204,6 +1235,110 @@ export const adminDashboardSummary = onRequest({ region: REGION }, async (req, r
     const status = Number(error?.status) || 500;
     logger.error('[adminDashboardSummary] failed', { error: error?.message || String(error) });
     return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to load dashboard');
+  }
+});
+
+export const adminCreateUser = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  let createdAuthUser = null;
+  try {
+    const adminUser = await requireAdmin(req);
+    const email = normalizeEmail(req.body?.email);
+    const password = asString(req.body?.password);
+    const role = normalizeRole(req.body?.role);
+    const enabledMiniApps = normalizeMiniAppIds(req.body?.enabledMiniApps) || defaultEnabledMiniAppsForRole(role);
+
+    if (!isEmail(email)) return jsonError(res, 400, 'Valid email is required');
+    if (password.length < 8) return jsonError(res, 400, 'Password must be at least 8 characters');
+
+    createdAuthUser = await admin.auth().createUser({
+      email,
+      password,
+      emailVerified: false,
+      disabled: false,
+    });
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const userDoc = {
+      uid: createdAuthUser.uid,
+      email,
+      role,
+      enabledMiniApps,
+      firstName: '',
+      lastName: '',
+      primaryAuthUid: createdAuthUser.uid,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: adminUser.uid,
+    };
+
+    await db.collection('users').doc(createdAuthUser.uid).set(userDoc, { merge: true });
+    const snap = await db.collection('users').doc(createdAuthUser.uid).get();
+
+    setCors(res);
+    res.status(200).json({ ok: true, user: mapUserDoc(snap) });
+  } catch (error) {
+    if (createdAuthUser?.uid) {
+      await admin.auth().deleteUser(createdAuthUser.uid).catch(() => {});
+    }
+    const status = Number(error?.status) || (error?.code === 'auth/email-already-exists' ? 409 : 500);
+    logger.error('[adminCreateUser] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to create user');
+  }
+});
+
+export const adminListUsers = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await requireAdmin(req);
+    const snap = await db.collection('users').orderBy('email', 'asc').limit(250).get();
+    const items = snap.docs.map(mapUserDoc);
+
+    setCors(res);
+    res.status(200).json({ ok: true, items, miniApps: MINI_APP_IDS });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminListUsers] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list users');
+  }
+});
+
+export const adminUpdateUserAccess = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const adminUser = await requireAdmin(req);
+    const uid = asString(req.body?.uid);
+    const role = normalizeRole(req.body?.role);
+    const enabledMiniApps = normalizeMiniAppIds(req.body?.enabledMiniApps) || [];
+    if (!uid) return jsonError(res, 400, 'uid is required');
+
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) return jsonError(res, 404, 'User not found');
+
+    await userRef.set(
+      {
+        role,
+        enabledMiniApps,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: adminUser.uid,
+      },
+      { merge: true }
+    );
+
+    const updatedSnap = await userRef.get();
+    setCors(res);
+    res.status(200).json({ ok: true, user: mapUserDoc(updatedSnap) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminUpdateUserAccess] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to update user access');
   }
 });
 
