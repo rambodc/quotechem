@@ -27,6 +27,42 @@ function normalizeRole(value) {
   return String(value || '').toLowerCase() === 'admin' ? 'admin' : 'user';
 }
 
+function cachedProfileKey(uid) {
+  return `quotechem:user-profile:${uid}`;
+}
+
+function readCachedProfile(uid) {
+  try {
+    const raw = window.localStorage.getItem(cachedProfileKey(uid));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedProfile(uid, profile) {
+  try {
+    window.localStorage.setItem(cachedProfileKey(uid), JSON.stringify(profile));
+  } catch {}
+}
+
+function buildAppUser(firebaseUser, data = {}, extra = {}) {
+  return {
+    id: firebaseUser.uid,
+    firebaseUid: firebaseUser.uid,
+    email: firebaseUser.email ?? data.email ?? null,
+    role: normalizeRole(data.role),
+    firstName: typeof data.firstName === 'string' ? data.firstName : '',
+    lastName: typeof data.lastName === 'string' ? data.lastName : '',
+    profilePhotoUrl: typeof data.profilePhotoUrl === 'string' ? data.profilePhotoUrl : '',
+    profilePhotoThumbUrl: typeof data.profilePhotoThumbUrl === 'string' ? data.profilePhotoThumbUrl : '',
+    profilePhotoPath: typeof data.profilePhotoPath === 'string' ? data.profilePhotoPath : '',
+    profilePhotoThumbPath: typeof data.profilePhotoThumbPath === 'string' ? data.profilePhotoThumbPath : '',
+    enabledMiniApps: Array.isArray(data.enabledMiniApps) ? data.enabledMiniApps : null,
+    ...extra,
+  };
+}
+
 function ProtectedRoute({ user, checking, children }) {
   if (checking) return null;
   return user ? children : <Navigate to="/signin" replace />;
@@ -97,23 +133,30 @@ function App() {
         profileUnsubRef.current = onSnapshot(userRef, (profileSnap) => {
           const data = profileSnap.exists() ? profileSnap.data() || {} : {};
 
-          setAppUser({
-            id: u.uid,
-            firebaseUid: u.uid,
-            email: u.email ?? null,
-            role: normalizeRole(data.role),
-            firstName: typeof data.firstName === 'string' ? data.firstName : '',
-            lastName: typeof data.lastName === 'string' ? data.lastName : '',
-            profilePhotoUrl: typeof data.profilePhotoUrl === 'string' ? data.profilePhotoUrl : '',
-            profilePhotoThumbUrl: typeof data.profilePhotoThumbUrl === 'string' ? data.profilePhotoThumbUrl : '',
-            profilePhotoPath: typeof data.profilePhotoPath === 'string' ? data.profilePhotoPath : '',
-            profilePhotoThumbPath: typeof data.profilePhotoThumbPath === 'string' ? data.profilePhotoThumbPath : '',
-            enabledMiniApps: Array.isArray(data.enabledMiniApps) ? data.enabledMiniApps : null,
-          });
+          const nextUser = buildAppUser(u, data);
+          writeCachedProfile(u.uid, nextUser);
+          setAppUser(nextUser);
+          setCheckingAuth(false);
+        }, () => {
+          const cached = readCachedProfile(u.uid);
+          if (cached) {
+            setAppUser(buildAppUser(u, cached, { offlineProfile: true }));
+          } else if (!navigator.onLine && window.location.pathname === '/apps/drilling-fluids-report') {
+            setAppUser(buildAppUser(u, { enabledMiniApps: ['drilling-fluids-report'] }, { offlineProfileUnavailable: true }));
+          } else {
+            setAppUser(buildAppUser(u));
+          }
           setCheckingAuth(false);
         });
       } catch {
-        setAppUser({ id: u.uid, firebaseUid: u.uid, email: u.email ?? null, role: 'user' });
+        const cached = readCachedProfile(u.uid);
+        if (cached) {
+          setAppUser(buildAppUser(u, cached, { offlineProfile: true }));
+        } else if (!navigator.onLine && window.location.pathname === '/apps/drilling-fluids-report') {
+          setAppUser(buildAppUser(u, { enabledMiniApps: ['drilling-fluids-report'] }, { offlineProfileUnavailable: true }));
+        } else {
+          setAppUser(buildAppUser(u));
+        }
         setCheckingAuth(false);
       }
     });

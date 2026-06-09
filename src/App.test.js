@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 let mockAuthUser = null;
 let mockProfile = { role: 'user', firstName: '', lastName: '', enabledMiniApps: null };
+let mockLocalReports = [];
 
 jest.mock('./firebase', () => ({
   auth: {},
@@ -35,10 +36,32 @@ jest.mock('./lib/api', () => ({
   postJson: jest.fn(),
 }));
 
+jest.mock('./apps/drillingFluidsStore', () => ({
+  listDrillingFluidReports: jest.fn(() => Promise.resolve(mockLocalReports)),
+  saveDrillingFluidReport: jest.fn((report) => {
+    mockLocalReports = [report, ...mockLocalReports.filter((item) => item.localId !== report.localId)];
+    return Promise.resolve(report);
+  }),
+  updateDrillingFluidReport: jest.fn((localId, patch) => {
+    const existing = mockLocalReports.find((item) => item.localId === localId) || { localId, payload: {} };
+    const updated = { ...existing, ...patch };
+    mockLocalReports = [updated, ...mockLocalReports.filter((item) => item.localId !== localId)];
+    return Promise.resolve(updated);
+  }),
+}));
+
 beforeEach(() => {
   const { onAuthStateChanged, signOut, updatePassword } = require('firebase/auth');
   const { getDoc, onSnapshot, serverTimestamp, setDoc } = require('firebase/firestore');
   const { postJson } = require('./lib/api');
+  const drillingStore = require('./apps/drillingFluidsStore');
+
+  mockLocalReports = [];
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+  Object.defineProperty(window.navigator, 'serviceWorker', {
+    configurable: true,
+    value: { register: jest.fn(() => Promise.resolve()) },
+  });
 
   onAuthStateChanged.mockImplementation((auth, callback) => {
     const unsubscribe = jest.fn();
@@ -58,6 +81,17 @@ beforeEach(() => {
   });
   serverTimestamp.mockImplementation(() => 'server-timestamp');
   setDoc.mockImplementation(() => Promise.resolve());
+  drillingStore.listDrillingFluidReports.mockImplementation(() => Promise.resolve(mockLocalReports));
+  drillingStore.saveDrillingFluidReport.mockImplementation((report) => {
+    mockLocalReports = [report, ...mockLocalReports.filter((item) => item.localId !== report.localId)];
+    return Promise.resolve(report);
+  });
+  drillingStore.updateDrillingFluidReport.mockImplementation((localId, patch) => {
+    const existing = mockLocalReports.find((item) => item.localId === localId) || { localId, payload: {} };
+    const updated = { ...existing, ...patch };
+    mockLocalReports = [updated, ...mockLocalReports.filter((item) => item.localId !== localId)];
+    return Promise.resolve(updated);
+  });
 
   postJson.mockImplementation((path) => {
     if (path === 'adminDashboardSummary') {
@@ -190,6 +224,41 @@ describe('mini-app portal routing', () => {
     cleanup();
     renderAt('/apps/drilling-fluids-report', 'admin');
     expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(screen.getByLabelText(/Density/i)).toBeTruthy();
+    expect(window.navigator.serviceWorker.register).toHaveBeenCalledWith('/drilling-fluids-sw.js');
+  });
+
+  test('Drilling Fluids Report saves locally and uploads pending reports', async () => {
+    const { setDoc } = require('firebase/firestore');
+    const drillingStore = require('./apps/drillingFluidsStore');
+    renderAt('/apps/drilling-fluids-report', 'user', ['drilling-fluids-report']);
+
+    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'North Pad 12' } });
+    fireEvent.change(screen.getByLabelText(/Density/i), { target: { value: '10.2 ppg' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
+
+    await waitFor(() => expect(drillingStore.saveDrillingFluidReport).toHaveBeenCalled());
+    expect(await screen.findByText(/Saved locally on this device/i)).toBeTruthy();
+    expect(await screen.findByText(/North Pad 12/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Upload$/i }));
+    await waitFor(() => expect(setDoc).toHaveBeenCalled());
+    expect(await screen.findByText(/1 report uploaded/i)).toBeTruthy();
+  });
+
+  test('Drilling Fluids Report disables upload offline but keeps local save available', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    const drillingStore = require('./apps/drillingFluidsStore');
+    renderAt('/apps/drilling-fluids-report', 'user', ['drilling-fluids-report']);
+
+    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Upload$/i }).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Offline Well' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
+
+    await waitFor(() => expect(drillingStore.saveDrillingFluidReport).toHaveBeenCalled());
+    expect(await screen.findByText(/Saved locally on this device/i)).toBeTruthy();
   });
 
   test('admin and basic users can open the Account mini app', async () => {
