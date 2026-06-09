@@ -1,18 +1,11 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
-import { FiGrid, FiLogOut, FiUser } from 'react-icons/fi';
-import { auth } from '../firebase';
+import { FiGrid, FiUser } from 'react-icons/fi';
 import './PortalLayout.css';
 
 export default function PortalLayout({ user, app, children }) {
   const navigate = useNavigate();
   const navItems = app?.navItems || [];
-
-  const onLogout = async () => {
-    await signOut(auth);
-    navigate('/', { replace: true });
-  };
 
   return (
     <div className="portal-shell">
@@ -33,10 +26,6 @@ export default function PortalLayout({ user, app, children }) {
           <button type="button" className="portal-icon-btn" onClick={() => navigate('/apps/account')} aria-label="Account">
             <FiUser size={17} />
             <span>{user?.email || 'Account'}</span>
-          </button>
-          <button type="button" className="portal-logout" onClick={onLogout}>
-            <FiLogOut size={16} />
-            <span>Logout</span>
           </button>
         </div>
       </header>

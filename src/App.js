@@ -18,6 +18,7 @@ import Dashboard from './admin/Dashboard';
 import Leads from './admin/Leads';
 import Customers from './admin/Customers';
 import DrillingFluidsReport from './apps/DrillingFluidsReport';
+import QuotesMiniApp from './apps/QuotesMiniApp';
 import UserAccess from './admin/UserAccess';
 
 export const UserContext = createContext(null);
@@ -37,8 +38,11 @@ function MiniAppRoute({ user, checking, appId, appPath, children }) {
 
   const app = getMiniApp(appId);
   if (!canAccessMiniApp(app, user.role, user.enabledMiniApps)) return <Navigate to="/portal" replace />;
+  if (appId === 'quotes' && appPath !== 'overview' && user.role !== 'admin') {
+    return <Navigate to="/apps/quotes" replace />;
+  }
 
-  if (!appPath) return <Navigate to={app.defaultPath} replace />;
+  if (!appPath && !children) return <Navigate to={app.defaultPath} replace />;
 
   return (
     <PortalLayout user={user} app={app}>
@@ -100,6 +104,8 @@ function App() {
             role: normalizeRole(data.role),
             firstName: typeof data.firstName === 'string' ? data.firstName : '',
             lastName: typeof data.lastName === 'string' ? data.lastName : '',
+            profilePhotoUrl: typeof data.profilePhotoUrl === 'string' ? data.profilePhotoUrl : '',
+            profilePhotoPath: typeof data.profilePhotoPath === 'string' ? data.profilePhotoPath : '',
             enabledMiniApps: Array.isArray(data.enabledMiniApps) ? data.enabledMiniApps : null,
           });
           setCheckingAuth(false);
@@ -155,7 +161,9 @@ function App() {
           <Route
             path="/apps/quotes"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" />
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="overview">
+                <QuotesMiniApp />
+              </MiniAppRoute>
             }
           />
           <Route

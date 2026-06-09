@@ -6,9 +6,9 @@ export const MINI_APPS = [
     label: 'Quotes',
     description: 'Manage quote leads, customers, and activity.',
     icon: FiClipboard,
-    adminOnly: true,
+    adminOnly: false,
     defaultVisibleForRoles: ['admin'],
-    defaultPath: '/apps/quotes/dashboard',
+    defaultPath: '/apps/quotes',
     navItems: [
       { path: '/apps/quotes/dashboard', label: 'Dashboard' },
       { path: '/apps/quotes/leads', label: 'Leads' },
@@ -21,7 +21,7 @@ export const MINI_APPS = [
     description: 'Placeholder report workspace for drilling fluids workflows.',
     icon: FiDroplet,
     adminOnly: false,
-    defaultVisibleForRoles: ['admin', 'user'],
+    defaultVisibleForRoles: ['admin'],
     defaultPath: '/apps/drilling-fluids-report',
     navItems: [],
   },
@@ -70,6 +70,7 @@ export function canAccessMiniApp(app, role, enabledMiniApps) {
   if (!app) return false;
   if (app.alwaysVisible) return true;
   if (role === 'admin' && app.adminOnly) return true;
+  if (role === 'admin' && app.defaultVisibleForRoles.includes('admin')) return true;
   if (app.adminOnly) return false;
 
   const explicit = normalizeEnabledMiniApps(enabledMiniApps);

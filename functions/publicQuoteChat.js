@@ -141,7 +141,7 @@ async function requireAdmin(req) {
 }
 
 const MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'user-access', 'account'];
-const ACCESS_MANAGED_MINI_APP_IDS = ['drilling-fluids-report'];
+const ACCESS_MANAGED_MINI_APP_IDS = ['quotes', 'drilling-fluids-report'];
 
 function normalizeMiniAppIds(value) {
   if (!Array.isArray(value)) return null;
@@ -154,7 +154,11 @@ function normalizeMiniAppIds(value) {
 }
 
 function defaultEnabledMiniAppsForRole(role) {
-  return role === 'admin' ? [...ACCESS_MANAGED_MINI_APP_IDS] : ['drilling-fluids-report'];
+  return role === 'admin' ? [...ACCESS_MANAGED_MINI_APP_IDS] : [];
+}
+
+function isValidTemporaryPassword(value) {
+  return asString(value).length >= 6;
 }
 
 function mapUserDoc(doc) {
@@ -1251,7 +1255,7 @@ export const adminCreateUser = onRequest({ region: REGION }, async (req, res) =>
     const enabledMiniApps = normalizeMiniAppIds(req.body?.enabledMiniApps) || defaultEnabledMiniAppsForRole(role);
 
     if (!isEmail(email)) return jsonError(res, 400, 'Valid email is required');
-    if (password.length < 8) return jsonError(res, 400, 'Password must be at least 8 characters');
+    if (!isValidTemporaryPassword(password)) return jsonError(res, 400, 'Password must be at least 6 characters');
 
     createdAuthUser = await admin.auth().createUser({
       email,
@@ -1605,3 +1609,8 @@ export const adminGetCustomerTimeline = onRequest({ region: REGION }, async (req
     return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to load customer timeline');
   }
 });
+
+export const __testables = {
+  isValidTemporaryPassword,
+  normalizeMiniAppIds,
+};

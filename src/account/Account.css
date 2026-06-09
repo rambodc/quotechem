@@ -20,6 +20,77 @@
   gap: 10px;
 }
 
+.account-profile-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.account-avatar {
+  width: 76px;
+  aspect-ratio: 1;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(145deg, #0b5fc0, #1394d8);
+  color: #ffffff;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.account-profile-card h3 {
+  margin: 0;
+}
+
+.account-upload {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.account-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.account-error,
+.account-success {
+  margin-top: 8px;
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.account-error {
+  color: #9f1239;
+}
+
+.account-success {
+  color: #047857;
+}
+
 .account-action {
   width: 100%;
   border: 1px solid #cbd5e1;
@@ -42,4 +113,11 @@
 
 .account-action:hover {
   border-color: #7dd3fc;
+}
+
+@media (max-width: 680px) {
+  .account-profile-card {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
 }

@@ -1,23 +1,33 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FiEdit2, FiPlus, FiX } from 'react-icons/fi';
 import { postJson } from '../lib/api';
 import { ACCESS_MANAGED_MINI_APPS, defaultMiniAppIdsForRole } from '../apps/miniApps';
 import './UserAccess.css';
 
+function managedDefaults(role) {
+  return defaultMiniAppIdsForRole(role).filter((id) => ACCESS_MANAGED_MINI_APPS.some((app) => app.id === id));
+}
+
 function normalizeEnabled(value, role) {
-  return Array.isArray(value) ? value : defaultMiniAppIdsForRole(role).filter((id) => ACCESS_MANAGED_MINI_APPS.some((app) => app.id === id));
+  return Array.isArray(value) ? value : managedDefaults(role);
+}
+
+function buildEmptyDraft() {
+  return {
+    uid: '',
+    email: '',
+    password: '',
+    role: 'user',
+    enabledMiniApps: managedDefaults('user'),
+  };
 }
 
 function MiniAppToggle({ app, checked, onChange }) {
   const Icon = app.icon;
   return (
-    <button
-      type="button"
-      className={`access-app-toggle ${checked ? 'enabled' : ''}`}
-      onClick={() => onChange(app.id)}
-      aria-pressed={checked}
-    >
+    <button type="button" className={`access-app-toggle ${checked ? 'enabled' : ''}`} onClick={() => onChange(app.id)} aria-pressed={checked}>
       <span className={`access-app-icon ${app.id}`}>
-        <Icon size={22} aria-hidden />
+        <Icon size={24} aria-hidden />
       </span>
       <span>{app.label}</span>
     </button>
@@ -27,16 +37,11 @@ function MiniAppToggle({ app, checked, onChange }) {
 export default function UserAccess() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [savingUid, setSavingUid] = useState('');
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  const [createForm, setCreateForm] = useState({
-    email: '',
-    password: '',
-    role: 'user',
-    enabledMiniApps: defaultMiniAppIdsForRole('user').filter((id) => ACCESS_MANAGED_MINI_APPS.some((app) => app.id === id)),
-  });
-
+  const [drawerMode, setDrawerMode] = useState('');
+  const [draft, setDraft] = useState(buildEmptyDraft);
   const managedAppIds = useMemo(() => ACCESS_MANAGED_MINI_APPS.map((app) => app.id), []);
 
   const loadUsers = useCallback(async () => {
@@ -56,8 +61,46 @@ export default function UserAccess() {
     loadUsers();
   }, [loadUsers]);
 
-  const toggleCreateApp = (appId) => {
-    setCreateForm((prev) => {
+  const openCreate = () => {
+    setError('');
+    setStatus('');
+    setDraft(buildEmptyDraft());
+    setDrawerMode('create');
+  };
+
+  const openEdit = (user) => {
+    setError('');
+    setStatus('');
+    setDraft({
+      uid: user.uid,
+      email: user.email || '',
+      password: '',
+      role: user.role || 'user',
+      enabledMiniApps: normalizeEnabled(user.enabledMiniApps, user.role || 'user'),
+    });
+    setDrawerMode('edit');
+  };
+
+  const closeDrawer = () => {
+    if (saving) return;
+    setDrawerMode('');
+    setDraft(buildEmptyDraft());
+  };
+
+  const updateDraft = (patch) => {
+    setDraft((prev) => ({ ...prev, ...patch }));
+  };
+
+  const changeRole = (role) => {
+    setDraft((prev) => ({
+      ...prev,
+      role,
+      enabledMiniApps: normalizeEnabled(prev.enabledMiniApps, role).filter((id) => managedAppIds.includes(id)),
+    }));
+  };
+
+  const toggleApp = (appId) => {
+    setDraft((prev) => {
       const current = normalizeEnabled(prev.enabledMiniApps, prev.role);
       return {
         ...prev,
@@ -66,72 +109,44 @@ export default function UserAccess() {
     });
   };
 
-  const createUser = async (event) => {
+  const submitDrawer = async (event) => {
     event.preventDefault();
     setError('');
     setStatus('');
-    setSavingUid('new');
+    setSaving(true);
+
     try {
-      await postJson(
-        'adminCreateUser',
-        {
-          email: createForm.email,
-          password: createForm.password,
-          role: createForm.role,
-          enabledMiniApps: createForm.enabledMiniApps.filter((id) => managedAppIds.includes(id)),
-        },
-        { authed: true }
-      );
-      setCreateForm({
-        email: '',
-        password: '',
-        role: 'user',
-        enabledMiniApps: defaultMiniAppIdsForRole('user').filter((id) => managedAppIds.includes(id)),
-      });
-      setStatus('User created.');
+      const enabledMiniApps = normalizeEnabled(draft.enabledMiniApps, draft.role).filter((id) => managedAppIds.includes(id));
+      if (drawerMode === 'create') {
+        await postJson(
+          'adminCreateUser',
+          {
+            email: draft.email,
+            password: draft.password,
+            role: draft.role,
+            enabledMiniApps,
+          },
+          { authed: true }
+        );
+        setStatus('User created.');
+      } else {
+        await postJson(
+          'adminUpdateUserAccess',
+          {
+            uid: draft.uid,
+            role: draft.role,
+            enabledMiniApps,
+          },
+          { authed: true }
+        );
+        setStatus(`Updated ${draft.email}.`);
+      }
       await loadUsers();
+      closeDrawer();
     } catch (err) {
-      setError(err?.message || 'Failed to create user.');
+      setError(err?.message || (drawerMode === 'create' ? 'Failed to create user.' : 'Failed to update access.'));
     } finally {
-      setSavingUid('');
-    }
-  };
-
-  const updateUserDraft = (uid, patch) => {
-    setUsers((prev) => prev.map((user) => (user.uid === uid ? { ...user, ...patch } : user)));
-  };
-
-  const toggleUserApp = (uid, appId) => {
-    setUsers((prev) =>
-      prev.map((user) => {
-        if (user.uid !== uid) return user;
-        const current = normalizeEnabled(user.enabledMiniApps, user.role);
-        const enabledMiniApps = current.includes(appId) ? current.filter((id) => id !== appId) : [...current, appId];
-        return { ...user, enabledMiniApps };
-      })
-    );
-  };
-
-  const saveUser = async (user) => {
-    setError('');
-    setStatus('');
-    setSavingUid(user.uid);
-    try {
-      await postJson(
-        'adminUpdateUserAccess',
-        {
-          uid: user.uid,
-          role: user.role,
-          enabledMiniApps: normalizeEnabled(user.enabledMiniApps, user.role).filter((id) => managedAppIds.includes(id)),
-        },
-        { authed: true }
-      );
-      setStatus(`Updated ${user.email}.`);
-      await loadUsers();
-    } catch (err) {
-      setError(err?.message || 'Failed to update access.');
-    } finally {
-      setSavingUid('');
+      setSaving(false);
     }
   };
 
@@ -142,81 +157,106 @@ export default function UserAccess() {
           <h1>User Access</h1>
           <p>Create users and control which mini apps appear in their launcher.</p>
         </div>
+        <button type="button" className="primary-btn" onClick={openCreate}>
+          <FiPlus size={16} />
+          Add user
+        </button>
       </header>
 
       {error ? <p className="access-message error">{error}</p> : null}
       {status ? <p className="access-message success">{status}</p> : null}
 
-      <form className="access-panel" onSubmit={createUser}>
-        <h2>Create user</h2>
-        <div className="access-form-grid">
-          <label>
-            <span>Email</span>
-            <input type="email" required value={createForm.email} onChange={(event) => setCreateForm((prev) => ({ ...prev, email: event.target.value }))} />
-          </label>
-          <label>
-            <span>Temporary password</span>
-            <input type="password" required minLength={8} value={createForm.password} onChange={(event) => setCreateForm((prev) => ({ ...prev, password: event.target.value }))} />
-          </label>
-          <label>
-            <span>Role</span>
-            <select value={createForm.role} onChange={(event) => setCreateForm((prev) => ({ ...prev, role: event.target.value }))}>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="access-toggle-grid" aria-label="Initial mini app access">
-          {ACCESS_MANAGED_MINI_APPS.map((app) => (
-            <MiniAppToggle key={app.id} app={app} checked={normalizeEnabled(createForm.enabledMiniApps, createForm.role).includes(app.id)} onChange={toggleCreateApp} />
-          ))}
-        </div>
-
-        <button type="submit" className="primary-btn" disabled={savingUid === 'new'}>
-          {savingUid === 'new' ? 'Creating...' : 'Create user'}
-        </button>
-      </form>
-
       <section className="access-panel">
         <div className="access-section-head">
-          <h2>Existing users</h2>
+          <h2>Users</h2>
           <button type="button" className="ghost-btn" onClick={loadUsers} disabled={loading}>
             Refresh
           </button>
         </div>
 
-        <div className="access-user-list">
-          {users.map((user) => (
-            <article key={user.uid} className="access-user-card">
-              <div>
-                <h3>{user.email || user.uid}</h3>
-                <p>{user.uid}</p>
-              </div>
-
-              <label className="access-role-select">
-                <span>Role</span>
-                <select value={user.role || 'user'} onChange={(event) => updateUserDraft(user.uid, { role: event.target.value })}>
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-
-              <div className="access-toggle-grid">
-                {ACCESS_MANAGED_MINI_APPS.map((app) => (
-                  <MiniAppToggle key={app.id} app={app} checked={normalizeEnabled(user.enabledMiniApps, user.role).includes(app.id)} onChange={() => toggleUserApp(user.uid, app.id)} />
-                ))}
-              </div>
-
-              <button type="button" className="primary-btn" onClick={() => saveUser(user)} disabled={savingUid === user.uid}>
-                {savingUid === user.uid ? 'Saving...' : 'Save access'}
-              </button>
-            </article>
-          ))}
+        <div className="access-table-wrap">
+          <table className="access-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Mini Apps</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => {
+                const enabled = normalizeEnabled(user.enabledMiniApps, user.role);
+                return (
+                  <tr key={user.uid}>
+                    <td>
+                      <strong>{user.email || user.uid}</strong>
+                      <span>{user.uid}</span>
+                    </td>
+                    <td>{user.role || 'user'}</td>
+                    <td>
+                      {enabled.length > 0
+                        ? enabled.map((id) => ACCESS_MANAGED_MINI_APPS.find((app) => app.id === id)?.label || id).join(', ')
+                        : 'None'}
+                    </td>
+                    <td>
+                      <button type="button" className="action-btn" onClick={() => openEdit(user)}>
+                        <FiEdit2 size={15} />
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           {!loading && users.length === 0 ? <p className="meta">No users found.</p> : null}
           {loading ? <p className="meta">Loading users...</p> : null}
         </div>
       </section>
+
+      {drawerMode ? (
+        <aside className="access-drawer" aria-label={drawerMode === 'create' ? 'Add user' : 'Edit user access'}>
+          <div className="drawer-header">
+            <h2>{drawerMode === 'create' ? 'Add User' : 'Edit User'}</h2>
+            <button type="button" className="ghost-btn" onClick={closeDrawer} disabled={saving} aria-label="Close">
+              <FiX size={16} />
+            </button>
+          </div>
+
+          <form className="access-drawer-form" onSubmit={submitDrawer}>
+            <label>
+              <span>Email</span>
+              <input type="email" required disabled={drawerMode === 'edit'} value={draft.email} onChange={(event) => updateDraft({ email: event.target.value })} />
+            </label>
+
+            {drawerMode === 'create' ? (
+              <label>
+                <span>Temporary password</span>
+                <input type="password" required minLength={6} value={draft.password} onChange={(event) => updateDraft({ password: event.target.value })} />
+              </label>
+            ) : null}
+
+            <label>
+              <span>Role</span>
+              <select value={draft.role} onChange={(event) => changeRole(event.target.value)}>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+
+            <div className="access-toggle-grid" aria-label="Mini app access">
+              {ACCESS_MANAGED_MINI_APPS.map((app) => (
+                <MiniAppToggle key={app.id} app={app} checked={normalizeEnabled(draft.enabledMiniApps, draft.role).includes(app.id)} onChange={toggleApp} />
+              ))}
+            </div>
+
+            <button type="submit" className="primary-btn" disabled={saving}>
+              {saving ? 'Saving...' : drawerMode === 'create' ? 'Create user' : 'Save access'}
+            </button>
+          </form>
+        </aside>
+      ) : null}
     </section>
   );
 }

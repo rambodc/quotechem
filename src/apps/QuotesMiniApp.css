@@ -1,0 +1,48 @@
+.quotes-mini-page {
+  min-height: calc(100vh - 156px);
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #0b1220, #0b5fc0);
+  color: #ffffff;
+}
+
+.quotes-mini-card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 28px;
+}
+
+.quotes-mini-icon {
+  width: 92px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.13);
+  color: #bfdbfe;
+  box-shadow: 0 28px 80px rgba(191, 219, 254, 0.2);
+}
+
+.quotes-mini-card p {
+  margin: 0;
+  color: #bfdbfe;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.quotes-mini-card h1 {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 4.4rem);
+  line-height: 1;
+}
+
+.quotes-mini-card span {
+  max-width: 520px;
+  color: #dbeafe;
+  line-height: 1.5;
+}
