@@ -5,6 +5,81 @@
   color: #0f172a;
 }
 
+.drilling-report-page.offline-standalone {
+  min-height: 100vh;
+  background: #f4f8fb;
+  padding: 18px;
+}
+
+.drilling-report-page.launch-page {
+  place-items: center;
+}
+
+.drilling-launch-card {
+  width: min(760px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  border: 1px solid #d8e5f2;
+  border-radius: 20px;
+  background: #ffffff;
+  padding: 24px;
+}
+
+.drilling-launch-card > p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.drilling-launch-card h1,
+.drilling-launch-card > span {
+  margin: 0;
+}
+
+.drilling-launch-card > span {
+  max-width: 580px;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.offline-ready-panel {
+  width: min(520px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid #fee2e2;
+  border-radius: 15px;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 12px;
+  text-align: left;
+}
+
+.offline-ready-panel.ready {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.offline-ready-panel strong,
+.offline-ready-panel span {
+  display: block;
+}
+
+.offline-ready-panel span {
+  margin-top: 2px;
+  font-size: 0.82rem;
+}
+
+.launch-actions {
+  justify-content: center;
+}
+
 .drilling-report-head {
   display: flex;
   align-items: flex-start;
@@ -149,6 +224,35 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.drilling-actions .primary,
+.drilling-actions .secondary {
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.drilling-actions .primary {
+  border: 0;
+  background: #0b5fc0;
+  color: #ffffff;
+}
+
+.drilling-actions .secondary {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.sign-in-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
 }
 
 .drilling-actions .upload:disabled {

@@ -1,5 +1,5 @@
-const CACHE_NAME = 'quotechem-drilling-fluids-v1';
-const OFFLINE_ROUTE = '/apps/drilling-fluids-report';
+const CACHE_NAME = 'quotechem-drilling-fluids-v2';
+const OFFLINE_ROUTE = '/offline/drilling-fluids-report';
 const SHELL_URLS = ['/', OFFLINE_ROUTE, '/manifest.json'];
 
 self.addEventListener('install', (event) => {

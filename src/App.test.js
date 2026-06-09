@@ -54,9 +54,12 @@ beforeEach(() => {
   const { onAuthStateChanged, signOut, updatePassword } = require('firebase/auth');
   const { getDoc, onSnapshot, serverTimestamp, setDoc } = require('firebase/firestore');
   const { postJson } = require('./lib/api');
+  const { auth } = require('./firebase');
   const drillingStore = require('./apps/drillingFluidsStore');
 
   mockLocalReports = [];
+  window.localStorage.clear();
+  auth.currentUser = mockAuthUser;
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   Object.defineProperty(window.navigator, 'serviceWorker', {
     configurable: true,
@@ -128,6 +131,8 @@ beforeEach(() => {
 
 function renderAt(path, role = 'user', enabledMiniApps = null) {
   mockAuthUser = { uid: `${role}-1`, email: `${role}@example.com` };
+  const { auth } = require('./firebase');
+  auth.currentUser = mockAuthUser;
   mockProfile = { role, firstName: '', lastName: '', enabledMiniApps };
   window.history.pushState({}, '', path);
   const App = require('./App').default;
@@ -136,6 +141,8 @@ function renderAt(path, role = 'user', enabledMiniApps = null) {
 
 function renderSignedOutAt(path) {
   mockAuthUser = null;
+  const { auth } = require('./firebase');
+  auth.currentUser = null;
   mockProfile = { role: 'user', firstName: '', lastName: '' };
   window.history.pushState({}, '', path);
   const App = require('./App').default;
@@ -224,14 +231,33 @@ describe('mini-app portal routing', () => {
     cleanup();
     renderAt('/apps/drilling-fluids-report', 'admin');
     expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
-    expect(screen.getByLabelText(/Density/i)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Open Offline Report/i }).getAttribute('href')).toBe('/offline/drilling-fluids-report');
     expect(window.navigator.serviceWorker.register).toHaveBeenCalledWith('/drilling-fluids-sw.js');
   });
 
-  test('Drilling Fluids Report saves locally and uploads pending reports', async () => {
+  test('offline Drilling Fluids Report renders outside the portal and saves locally', async () => {
+    const drillingStore = require('./apps/drillingFluidsStore');
+    renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
+
+    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Apps/i })).not.toBeTruthy();
+    expect(screen.getByLabelText(/Density/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Offline Well' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
+
+    await waitFor(() => expect(drillingStore.saveDrillingFluidReport).toHaveBeenCalled());
+    expect(await screen.findByText(/Saved locally on this device/i)).toBeTruthy();
+    expect(await screen.findByText(/Offline Well/i)).toBeTruthy();
+  });
+
+  test('offline Drilling Fluids Report uploads pending reports when prepared and signed in', async () => {
     const { setDoc } = require('firebase/firestore');
     const drillingStore = require('./apps/drillingFluidsStore');
-    renderAt('/apps/drilling-fluids-report', 'user', ['drilling-fluids-report']);
+    window.localStorage.setItem(
+      'quotechem:offline-drilling-user',
+      JSON.stringify({ uid: 'user-1', email: 'user@example.com', preparedAt: '2026-06-09T00:00:00.000Z' })
+    );
+    renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
     expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'North Pad 12' } });
@@ -247,10 +273,19 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByText(/1 report uploaded/i)).toBeTruthy();
   });
 
-  test('Drilling Fluids Report disables upload offline but keeps local save available', async () => {
+  test('offline Drilling Fluids Report asks users to sign in before upload without identity', async () => {
+    renderSignedOutAt('/offline/drilling-fluids-report');
+
+    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Upload$/i }));
+
+    expect(await screen.findByText(/Sign in to upload/i)).toBeTruthy();
+  });
+
+  test('offline Drilling Fluids Report disables upload offline but keeps local save available', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     const drillingStore = require('./apps/drillingFluidsStore');
-    renderAt('/apps/drilling-fluids-report', 'user', ['drilling-fluids-report']);
+    renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
     expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Upload$/i }).disabled).toBe(true);
@@ -259,6 +294,13 @@ describe('mini-app portal routing', () => {
 
     await waitFor(() => expect(drillingStore.saveDrillingFluidReport).toHaveBeenCalled());
     expect(await screen.findByText(/Saved locally on this device/i)).toBeTruthy();
+  });
+
+  test('drilling service worker only falls back for the dedicated offline route', () => {
+    const fs = require('fs');
+    const source = fs.readFileSync(`${process.cwd()}/public/drilling-fluids-sw.js`, 'utf8');
+    expect(source).toContain("const OFFLINE_ROUTE = '/offline/drilling-fluids-report'");
+    expect(source).not.toContain("const OFFLINE_ROUTE = '/apps/drilling-fluids-report'");
   });
 
   test('admin and basic users can open the Account mini app', async () => {

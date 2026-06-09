@@ -18,6 +18,7 @@ import Dashboard from './admin/Dashboard';
 import Leads from './admin/Leads';
 import Customers from './admin/Customers';
 import DrillingFluidsReport from './apps/DrillingFluidsReport';
+import OfflineDrillingFluidsReport from './apps/OfflineDrillingFluidsReport';
 import QuotesMiniApp from './apps/QuotesMiniApp';
 import UserAccess from './admin/UserAccess';
 
@@ -176,6 +177,7 @@ function App() {
           <Route path="/" element={<CatalogHome />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chemicals/:slug" element={<ProductPage />} />
+          <Route path="/offline/drilling-fluids-report" element={<OfflineDrillingFluidsReport />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route
             path="/signin"
