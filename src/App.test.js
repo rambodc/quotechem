@@ -222,6 +222,8 @@ describe('mini-app portal routing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Close/i }));
     fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
     expect(await screen.findByRole('heading', { name: 'Edit User' })).toBeTruthy();
+    expect(screen.getByDisplayValue('Riley')).toBeTruthy();
+    expect(screen.getByDisplayValue('Chen')).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
     expect(screen.getByDisplayValue('user@example.com').disabled).toBe(true);
   });

@@ -156,6 +156,8 @@ export default function UserAccess() {
           'adminUpdateUserAccess',
           {
             uid: draft.uid,
+            firstName: draft.firstName,
+            lastName: draft.lastName,
             role: draft.role,
             enabledMiniApps,
           },
@@ -239,18 +241,16 @@ export default function UserAccess() {
               <input type="email" required disabled={drawerMode === 'edit'} value={draft.email} onChange={(event) => updateDraft({ email: event.target.value })} />
             </label>
 
-            {drawerMode === 'create' ? (
-              <div className="access-name-grid">
-                <label>
-                  <span>First name</span>
-                  <input type="text" value={draft.firstName} onChange={(event) => updateDraft({ firstName: event.target.value })} />
-                </label>
-                <label>
-                  <span>Last name</span>
-                  <input type="text" value={draft.lastName} onChange={(event) => updateDraft({ lastName: event.target.value })} />
-                </label>
-              </div>
-            ) : null}
+            <div className="access-name-grid">
+              <label>
+                <span>First name</span>
+                <input type="text" value={draft.firstName} onChange={(event) => updateDraft({ firstName: event.target.value })} />
+              </label>
+              <label>
+                <span>Last name</span>
+                <input type="text" value={draft.lastName} onChange={(event) => updateDraft({ lastName: event.target.value })} />
+              </label>
+            </div>
 
             {drawerMode === 'create' ? (
               <label>

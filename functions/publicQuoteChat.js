@@ -1325,6 +1325,8 @@ export const adminUpdateUserAccess = onRequest({ region: REGION }, async (req, r
     const adminUser = await requireAdmin(req);
     const uid = asString(req.body?.uid);
     const role = normalizeRole(req.body?.role);
+    const firstName = asString(req.body?.firstName).slice(0, 80);
+    const lastName = asString(req.body?.lastName).slice(0, 80);
     const enabledMiniApps = normalizeMiniAppIds(req.body?.enabledMiniApps) || [];
     if (!uid) return jsonError(res, 400, 'uid is required');
 
@@ -1335,6 +1337,8 @@ export const adminUpdateUserAccess = onRequest({ region: REGION }, async (req, r
     await userRef.set(
       {
         role,
+        firstName,
+        lastName,
         enabledMiniApps,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedBy: adminUser.uid,
