@@ -11,8 +11,8 @@ export default function CatalogHome() {
           <Link to="/" className="catalog-brand" aria-label="QuoteChem home">
             <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo 500.png`} alt="QuoteChem" />
           </Link>
-          <Link to="/chat" className="catalog-chat-link">
-            Chat with QuoteChem
+          <Link to="/portal" className="catalog-chat-link">
+            Portal
           </Link>
         </nav>
 

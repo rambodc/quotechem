@@ -105,7 +105,9 @@ function App() {
             firstName: typeof data.firstName === 'string' ? data.firstName : '',
             lastName: typeof data.lastName === 'string' ? data.lastName : '',
             profilePhotoUrl: typeof data.profilePhotoUrl === 'string' ? data.profilePhotoUrl : '',
+            profilePhotoThumbUrl: typeof data.profilePhotoThumbUrl === 'string' ? data.profilePhotoThumbUrl : '',
             profilePhotoPath: typeof data.profilePhotoPath === 'string' ? data.profilePhotoPath : '',
+            profilePhotoThumbPath: typeof data.profilePhotoThumbPath === 'string' ? data.profilePhotoThumbPath : '',
             enabledMiniApps: Array.isArray(data.enabledMiniApps) ? data.enabledMiniApps : null,
           });
           setCheckingAuth(false);

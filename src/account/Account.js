@@ -21,6 +21,49 @@ function AccountAction({ icon: Icon, title, onClick }) {
   );
 }
 
+function resizeImageToSquare(file, size) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Unable to prepare image.'));
+        return;
+      }
+
+      const sourceSize = Math.min(image.width, image.height);
+      const sourceX = (image.width - sourceSize) / 2;
+      const sourceY = (image.height - sourceSize) / 2;
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, size, size);
+      context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Unable to resize image.'));
+        },
+        'image/jpeg',
+        0.88
+      );
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Unable to load image.'));
+    };
+
+    image.src = url;
+  });
+}
+
 export default function Account() {
   const navigate = useNavigate();
   const appUser = useContext(UserContext);
@@ -49,15 +92,25 @@ export default function Account() {
     setUploading(true);
 
     try {
-      const path = `profilePhotos/${auth.currentUser.uid}/avatar`;
-      const imageRef = storageRef(storage, path);
-      await uploadBytes(imageRef, file, { contentType: file.type || 'image/jpeg' });
-      const url = await getDownloadURL(imageRef);
+      const uid = auth.currentUser.uid;
+      const avatarPath = `profilePhotos/${uid}/avatar-200.jpg`;
+      const thumbPath = `profilePhotos/${uid}/avatar-50.jpg`;
+      const [avatarBlob, thumbBlob] = await Promise.all([resizeImageToSquare(file, 200), resizeImageToSquare(file, 50)]);
+      const avatarRef = storageRef(storage, avatarPath);
+      const thumbRef = storageRef(storage, thumbPath);
+
+      await Promise.all([
+        uploadBytes(avatarRef, avatarBlob, { contentType: 'image/jpeg' }),
+        uploadBytes(thumbRef, thumbBlob, { contentType: 'image/jpeg' }),
+      ]);
+      const [avatarUrl, thumbUrl] = await Promise.all([getDownloadURL(avatarRef), getDownloadURL(thumbRef)]);
       await setDoc(
-        doc(db, 'users', auth.currentUser.uid),
+        doc(db, 'users', uid),
         {
-          profilePhotoUrl: url,
-          profilePhotoPath: path,
+          profilePhotoUrl: avatarUrl,
+          profilePhotoPath: avatarPath,
+          profilePhotoThumbUrl: thumbUrl,
+          profilePhotoThumbPath: thumbPath,
           updatedAt: serverTimestamp(),
         },
         { merge: true }

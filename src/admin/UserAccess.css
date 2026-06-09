@@ -30,44 +30,83 @@
   gap: 12px;
 }
 
-.access-table-wrap {
-  overflow: auto;
+.access-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.access-user-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
   border: 1px solid #edf2f7;
-  border-radius: 12px;
-}
-
-.access-table {
-  width: 100%;
-  min-width: 760px;
-  border-collapse: collapse;
-}
-
-.access-table th,
-.access-table td {
-  text-align: left;
+  border-radius: 14px;
+  background: #ffffff;
   padding: 12px;
-  border-bottom: 1px solid #edf2f7;
-  font-size: 0.88rem;
-  vertical-align: middle;
 }
 
-.access-table th {
+.access-user-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.access-avatar {
+  width: 42px;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: linear-gradient(145deg, #0b5fc0, #1394d8);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.access-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.access-user-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.access-user-copy strong {
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-user-copy span {
   color: #64748b;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.access-table td strong,
-.access-table td span {
-  display: block;
-}
-
-.access-table td span {
-  margin-top: 3px;
-  color: #64748b;
+.access-role {
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 5px 9px;
   font-size: 0.76rem;
-  overflow-wrap: anywhere;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.access-role.admin {
+  background: #eaf3ff;
+  color: #0b5fc0;
 }
 
 .action-btn {
@@ -92,6 +131,12 @@
   display: grid;
   gap: 14px;
   margin-top: 16px;
+}
+
+.access-name-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .access-drawer-form label {
@@ -176,7 +221,28 @@
 }
 
 @media (max-width: 620px) {
+  .access-panel {
+    padding: 12px;
+  }
+
+  .access-user-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .access-user-row .action-btn {
+    grid-column: 2;
+  }
+
+  .access-role {
+    justify-self: end;
+  }
+
   .access-toggle-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .access-name-grid {
     grid-template-columns: 1fr;
   }
 }

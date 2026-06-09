@@ -14,6 +14,7 @@ jest.mock('firebase/auth', () => ({
   onAuthStateChanged: jest.fn(),
   signInWithEmailAndPassword: jest.fn(),
   signOut: jest.fn(),
+  updatePassword: jest.fn(),
 }));
 
 jest.mock('firebase/firestore', () => ({
@@ -35,7 +36,7 @@ jest.mock('./lib/api', () => ({
 }));
 
 beforeEach(() => {
-  const { onAuthStateChanged, signOut } = require('firebase/auth');
+  const { onAuthStateChanged, signOut, updatePassword } = require('firebase/auth');
   const { getDoc, onSnapshot, serverTimestamp, setDoc } = require('firebase/firestore');
   const { postJson } = require('./lib/api');
 
@@ -45,6 +46,7 @@ beforeEach(() => {
     return unsubscribe;
   });
   signOut.mockImplementation(() => Promise.resolve());
+  updatePassword.mockImplementation(() => Promise.resolve());
 
   getDoc.mockImplementation(() => Promise.resolve({ exists: () => true }));
   onSnapshot.mockImplementation((ref, callback) => {
@@ -77,7 +79,10 @@ beforeEach(() => {
           {
             uid: 'user-1',
             email: 'user@example.com',
+            firstName: 'Riley',
+            lastName: 'Chen',
             role: 'user',
+            profilePhotoThumbUrl: 'https://example.com/riley-50.jpg',
             enabledMiniApps: ['drilling-fluids-report'],
           },
         ],
@@ -202,11 +207,14 @@ describe('mini-app portal routing', () => {
     renderAt('/apps/user-access', 'admin');
 
     expect(await screen.findByRole('heading', { name: 'User Access' })).toBeTruthy();
+    expect(await screen.findByText('Riley Chen')).toBeTruthy();
     expect(await screen.findByText('user@example.com')).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Add user/i }));
     expect(await screen.findByRole('heading', { name: 'Add User' })).toBeTruthy();
+    expect(screen.getByLabelText(/First name/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Last name/i)).toBeTruthy();
     expect(screen.getByLabelText(/Temporary password/i).getAttribute('minLength')).toBe('6');
     expect(screen.getByRole('button', { name: /Quotes/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Drilling Fluids Report/i })).toBeTruthy();
@@ -216,6 +224,15 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('heading', { name: 'Edit User' })).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
     expect(screen.getByDisplayValue('user@example.com').disabled).toBe(true);
+  });
+
+  test('Change Password only requires a six character minimum', async () => {
+    renderAt('/apps/account/password', 'user');
+
+    expect(await screen.findByRole('heading', { name: 'Change Password' })).toBeTruthy();
+    expect(screen.getByText(/at least 6 characters/i)).toBeTruthy();
+    expect(screen.getByLabelText(/New password/i).getAttribute('minLength')).toBe('6');
+    expect(screen.getByLabelText(/Confirm password/i).getAttribute('minLength')).toBe('6');
   });
 
   test('signed-out users visiting portal routes are sent to sign in', async () => {

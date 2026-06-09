@@ -168,6 +168,10 @@ function mapUserDoc(doc) {
     uid: asString(data.uid) || doc.id,
     email: asString(data.email),
     role,
+    firstName: asString(data.firstName),
+    lastName: asString(data.lastName),
+    profilePhotoUrl: asString(data.profilePhotoUrl),
+    profilePhotoThumbUrl: asString(data.profilePhotoThumbUrl),
     enabledMiniApps: normalizeMiniAppIds(data.enabledMiniApps) || defaultEnabledMiniAppsForRole(role),
     createdAt: toIso(data.createdAt),
     updatedAt: toIso(data.updatedAt),
@@ -1252,6 +1256,8 @@ export const adminCreateUser = onRequest({ region: REGION }, async (req, res) =>
     const email = normalizeEmail(req.body?.email);
     const password = asString(req.body?.password);
     const role = normalizeRole(req.body?.role);
+    const firstName = asString(req.body?.firstName).slice(0, 80);
+    const lastName = asString(req.body?.lastName).slice(0, 80);
     const enabledMiniApps = normalizeMiniAppIds(req.body?.enabledMiniApps) || defaultEnabledMiniAppsForRole(role);
 
     if (!isEmail(email)) return jsonError(res, 400, 'Valid email is required');
@@ -1270,8 +1276,8 @@ export const adminCreateUser = onRequest({ region: REGION }, async (req, res) =>
       email,
       role,
       enabledMiniApps,
-      firstName: '',
-      lastName: '',
+      firstName,
+      lastName,
       primaryAuthUid: createdAuthUser.uid,
       createdAt: now,
       updatedAt: now,

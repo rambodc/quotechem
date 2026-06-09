@@ -15,11 +15,29 @@ function normalizeEnabled(value, role) {
 function buildEmptyDraft() {
   return {
     uid: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     role: 'user',
     enabledMiniApps: managedDefaults('user'),
   };
+}
+
+function initialsForUser(user) {
+  const name = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
+  const source = name || user?.email || 'QC';
+  return source
+    .split(/\s|@/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'QC';
+}
+
+function displayNameForUser(user) {
+  const name = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
+  return name || 'No name set';
 }
 
 function MiniAppToggle({ app, checked, onChange }) {
@@ -73,6 +91,8 @@ export default function UserAccess() {
     setStatus('');
     setDraft({
       uid: user.uid,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
       email: user.email || '',
       password: '',
       role: user.role || 'user',
@@ -123,6 +143,8 @@ export default function UserAccess() {
           {
             email: draft.email,
             password: draft.password,
+            firstName: draft.firstName,
+            lastName: draft.lastName,
             role: draft.role,
             enabledMiniApps,
           },
@@ -174,42 +196,29 @@ export default function UserAccess() {
           </button>
         </div>
 
-        <div className="access-table-wrap">
-          <table className="access-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Mini Apps</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => {
-                const enabled = normalizeEnabled(user.enabledMiniApps, user.role);
-                return (
-                  <tr key={user.uid}>
-                    <td>
-                      <strong>{user.email || user.uid}</strong>
-                      <span>{user.uid}</span>
-                    </td>
-                    <td>{user.role || 'user'}</td>
-                    <td>
-                      {enabled.length > 0
-                        ? enabled.map((id) => ACCESS_MANAGED_MINI_APPS.find((app) => app.id === id)?.label || id).join(', ')
-                        : 'None'}
-                    </td>
-                    <td>
-                      <button type="button" className="action-btn" onClick={() => openEdit(user)}>
-                        <FiEdit2 size={15} />
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="access-user-list">
+          {users.map((user) => (
+            <article key={user.uid} className="access-user-row">
+              <div className="access-user-main">
+                <span className="access-avatar">
+                  {user.profilePhotoThumbUrl || user.profilePhotoUrl ? (
+                    <img src={user.profilePhotoThumbUrl || user.profilePhotoUrl} alt="" />
+                  ) : (
+                    initialsForUser(user)
+                  )}
+                </span>
+                <span className="access-user-copy">
+                  <strong>{displayNameForUser(user)}</strong>
+                  <span>{user.email || user.uid}</span>
+                </span>
+              </div>
+              <span className={`access-role ${user.role === 'admin' ? 'admin' : ''}`}>{user.role || 'user'}</span>
+              <button type="button" className="action-btn" onClick={() => openEdit(user)}>
+                <FiEdit2 size={15} />
+                Edit
+              </button>
+            </article>
+          ))}
           {!loading && users.length === 0 ? <p className="meta">No users found.</p> : null}
           {loading ? <p className="meta">Loading users...</p> : null}
         </div>
@@ -229,6 +238,19 @@ export default function UserAccess() {
               <span>Email</span>
               <input type="email" required disabled={drawerMode === 'edit'} value={draft.email} onChange={(event) => updateDraft({ email: event.target.value })} />
             </label>
+
+            {drawerMode === 'create' ? (
+              <div className="access-name-grid">
+                <label>
+                  <span>First name</span>
+                  <input type="text" value={draft.firstName} onChange={(event) => updateDraft({ firstName: event.target.value })} />
+                </label>
+                <label>
+                  <span>Last name</span>
+                  <input type="text" value={draft.lastName} onChange={(event) => updateDraft({ lastName: event.target.value })} />
+                </label>
+              </div>
+            ) : null}
 
             {drawerMode === 'create' ? (
               <label>

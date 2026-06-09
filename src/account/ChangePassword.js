@@ -26,8 +26,8 @@ export default function ChangePassword() {
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
       return;
     }
 
@@ -53,7 +53,7 @@ export default function ChangePassword() {
     <section className="credential-page">
       <header>
         <h2>Change Password</h2>
-        <p>Choose a strong password with 8+ characters.</p>
+        <p>Choose a password with at least 6 characters.</p>
       </header>
 
       <form className="credential-form" onSubmit={handleSubmit}>
@@ -66,6 +66,7 @@ export default function ChangePassword() {
           type="password"
           autoComplete="new-password"
           required
+          minLength={6}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           placeholder="********"
@@ -77,6 +78,7 @@ export default function ChangePassword() {
           type="password"
           autoComplete="new-password"
           required
+          minLength={6}
           value={confirm}
           onChange={(event) => setConfirm(event.target.value)}
           placeholder="********"

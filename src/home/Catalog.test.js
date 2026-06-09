@@ -17,11 +17,11 @@ function renderPublicRoutes(initialEntries = ['/']) {
 }
 
 describe('public catalog pages', () => {
-  test('home renders QuoteChem intro, chat link, and four product cards', () => {
+  test('home renders QuoteChem intro, portal link, and four product cards', () => {
     renderPublicRoutes();
 
     expect(screen.getByRole('heading', { name: /Source industrial chemicals/i })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Chat with QuoteChem/i }).getAttribute('href')).toBe('/chat');
+    expect(screen.getByRole('link', { name: /Portal/i }).getAttribute('href')).toBe('/portal');
     expect(screen.getByRole('link', { name: /Sodium Hydroxide/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Hydrochloric Acid/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Sulfuric Acid/i })).toBeTruthy();
