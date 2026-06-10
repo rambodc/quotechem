@@ -1,7 +1,8 @@
 export const OFFLINE_DRILLING_ROUTE = '/offline/drilling-fluids-report';
-export const OFFLINE_CACHE_NAME = 'quotechem-drilling-fluids-v2';
+export const OFFLINE_CACHE_NAME = 'quotechem-drilling-fluids-v3';
 export const PREPARED_USER_KEY = 'quotechem:offline-drilling-user';
-export const DRILLING_MANIFEST_PATH = '/drilling-fluids-manifest.json';
+export const DRILLING_MANIFEST_PATH = '/offline/drilling-fluids-manifest.json';
+export const DRILLING_SERVICE_WORKER_PATH = '/offline/drilling-fluids-sw.js';
 
 export function readPreparedDrillingUser() {
   try {
@@ -28,7 +29,10 @@ export function writePreparedDrillingUser(user) {
 
 export function registerDrillingOfflineWorker() {
   if (!('serviceWorker' in navigator)) return Promise.resolve(false);
-  return navigator.serviceWorker.register('/drilling-fluids-sw.js').then(() => true).catch(() => false);
+  return cleanupLegacyDrillingOffline()
+    .then(() => navigator.serviceWorker.register(DRILLING_SERVICE_WORKER_PATH, { scope: '/offline/' }))
+    .then(() => true)
+    .catch(() => false);
 }
 
 export function activateDrillingManifest() {
@@ -49,7 +53,14 @@ function sameOriginAssetUrls() {
     .filter((name) => {
       try {
         const url = new URL(name);
-        return url.origin === window.location.origin && (url.pathname.startsWith('/static/') || url.pathname.startsWith('/assets/') || url.pathname === '/manifest.json');
+        return (
+          url.origin === window.location.origin &&
+          (url.pathname.startsWith('/static/') ||
+            url.pathname.startsWith('/assets/') ||
+            url.pathname === '/logo192.png' ||
+            url.pathname === '/logo512.png' ||
+            url.pathname === DRILLING_MANIFEST_PATH)
+        );
       } catch {
         return false;
       }
@@ -57,7 +68,7 @@ function sameOriginAssetUrls() {
 }
 
 export function drillingOfflineUrls() {
-  return Array.from(new Set(['/', OFFLINE_DRILLING_ROUTE, DRILLING_MANIFEST_PATH, ...sameOriginAssetUrls()]));
+  return Array.from(new Set([OFFLINE_DRILLING_ROUTE, DRILLING_MANIFEST_PATH, ...sameOriginAssetUrls()]));
 }
 
 export function warmDrillingOfflineCache() {
@@ -93,8 +104,10 @@ function testIndexedDb() {
 async function serviceWorkerReady() {
   if (!('serviceWorker' in navigator)) return false;
   try {
-    const registration = await navigator.serviceWorker.ready;
-    return Boolean(registration?.active || navigator.serviceWorker.controller);
+    const registration = navigator.serviceWorker.getRegistration
+      ? await navigator.serviceWorker.getRegistration('/offline/')
+      : await navigator.serviceWorker.ready;
+    return Boolean(registration?.active && registration.scope.endsWith('/offline/'));
   } catch {
     return false;
   }
@@ -137,4 +150,29 @@ export async function prepareDrillingOfflineApp(user) {
   await registerDrillingOfflineWorker();
   await warmDrillingOfflineCache();
   return verifyDrillingOfflineReadiness();
+}
+
+export async function cleanupLegacyDrillingOffline() {
+  const tasks = [];
+  if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+    tasks.push(
+      navigator.serviceWorker.getRegistrations().then((registrations) =>
+        Promise.all(
+          registrations
+            .filter((registration) => registration.active?.scriptURL?.endsWith('/drilling-fluids-sw.js') && !registration.scope.endsWith('/offline/'))
+            .map((registration) => registration.unregister())
+        )
+      )
+    );
+  }
+
+  if ('caches' in window) {
+    tasks.push(
+      window.caches
+        .keys()
+        .then((keys) => Promise.all(keys.filter((key) => key.startsWith('quotechem-drilling-fluids-') && key !== OFFLINE_CACHE_NAME).map((key) => window.caches.delete(key))))
+    );
+  }
+
+  await Promise.all(tasks).catch(() => {});
 }

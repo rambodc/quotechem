@@ -1,6 +1,7 @@
-const CACHE_NAME = 'quotechem-drilling-fluids-v2';
+const CACHE_NAME = 'quotechem-drilling-fluids-v3';
 const OFFLINE_ROUTE = '/offline/drilling-fluids-report';
-const SHELL_URLS = ['/', OFFLINE_ROUTE, '/manifest.json', '/drilling-fluids-manifest.json'];
+const MANIFEST_URL = '/offline/drilling-fluids-manifest.json';
+const SHELL_URLS = [OFFLINE_ROUTE, MANIFEST_URL];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -16,7 +17,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('quotechem-drilling-fluids-') && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
@@ -26,8 +27,9 @@ function shouldRuntimeCache(url) {
     url.origin === self.location.origin &&
     (url.pathname.startsWith('/static/') ||
       url.pathname.startsWith('/assets/') ||
-      url.pathname === '/manifest.json' ||
-      url.pathname === '/drilling-fluids-manifest.json')
+      url.pathname === '/logo192.png' ||
+      url.pathname === '/logo512.png' ||
+      url.pathname === MANIFEST_URL)
   );
 }
 
@@ -44,7 +46,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(OFFLINE_ROUTE, clone));
           return response;
         })
-        .catch(() => caches.match(OFFLINE_ROUTE).then((cached) => cached || caches.match('/')))
+        .catch(() => caches.match(OFFLINE_ROUTE))
     );
     return;
   }

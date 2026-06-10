@@ -114,8 +114,18 @@ beforeEach(() => {
     configurable: true,
     value: {
       controller: {},
-      ready: Promise.resolve({ active: {} }),
-      register: jest.fn(() => Promise.resolve({ active: {} })),
+      ready: Promise.resolve({ active: {}, scope: `${window.location.origin}/offline/` }),
+      getRegistration: jest.fn(() => Promise.resolve({ active: {}, scope: `${window.location.origin}/offline/` })),
+      getRegistrations: jest.fn(() =>
+        Promise.resolve([
+          {
+            scope: `${window.location.origin}/`,
+            active: { scriptURL: `${window.location.origin}/drilling-fluids-sw.js` },
+            unregister: jest.fn(() => Promise.resolve(true)),
+          },
+        ])
+      ),
+      register: jest.fn(() => Promise.resolve({ active: {}, scope: `${window.location.origin}/offline/` })),
     },
   });
 
@@ -291,7 +301,8 @@ describe('mini-app portal routing', () => {
     expect(screen.getByRole('link', { name: /Test Offline Page/i }).getAttribute('href')).toBe('/offline/drilling-fluids-report?offline-check=1');
     expect(screen.getByRole('link', { name: /Open Offline Report/i }).getAttribute('href')).toBe('/offline/drilling-fluids-report');
     fireEvent.click(screen.getByRole('button', { name: /Prepare Offline App/i }));
-    expect(window.navigator.serviceWorker.register).toHaveBeenCalledWith('/drilling-fluids-sw.js');
+    await waitFor(() => expect(window.navigator.serviceWorker.register).toHaveBeenCalledWith('/offline/drilling-fluids-sw.js', { scope: '/offline/' }));
+    expect(window.navigator.serviceWorker.getRegistrations).toHaveBeenCalled();
     await waitFor(() => expect(window.localStorage.getItem('quotechem:offline-drilling-user')).toContain('admin@example.com'));
   });
 
@@ -300,7 +311,7 @@ describe('mini-app portal routing', () => {
     renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
     expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
-    expect(document.querySelector('link[rel="manifest"]').getAttribute('href')).toBe('/drilling-fluids-manifest.json');
+    expect(document.querySelector('link[rel="manifest"]').getAttribute('href')).toBe('/offline/drilling-fluids-manifest.json');
     expect(screen.queryByRole('button', { name: /Apps/i })).not.toBeTruthy();
     expect(screen.getByLabelText(/Density/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Offline Well' } });
@@ -359,9 +370,19 @@ describe('mini-app portal routing', () => {
 
   test('drilling service worker only falls back for the dedicated offline route', () => {
     const fs = require('fs');
-    const source = fs.readFileSync(`${process.cwd()}/public/drilling-fluids-sw.js`, 'utf8');
+    const source = fs.readFileSync(`${process.cwd()}/public/offline/drilling-fluids-sw.js`, 'utf8');
     expect(source).toContain("const OFFLINE_ROUTE = '/offline/drilling-fluids-report'");
+    expect(source).not.toContain("const SHELL_URLS = ['/'");
+    expect(source).not.toContain("caches.match('/')");
+    expect(source).not.toContain('caches.match(\'/\')');
     expect(source).not.toContain("const OFFLINE_ROUTE = '/apps/drilling-fluids-report'");
+  });
+
+  test('drilling manifest is scoped to offline routes only', () => {
+    const fs = require('fs');
+    const manifest = JSON.parse(fs.readFileSync(`${process.cwd()}/public/offline/drilling-fluids-manifest.json`, 'utf8'));
+    expect(manifest.start_url).toBe('/offline/drilling-fluids-report');
+    expect(manifest.scope).toBe('/offline/');
   });
 
   test('admin and basic users can open the Account mini app', async () => {
