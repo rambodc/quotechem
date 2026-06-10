@@ -60,10 +60,63 @@ beforeEach(() => {
   mockLocalReports = [];
   window.localStorage.clear();
   auth.currentUser = mockAuthUser;
+  document.head.querySelectorAll('link[rel="manifest"]').forEach((node) => node.remove());
+  const manifestLink = document.createElement('link');
+  manifestLink.rel = 'manifest';
+  manifestLink.href = '/manifest.json';
+  document.head.appendChild(manifestLink);
+  const cachedUrls = new Map();
+  const cache = {
+    addAll: jest.fn((urls) => {
+      urls.forEach((url) => cachedUrls.set(url, { ok: true }));
+      return Promise.resolve();
+    }),
+    match: jest.fn((url) => Promise.resolve(cachedUrls.get(typeof url === 'string' ? url : url.url) || null)),
+    put: jest.fn((url, response) => {
+      cachedUrls.set(typeof url === 'string' ? url : url.url, response || { ok: true });
+      return Promise.resolve();
+    }),
+  };
+  Object.defineProperty(window, 'caches', {
+    configurable: true,
+    value: {
+      open: jest.fn(() => Promise.resolve(cache)),
+      match: jest.fn((url) => Promise.resolve(cachedUrls.get(typeof url === 'string' ? url : url.url) || null)),
+      keys: jest.fn(() => Promise.resolve([])),
+      delete: jest.fn(() => Promise.resolve(true)),
+    },
+  });
+  Object.defineProperty(window, 'indexedDB', {
+    configurable: true,
+    value: {
+      open: jest.fn(() => {
+        const request = {
+          result: {
+            objectStoreNames: { contains: jest.fn(() => false) },
+            createObjectStore: jest.fn(),
+            close: jest.fn(),
+          },
+        };
+        setTimeout(() => {
+          if (request.onupgradeneeded) request.onupgradeneeded();
+          if (request.onsuccess) request.onsuccess();
+        }, 0);
+        return request;
+      }),
+    },
+  });
+  Object.defineProperty(window.performance, 'getEntriesByType', {
+    configurable: true,
+    value: jest.fn(() => [{ name: `${window.location.origin}/static/js/main.js` }, { name: `${window.location.origin}/static/css/main.css` }]),
+  });
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   Object.defineProperty(window.navigator, 'serviceWorker', {
     configurable: true,
-    value: { register: jest.fn(() => Promise.resolve()) },
+    value: {
+      controller: {},
+      ready: Promise.resolve({ active: {} }),
+      register: jest.fn(() => Promise.resolve({ active: {} })),
+    },
   });
 
   onAuthStateChanged.mockImplementation((auth, callback) => {
@@ -231,8 +284,15 @@ describe('mini-app portal routing', () => {
     cleanup();
     renderAt('/apps/drilling-fluids-report', 'admin');
     expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Prepare Offline App/i })).toBeTruthy();
+    expect(screen.getByText(/Account prepared/i)).toBeTruthy();
+    expect(screen.getByText(/Offline page cached/i)).toBeTruthy();
+    expect(screen.getByText(/Add to Home Screen/i)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Test Offline Page/i }).getAttribute('href')).toBe('/offline/drilling-fluids-report?offline-check=1');
     expect(screen.getByRole('link', { name: /Open Offline Report/i }).getAttribute('href')).toBe('/offline/drilling-fluids-report');
+    fireEvent.click(screen.getByRole('button', { name: /Prepare Offline App/i }));
     expect(window.navigator.serviceWorker.register).toHaveBeenCalledWith('/drilling-fluids-sw.js');
+    await waitFor(() => expect(window.localStorage.getItem('quotechem:offline-drilling-user')).toContain('admin@example.com'));
   });
 
   test('offline Drilling Fluids Report renders outside the portal and saves locally', async () => {
@@ -240,6 +300,7 @@ describe('mini-app portal routing', () => {
     renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
     expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(document.querySelector('link[rel="manifest"]').getAttribute('href')).toBe('/drilling-fluids-manifest.json');
     expect(screen.queryByRole('button', { name: /Apps/i })).not.toBeTruthy();
     expect(screen.getByLabelText(/Density/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Offline Well' } });

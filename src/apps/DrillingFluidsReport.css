@@ -76,6 +76,77 @@
   font-size: 0.82rem;
 }
 
+.offline-checklist {
+  width: min(520px, 100%);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.offline-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  padding: 9px 11px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.offline-checklist li.ok {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.install-panel {
+  width: min(520px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #d8e5f2;
+  border-radius: 15px;
+  background: #f8fbff;
+  padding: 12px;
+  text-align: left;
+}
+
+.install-panel strong,
+.install-panel span {
+  display: block;
+}
+
+.install-panel span {
+  margin-top: 2px;
+  color: #475569;
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.manual-install,
+.install-panel .compact {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.manual-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  background: #eaf3ff;
+  color: #0b5fc0;
+  padding: 8px 10px;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
 .launch-actions {
   justify-content: center;
 }
@@ -361,6 +432,15 @@
 
   .drilling-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .install-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .manual-install {
+    justify-content: center;
   }
 
   .drilling-actions button {

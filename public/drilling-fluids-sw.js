@@ -1,6 +1,6 @@
 const CACHE_NAME = 'quotechem-drilling-fluids-v2';
 const OFFLINE_ROUTE = '/offline/drilling-fluids-report';
-const SHELL_URLS = ['/', OFFLINE_ROUTE, '/manifest.json'];
+const SHELL_URLS = ['/', OFFLINE_ROUTE, '/manifest.json', '/drilling-fluids-manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -22,7 +22,13 @@ self.addEventListener('activate', (event) => {
 });
 
 function shouldRuntimeCache(url) {
-  return url.origin === self.location.origin && (url.pathname.startsWith('/static/') || url.pathname.startsWith('/assets/') || url.pathname === '/manifest.json');
+  return (
+    url.origin === self.location.origin &&
+    (url.pathname.startsWith('/static/') ||
+      url.pathname.startsWith('/assets/') ||
+      url.pathname === '/manifest.json' ||
+      url.pathname === '/drilling-fluids-manifest.json')
+  );
 }
 
 self.addEventListener('fetch', (event) => {
