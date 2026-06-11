@@ -88,7 +88,7 @@ export default function DrillingFluidsReport() {
           <FiDroplet size={34} aria-hidden />
         </span>
         <p>Offline PWA Setup</p>
-        <h1 id="drilling-report-title">Drilling Fluids Report</h1>
+        <h1 id="drilling-report-title">Testing Offline</h1>
         <span>
           Prepare this field report once while online. QuoteChem will verify the offline page, app files, account ownership, and device storage before marking it ready.
         </span>
@@ -116,7 +116,7 @@ export default function DrillingFluidsReport() {
             <strong>{installPrompt ? 'Install app available' : isIos ? 'Install on iPhone or iPad' : 'Install instructions'}</strong>
             <span>
               {installPrompt
-                ? 'Use the browser install prompt for a dedicated Field Reports app.'
+                ? 'Use the browser install prompt for a dedicated Testing Offline app.'
                 : isIos
                   ? 'Tap Share, then Add to Home Screen after the page is offline ready.'
                   : 'If your browser does not show Install, bookmark or pin the offline report after it is ready.'}

@@ -1,7 +1,7 @@
 {
-  "short_name": "Field Reports",
-  "name": "QuoteChem Field Reports",
-  "description": "Offline drilling fluids reports for QuoteChem field work.",
+  "short_name": "Testing Offline",
+  "name": "QuoteChem Testing Offline",
+  "description": "Offline testing reports for QuoteChem field work.",
   "icons": [
     {
       "src": "/logo192.png",

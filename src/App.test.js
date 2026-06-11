@@ -218,7 +218,7 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
-    expect(screen.getByRole('link', { name: /Drilling Fluids Report/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
+    expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -228,7 +228,7 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Drilling Fluids Report/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /User Access/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -238,16 +238,16 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
-    expect(screen.queryByRole('link', { name: /Drilling Fluids Report/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
-  test('basic users with Drilling Fluids Report enabled see that app and Account only', async () => {
+  test('basic users with Testing Offline enabled see that app and Account only', async () => {
     renderAt('/portal', 'user', ['drilling-fluids-report']);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.getByRole('link', { name: /Drilling Fluids Report/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
+    expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
@@ -283,17 +283,17 @@ describe('mini-app portal routing', () => {
     renderAt('/apps/drilling-fluids-report', 'user', []);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Drilling Fluids Report' })).not.toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Testing Offline' })).not.toBeTruthy();
     expect(window.location.pathname).toBe('/portal');
   });
 
-  test('admin users can open User Access and Drilling Fluids Report mini apps', async () => {
+  test('admin users can open User Access and Testing Offline mini apps', async () => {
     renderAt('/apps/user-access', 'admin');
     expect(await screen.findByRole('heading', { name: 'User Access' })).toBeTruthy();
 
     cleanup();
     renderAt('/apps/drilling-fluids-report', 'admin');
-    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Prepare Offline App/i })).toBeTruthy();
     expect(screen.getByText(/Account prepared/i)).toBeTruthy();
     expect(screen.getByText(/Offline page cached/i)).toBeTruthy();
@@ -306,11 +306,11 @@ describe('mini-app portal routing', () => {
     await waitFor(() => expect(window.localStorage.getItem('quotechem:offline-drilling-user')).toContain('admin@example.com'));
   });
 
-  test('offline Drilling Fluids Report renders outside the portal and saves locally', async () => {
+  test('offline Testing Offline renders outside the portal and saves locally', async () => {
     const drillingStore = require('./apps/drillingFluidsStore');
     renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
-    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
     expect(document.querySelector('link[rel="manifest"]').getAttribute('href')).toBe('/offline/drilling-fluids-manifest.json');
     expect(screen.queryByRole('button', { name: /Apps/i })).not.toBeTruthy();
     expect(screen.getByLabelText(/Density/i)).toBeTruthy();
@@ -322,7 +322,7 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByText(/Offline Well/i)).toBeTruthy();
   });
 
-  test('offline Drilling Fluids Report uploads pending reports when prepared and signed in', async () => {
+  test('offline Testing Offline uploads pending reports when prepared and signed in', async () => {
     const { setDoc } = require('firebase/firestore');
     const drillingStore = require('./apps/drillingFluidsStore');
     window.localStorage.setItem(
@@ -331,7 +331,7 @@ describe('mini-app portal routing', () => {
     );
     renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
-    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'North Pad 12' } });
     fireEvent.change(screen.getByLabelText(/Density/i), { target: { value: '10.2 ppg' } });
     fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
@@ -345,21 +345,21 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByText(/1 report uploaded/i)).toBeTruthy();
   });
 
-  test('offline Drilling Fluids Report asks users to sign in before upload without identity', async () => {
+  test('offline Testing Offline asks users to sign in before upload without identity', async () => {
     renderSignedOutAt('/offline/drilling-fluids-report');
 
-    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Upload$/i }));
 
     expect(await screen.findByText(/Sign in to upload/i)).toBeTruthy();
   });
 
-  test('offline Drilling Fluids Report disables upload offline but keeps local save available', async () => {
+  test('offline Testing Offline disables upload offline but keeps local save available', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     const drillingStore = require('./apps/drillingFluidsStore');
     renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
-    expect(await screen.findByRole('heading', { name: 'Drilling Fluids Report' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Upload$/i }).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Offline Well' } });
     fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
@@ -410,7 +410,7 @@ describe('mini-app portal routing', () => {
     expect(screen.getByLabelText(/Last name/i)).toBeTruthy();
     expect(screen.getByLabelText(/Temporary password/i).getAttribute('minLength')).toBe('6');
     expect(screen.getByRole('button', { name: /Quotes/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Drilling Fluids Report/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Testing Offline/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Close/i }));
     fireEvent.click(screen.getByRole('button', { name: /Edit/i }));

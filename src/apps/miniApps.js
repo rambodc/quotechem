@@ -17,8 +17,8 @@ export const MINI_APPS = [
   },
   {
     id: 'drilling-fluids-report',
-    label: 'Drilling Fluids Report',
-    description: 'Placeholder report workspace for drilling fluids workflows.',
+    label: 'Testing Offline',
+    description: 'Offline-capable testing workspace for field report workflows.',
     icon: FiDroplet,
     adminOnly: false,
     defaultVisibleForRoles: ['admin'],

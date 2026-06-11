@@ -214,7 +214,7 @@ export default function OfflineDrillingFluidsReport() {
       <header className="drilling-report-head">
         <div>
           <p>Offline Report</p>
-          <h1 id="drilling-report-title">Drilling Fluids Report</h1>
+          <h1 id="drilling-report-title">Testing Offline</h1>
         </div>
         <span className={`network-badge ${online ? 'online' : 'offline'}`}>
           {online ? <FiCloud size={16} /> : <FiWifiOff size={16} />}
