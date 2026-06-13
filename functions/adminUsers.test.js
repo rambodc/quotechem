@@ -17,3 +17,27 @@ test('managed mini app normalization includes access-managed apps only', () => {
     'drilling-programs',
   ]);
 });
+
+test('generated drilling program content is Firestore-safe', () => {
+  const safe = __testables.firestoreSafeGeneratedProgramContent({
+    title: 'Program',
+    sections: [
+      {
+        title: 'Hydraulics',
+        body: 'Body',
+        bullets: ['One'],
+        table: [
+          ['Property', 'Value'],
+          ['Density', '10.2 ppg'],
+        ],
+        notes: 'Notes',
+        assetIds: ['asset-1'],
+      },
+    ],
+  });
+
+  assert.deepEqual(safe.sections[0].table, [
+    { cells: ['Property', 'Value'] },
+    { cells: ['Density', '10.2 ppg'] },
+  ]);
+});

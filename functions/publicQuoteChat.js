@@ -338,6 +338,24 @@ function normalizeGeneratedProgramContent(value = {}, fallback) {
   };
 }
 
+function firestoreSafeGeneratedProgramContent(content = {}) {
+  return {
+    title: asString(content.title),
+    subtitle: asString(content.subtitle),
+    summary: asString(content.summary),
+    sections: (Array.isArray(content.sections) ? content.sections : []).map((section) => ({
+      title: asString(section.title),
+      body: asString(section.body),
+      bullets: (Array.isArray(section.bullets) ? section.bullets : []).map(asString).filter(Boolean),
+      table: (Array.isArray(section.table) ? section.table : []).map((row) => ({
+        cells: (Array.isArray(row) ? row : []).map(asString).filter(Boolean),
+      })),
+      notes: asString(section.notes),
+      assetIds: (Array.isArray(section.assetIds) ? section.assetIds : []).map(asString).filter(Boolean),
+    })),
+  };
+}
+
 async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
   const apiKey = readSecret(OPENAI_API_KEY);
   const model = asString(process.env.OPENAI_DOCUMENT_MODEL) || asString(process.env.OPENAI_MODEL) || 'gpt-4o-mini';
@@ -1880,7 +1898,7 @@ export const generateDrillingProgramPdf = onRequest(
           status: 'completed',
           pdfPath,
           pdfUrl,
-          generatedContent: generated.content,
+          generatedContent: firestoreSafeGeneratedProgramContent(generated.content),
           model: generated.model,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
@@ -2176,4 +2194,5 @@ export const adminGetCustomerTimeline = onRequest({ region: REGION }, async (req
 export const __testables = {
   isValidTemporaryPassword,
   normalizeMiniAppIds,
+  firestoreSafeGeneratedProgramContent,
 };
