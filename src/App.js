@@ -18,6 +18,7 @@ import Dashboard from './admin/Dashboard';
 import Leads from './admin/Leads';
 import Customers from './admin/Customers';
 import DrillingFluidsReport from './apps/DrillingFluidsReport';
+import DrillingPrograms from './apps/DrillingPrograms';
 import OfflineDrillingFluidsReport from './apps/OfflineDrillingFluidsReport';
 import QuotesMiniApp from './apps/QuotesMiniApp';
 import UserAccess from './admin/UserAccess';
@@ -243,6 +244,15 @@ function App() {
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="drilling-fluids-report" appPath="overview">
                 <DrillingFluidsReport />
+              </MiniAppRoute>
+            }
+          />
+
+          <Route
+            path="/apps/drilling-programs"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="drilling-programs" appPath="overview">
+                <DrillingPrograms />
               </MiniAppRoute>
             }
           />

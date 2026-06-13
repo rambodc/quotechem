@@ -1,4 +1,4 @@
-import { FiClipboard, FiDroplet, FiShield, FiUser } from 'react-icons/fi';
+import { FiClipboard, FiDroplet, FiFileText, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
   {
@@ -23,6 +23,16 @@ export const MINI_APPS = [
     adminOnly: false,
     defaultVisibleForRoles: ['admin'],
     defaultPath: '/apps/drilling-fluids-report',
+    navItems: [],
+  },
+  {
+    id: 'drilling-programs',
+    label: 'Drilling Programs',
+    description: 'Generate AI-assisted drilling program PDFs from managed instruction templates.',
+    icon: FiFileText,
+    adminOnly: false,
+    defaultVisibleForRoles: ['admin'],
+    defaultPath: '/apps/drilling-programs',
     navItems: [],
   },
   {

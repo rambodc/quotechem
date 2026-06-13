@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import PDFDocument from 'pdfkit';
 import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
-import { admin, db } from './firebaseAdmin.js';
+import { admin, db, storage } from './firebaseAdmin.js';
 
 const REGION = 'us-central1';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const SESSION_COLLECTION = 'publicIntakeSessions';
 const RFQ_COLLECTION = 'publicRfqs';
+const DRILLING_PROGRAM_TEMPLATE_COLLECTION = 'drillingProgramTemplates';
+const DRILLING_PROGRAM_RUN_COLLECTION = 'drillingProgramRuns';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
@@ -140,8 +143,8 @@ async function requireAdmin(req) {
   return user;
 }
 
-const MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'user-access', 'account'];
-const ACCESS_MANAGED_MINI_APP_IDS = ['quotes', 'drilling-fluids-report'];
+const MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'drilling-programs', 'user-access', 'account'];
+const ACCESS_MANAGED_MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'drilling-programs'];
 
 function normalizeMiniAppIds(value) {
   if (!Array.isArray(value)) return null;
@@ -177,6 +180,359 @@ function mapUserDoc(doc) {
     updatedAt: toIso(data.updatedAt),
     createdBy: asString(data.createdBy),
   };
+}
+
+function normalizeDocId(value) {
+  return asString(value).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 90);
+}
+
+function normalizeAsset(value = {}) {
+  return {
+    id: normalizeDocId(value.id) || randomUUID(),
+    name: asString(value.name).slice(0, 160),
+    path: asString(value.path).slice(0, 500),
+    url: asString(value.url).slice(0, 1000),
+    contentType: asString(value.contentType).slice(0, 120),
+  };
+}
+
+function normalizeProgramTemplate(input = {}) {
+  const sections = Array.isArray(input.sections) ? input.sections : [];
+  return {
+    name: asString(input.name).slice(0, 160),
+    description: asString(input.description).slice(0, 1000),
+    published: Boolean(input.published),
+    sections: sections.slice(0, 20).map((section) => ({
+      id: normalizeDocId(section.id) || randomUUID(),
+      title: asString(section.title).slice(0, 160),
+      description: asString(section.description).slice(0, 800),
+      required: section.required !== false,
+      options: (Array.isArray(section.options) ? section.options : []).slice(0, 12).map((option) => ({
+        id: normalizeDocId(option.id) || randomUUID(),
+        label: asString(option.label).slice(0, 160),
+        instructions: asString(option.instructions).slice(0, 12000),
+        assets: (Array.isArray(option.assets) ? option.assets : []).slice(0, 12).map(normalizeAsset),
+      })),
+    })),
+  };
+}
+
+function validateProgramTemplate(template) {
+  if (!template.name) return 'Template name is required';
+  if (!template.sections.length) return 'At least one section is required';
+  for (const section of template.sections) {
+    if (!section.title) return 'Every section needs a title';
+    if (!section.options.length) return `Section "${section.title}" needs at least one option`;
+    for (const option of section.options) {
+      if (!option.label) return `Every option in "${section.title}" needs a label`;
+      if (!option.instructions) return `Option "${option.label}" needs instructions`;
+    }
+  }
+  return '';
+}
+
+function mapProgramTemplateDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    id: doc.id,
+    name: asString(data.name),
+    description: asString(data.description),
+    published: Boolean(data.published),
+    sections: Array.isArray(data.sections) ? data.sections : [],
+    createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt),
+    createdBy: asString(data.createdBy),
+    updatedBy: asString(data.updatedBy),
+  };
+}
+
+function normalizeProgramJob(input = {}) {
+  return {
+    programTitle: asString(input.programTitle).slice(0, 160),
+    customer: asString(input.customer).slice(0, 160),
+    wellName: asString(input.wellName).slice(0, 160),
+    location: asString(input.location).slice(0, 200),
+    rig: asString(input.rig).slice(0, 160),
+    programDate: asString(input.programDate).slice(0, 40),
+    notes: asString(input.notes).slice(0, 3000),
+    extraRequirements: asString(input.extraRequirements).slice(0, 3000),
+  };
+}
+
+function mapProgramRunDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    runId: doc.id,
+    templateId: asString(data.templateId),
+    templateName: asString(data.templateName),
+    programTitle: asString(data.programTitle),
+    status: asString(data.status) || 'pending',
+    pdfPath: asString(data.pdfPath),
+    pdfUrl: asString(data.pdfUrl),
+    error: asString(data.error),
+    createdBy: asString(data.createdBy),
+    createdByEmail: asString(data.createdByEmail),
+    createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt),
+  };
+}
+
+function selectedProgramOptions(template, selections = {}) {
+  const selected = [];
+  for (const section of template.sections || []) {
+    const selectedOptionId = normalizeDocId(selections[section.id]);
+    const option = (section.options || []).find((item) => item.id === selectedOptionId);
+    if (section.required !== false && !option) {
+      const err = new Error(`Choose an option for ${section.title}`);
+      err.status = 400;
+      throw err;
+    }
+    if (option) selected.push({ section, option });
+  }
+  return selected;
+}
+
+function extractResponsesText(data) {
+  if (typeof data?.output_text === 'string') return data.output_text;
+  const chunks = [];
+  for (const item of data?.output || []) {
+    for (const content of item?.content || []) {
+      if (typeof content?.text === 'string') chunks.push(content.text);
+    }
+  }
+  return chunks.join('\n').trim();
+}
+
+function fallbackProgramContent({ template, job, selectedOptions }) {
+  return {
+    title: job.programTitle || template.name || 'Drilling Program',
+    subtitle: [job.wellName, job.location].filter(Boolean).join(' - '),
+    summary: job.notes || template.description || 'Generated drilling program based on the selected instruction set.',
+    sections: selectedOptions.map(({ section, option }) => ({
+      title: section.title,
+      body: option.instructions,
+      bullets: [],
+      table: [],
+      notes: section.description,
+      assetIds: (option.assets || []).map((asset) => asset.id),
+    })),
+  };
+}
+
+function normalizeGeneratedProgramContent(value = {}, fallback) {
+  const sections = Array.isArray(value.sections) ? value.sections : [];
+  return {
+    title: asString(value.title) || fallback.title,
+    subtitle: asString(value.subtitle) || fallback.subtitle,
+    summary: asString(value.summary) || fallback.summary,
+    sections: sections.length
+      ? sections.slice(0, 30).map((section, index) => ({
+          title: asString(section.title) || fallback.sections[index]?.title || `Section ${index + 1}`,
+          body: asString(section.body) || fallback.sections[index]?.body || '',
+          bullets: (Array.isArray(section.bullets) ? section.bullets : []).map(asString).filter(Boolean).slice(0, 12),
+          table: (Array.isArray(section.table) ? section.table : []).slice(0, 20).map((row) => (Array.isArray(row) ? row.map(asString).slice(0, 6) : [])),
+          notes: asString(section.notes),
+          assetIds: (Array.isArray(section.assetIds) ? section.assetIds : []).map(asString).filter(Boolean).slice(0, 12),
+        }))
+      : fallback.sections,
+  };
+}
+
+async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
+  const apiKey = readSecret(OPENAI_API_KEY);
+  const model = asString(process.env.OPENAI_DOCUMENT_MODEL) || asString(process.env.OPENAI_MODEL) || 'gpt-4o-mini';
+  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+
+  const fallback = fallbackProgramContent({ template, job, selectedOptions });
+  const prompt = [
+    'Create a professional drilling program PDF draft as strict JSON.',
+    'Use the selected admin instructions as the controlling source. Do not invent operational requirements that conflict with instructions.',
+    'Return JSON with title, subtitle, summary, and sections. Each section has title, body, bullets, table, notes, and assetIds.',
+    'Keep the content polished, concise, practical, and suitable for a one-pass generated PDF.',
+    'Job details:',
+    JSON.stringify(job),
+    'Template:',
+    JSON.stringify({ name: template.name, description: template.description }),
+    'Selected sections/options:',
+    JSON.stringify(
+      selectedOptions.map(({ section, option }) => ({
+        sectionId: section.id,
+        sectionTitle: section.title,
+        sectionDescription: section.description,
+        optionId: option.id,
+        optionLabel: option.label,
+        instructions: option.instructions,
+        assets: (option.assets || []).map((asset) => ({ id: asset.id, name: asset.name, contentType: asset.contentType })),
+      }))
+    ),
+  ].join('\n');
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      input: [
+        {
+          role: 'system',
+          content:
+            'You are a drilling program technical writer. Return valid JSON only. Do not include markdown fences.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'drilling_program_pdf',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string' },
+              subtitle: { type: 'string' },
+              summary: { type: 'string' },
+              sections: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: 'string' },
+                    body: { type: 'string' },
+                    bullets: { type: 'array', items: { type: 'string' } },
+                    table: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
+                    notes: { type: 'string' },
+                    assetIds: { type: 'array', items: { type: 'string' } },
+                  },
+                  required: ['title', 'body', 'bullets', 'table', 'notes', 'assetIds'],
+                },
+              },
+            },
+            required: ['title', 'subtitle', 'summary', 'sections'],
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const failureText = await response.text();
+    throw new Error(`OpenAI document request failed: ${response.status} ${failureText}`);
+  }
+
+  const data = await response.json();
+  const raw = extractResponsesText(data);
+  const parsed = raw ? JSON.parse(raw) : {};
+  return {
+    content: normalizeGeneratedProgramContent(parsed, fallback),
+    model,
+  };
+}
+
+function collectProgramAssets(selectedOptions) {
+  const byId = new Map();
+  for (const { option } of selectedOptions) {
+    for (const asset of option.assets || []) {
+      if (asset.id) byId.set(asset.id, asset);
+    }
+  }
+  return byId;
+}
+
+async function loadImageAsset(asset) {
+  if (!asset?.path || !asset.contentType?.startsWith('image/')) return null;
+  try {
+    const [buffer] = await storage.bucket().file(asset.path).download();
+    return buffer;
+  } catch {
+    return null;
+  }
+}
+
+function pdfBufferFromDoc(doc) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.end();
+  });
+}
+
+function drawKeyValue(doc, label, value) {
+  if (!value) return;
+  doc.font('Helvetica-Bold').fillColor('#334155').text(`${label}: `, { continued: true });
+  doc.font('Helvetica').fillColor('#0f172a').text(value);
+}
+
+async function buildDrillingProgramPdf({ content, job, selectedOptions }) {
+  const doc = new PDFDocument({ size: 'LETTER', margin: 54, bufferPages: true });
+  const assetsById = collectProgramAssets(selectedOptions);
+
+  doc.fillColor('#0f2a56').font('Helvetica-Bold').fontSize(25).text(content.title || 'Drilling Program', { lineGap: 3 });
+  if (content.subtitle) doc.moveDown(0.25).font('Helvetica').fontSize(12).fillColor('#475569').text(content.subtitle);
+  doc.moveDown(1);
+  doc.rect(54, doc.y, 504, 1).fill('#d8e5f2');
+  doc.moveDown(1);
+  doc.fontSize(10).fillColor('#0f172a');
+  drawKeyValue(doc, 'Customer', job.customer);
+  drawKeyValue(doc, 'Well', job.wellName);
+  drawKeyValue(doc, 'Location', job.location);
+  drawKeyValue(doc, 'Rig', job.rig);
+  drawKeyValue(doc, 'Date', job.programDate);
+  doc.moveDown(1);
+  doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f2a56').text('Summary');
+  doc.font('Helvetica').fontSize(10.5).fillColor('#0f172a').text(content.summary || '', { lineGap: 3 });
+
+  for (const section of content.sections || []) {
+    doc.addPage();
+    doc.font('Helvetica-Bold').fontSize(18).fillColor('#0f2a56').text(section.title, { lineGap: 3 });
+    doc.moveDown(0.6);
+    if (section.body) doc.font('Helvetica').fontSize(10.5).fillColor('#0f172a').text(section.body, { lineGap: 3 });
+    if (section.bullets?.length) {
+      doc.moveDown(0.6);
+      for (const bullet of section.bullets) {
+        doc.font('Helvetica').fontSize(10).fillColor('#0f172a').text(`• ${bullet}`, { indent: 12, lineGap: 2 });
+      }
+    }
+    if (section.table?.length) {
+      doc.moveDown(0.7);
+      for (const row of section.table) {
+        doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(row.filter(Boolean).join('    |    '));
+      }
+    }
+    if (section.notes) {
+      doc.moveDown(0.7);
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#475569').text('Notes');
+      doc.font('Helvetica').fontSize(9.5).fillColor('#475569').text(section.notes, { lineGap: 2 });
+    }
+
+    const imageAsset = (section.assetIds || []).map((id) => assetsById.get(id)).find((asset) => asset?.contentType?.startsWith('image/'));
+    const imageBuffer = await loadImageAsset(imageAsset);
+    if (imageBuffer) {
+      if (doc.y > 500) doc.addPage();
+      doc.moveDown(1);
+      try {
+        doc.image(imageBuffer, { fit: [480, 180], align: 'center' });
+      } catch {}
+    }
+  }
+
+  const pages = doc.bufferedPageRange();
+  for (let i = 0; i < pages.count; i += 1) {
+    doc.switchToPage(i);
+    doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(`QuoteChem Drilling Program • Page ${i + 1} of ${pages.count}`, 54, 746, {
+      width: 504,
+      align: 'center',
+    });
+  }
+
+  return pdfBufferFromDoc(doc);
 }
 
 function escapeHtml(text) {
@@ -1355,6 +1711,203 @@ export const adminUpdateUserAccess = onRequest({ region: REGION }, async (req, r
     return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to update user access');
   }
 });
+
+export const adminListDrillingProgramTemplates = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await requireAdmin(req);
+    const snap = await db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).orderBy('updatedAt', 'desc').limit(100).get();
+    setCors(res);
+    res.status(200).json({ ok: true, items: snap.docs.map(mapProgramTemplateDoc) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminListDrillingProgramTemplates] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list drilling program templates');
+  }
+});
+
+export const adminSaveDrillingProgramTemplate = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const adminUser = await requireAdmin(req);
+    const templateId = normalizeDocId(req.body?.id) || randomUUID();
+    const template = normalizeProgramTemplate(req.body || {});
+    const validationError = validateProgramTemplate(template);
+    if (validationError) return jsonError(res, 400, validationError);
+
+    const ref = db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).doc(templateId);
+    const existing = await ref.get();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await ref.set(
+      {
+        ...template,
+        updatedAt: now,
+        updatedBy: adminUser.uid,
+        ...(existing.exists ? {} : { createdAt: now, createdBy: adminUser.uid }),
+      },
+      { merge: true }
+    );
+
+    const saved = await ref.get();
+    setCors(res);
+    res.status(200).json({ ok: true, template: mapProgramTemplateDoc(saved) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminSaveDrillingProgramTemplate] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to save drilling program template');
+  }
+});
+
+export const listDrillingProgramTemplates = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await authenticateRequest(req);
+    const userSnap = await db.collection('users').doc(user.uid).get();
+    const appUser = userSnap.data() || {};
+    const allowed = user.role === 'admin' || normalizeMiniAppIds(appUser.enabledMiniApps)?.includes('drilling-programs');
+    if (!allowed) return jsonError(res, 403, 'Forbidden');
+
+    const snap = await db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).orderBy('updatedAt', 'desc').limit(100).get();
+    const items = snap.docs
+      .map(mapProgramTemplateDoc)
+      .filter((template) => user.role === 'admin' || template.published);
+
+    setCors(res);
+    res.status(200).json({ ok: true, items });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[listDrillingProgramTemplates] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list drilling program templates');
+  }
+});
+
+export const listDrillingProgramRuns = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await authenticateRequest(req);
+    const snap = await db.collection(DRILLING_PROGRAM_RUN_COLLECTION).orderBy('createdAt', 'desc').limit(100).get();
+    const items = snap.docs
+      .map(mapProgramRunDoc)
+      .filter((run) => user.role === 'admin' || run.createdBy === user.uid);
+
+    setCors(res);
+    res.status(200).json({ ok: true, items });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[listDrillingProgramRuns] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list drilling program runs');
+  }
+});
+
+export const generateDrillingProgramPdf = onRequest(
+  {
+    region: REGION,
+    timeoutSeconds: 120,
+    memory: '1GiB',
+    secrets: [OPENAI_API_KEY],
+  },
+  async (req, res) => {
+    if (preflight(req, res)) return;
+    if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+    let runRef = null;
+    try {
+      const user = await authenticateRequest(req);
+      const userSnap = await db.collection('users').doc(user.uid).get();
+      const appUser = userSnap.data() || {};
+      const allowed = user.role === 'admin' || normalizeMiniAppIds(appUser.enabledMiniApps)?.includes('drilling-programs');
+      if (!allowed) return jsonError(res, 403, 'Forbidden');
+
+      const templateId = normalizeDocId(req.body?.templateId);
+      if (!templateId) return jsonError(res, 400, 'templateId is required');
+      const templateSnap = await db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).doc(templateId).get();
+      if (!templateSnap.exists) return jsonError(res, 404, 'Template not found');
+      const template = mapProgramTemplateDoc(templateSnap);
+      if (user.role !== 'admin' && !template.published) return jsonError(res, 403, 'Template is not published');
+
+      const job = normalizeProgramJob(req.body?.job || {});
+      if (!job.programTitle) return jsonError(res, 400, 'Program title is required');
+      if (!job.wellName) return jsonError(res, 400, 'Well name is required');
+      const selectedOptions = selectedProgramOptions(template, req.body?.selections || {});
+      if (!selectedOptions.length) return jsonError(res, 400, 'At least one section option is required');
+
+      const runId = randomUUID();
+      runRef = db.collection(DRILLING_PROGRAM_RUN_COLLECTION).doc(runId);
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      await runRef.set({
+        templateId,
+        templateName: template.name,
+        programTitle: job.programTitle,
+        status: 'generating',
+        job,
+        selections: req.body?.selections || {},
+        createdBy: user.uid,
+        createdByEmail: user.email,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const generated = await callOpenAIDrillingProgram({ template, job, selectedOptions });
+      const pdfBuffer = await buildDrillingProgramPdf({ content: generated.content, job, selectedOptions });
+      const pdfPath = `drillingPrograms/generated/${user.uid}/${runId}.pdf`;
+      const bucket = storage.bucket();
+      const file = bucket.file(pdfPath);
+      const downloadToken = randomUUID();
+      await file.save(pdfBuffer, {
+        contentType: 'application/pdf',
+        resumable: false,
+        metadata: {
+          cacheControl: 'private, max-age=0, no-cache',
+          metadata: {
+            createdBy: user.uid,
+            runId,
+            firebaseStorageDownloadTokens: downloadToken,
+          },
+        },
+      });
+      const pdfUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(pdfPath)}?alt=media&token=${downloadToken}`;
+
+      await runRef.set(
+        {
+          status: 'completed',
+          pdfPath,
+          pdfUrl,
+          generatedContent: generated.content,
+          model: generated.model,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      const updatedRun = await runRef.get();
+      setCors(res);
+      res.status(200).json({ ok: true, run: mapProgramRunDoc(updatedRun) });
+    } catch (error) {
+      const status = Number(error?.status) || 500;
+      const message = status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to generate drilling program PDF';
+      if (runRef) {
+        await runRef.set(
+          {
+            status: 'failed',
+            error: message,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+      logger.error('[generateDrillingProgramPdf] failed', { error: message });
+      return jsonError(res, status, message);
+    }
+  }
+);
 
 export const adminListLeads = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;

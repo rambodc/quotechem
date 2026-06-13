@@ -13,6 +13,11 @@ import {
   adminAddLeadNote,
   adminListCustomers,
   adminGetCustomerTimeline,
+  adminListDrillingProgramTemplates,
+  adminSaveDrillingProgramTemplate,
+  listDrillingProgramTemplates,
+  listDrillingProgramRuns,
+  generateDrillingProgramPdf,
 } from './publicQuoteChat.js';
 
 export {
@@ -30,4 +35,9 @@ export {
   adminAddLeadNote,
   adminListCustomers,
   adminGetCustomerTimeline,
+  adminListDrillingProgramTemplates,
+  adminSaveDrillingProgramTemplate,
+  listDrillingProgramTemplates,
+  listDrillingProgramRuns,
+  generateDrillingProgramPdf,
 };

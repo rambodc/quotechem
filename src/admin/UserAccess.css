@@ -203,6 +203,10 @@
   background: linear-gradient(145deg, #020617, #0ea5e9);
 }
 
+.access-app-icon.drilling-programs {
+  background: linear-gradient(145deg, #1f2937, #0b5fc0);
+}
+
 .access-message {
   margin: 0;
   border-radius: 12px;

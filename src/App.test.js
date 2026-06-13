@@ -5,6 +5,29 @@ let mockAuthUser = null;
 let mockProfile = { role: 'user', firstName: '', lastName: '', enabledMiniApps: null };
 let mockLocalReports = [];
 
+const mockDrillingProgramTemplate = {
+  id: 'template-1',
+  name: 'Standard Drilling Program',
+  description: 'Standard generated program.',
+  published: true,
+  sections: [
+    {
+      id: 'overview',
+      title: 'Program Overview',
+      description: 'Opening program section.',
+      required: true,
+      options: [
+        {
+          id: 'standard',
+          label: 'Standard',
+          instructions: 'Write a standard drilling program overview.',
+          assets: [],
+        },
+      ],
+    },
+  ],
+};
+
 jest.mock('./firebase', () => ({
   auth: {},
   db: {},
@@ -188,6 +211,46 @@ beforeEach(() => {
         ],
       });
     }
+    if (path === 'listDrillingProgramTemplates') {
+      return Promise.resolve({ items: [mockDrillingProgramTemplate] });
+    }
+    if (path === 'listDrillingProgramRuns') {
+      return Promise.resolve({
+        items: [
+          {
+            runId: 'run-1',
+            templateName: 'Standard Drilling Program',
+            programTitle: 'North Pad Program',
+            status: 'completed',
+            pdfUrl: 'https://example.com/north-pad.pdf',
+            createdAt: '2026-06-13T12:00:00.000Z',
+          },
+          {
+            runId: 'run-2',
+            templateName: 'Standard Drilling Program',
+            programTitle: 'Failed Program',
+            status: 'failed',
+            error: 'OpenAI document request failed',
+            createdAt: '2026-06-13T11:00:00.000Z',
+          },
+        ],
+      });
+    }
+    if (path === 'generateDrillingProgramPdf') {
+      return Promise.resolve({
+        run: {
+          runId: 'run-new',
+          templateName: 'Standard Drilling Program',
+          programTitle: 'Generated Test Program',
+          status: 'completed',
+          pdfUrl: 'https://example.com/generated.pdf',
+          createdAt: '2026-06-13T13:00:00.000Z',
+        },
+      });
+    }
+    if (path === 'adminSaveDrillingProgramTemplate') {
+      return Promise.resolve({ template: mockDrillingProgramTemplate });
+    }
     return Promise.resolve({});
   });
 });
@@ -219,6 +282,7 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
     expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
+    expect(screen.getByRole('link', { name: /Drilling Programs/i }).getAttribute('href')).toBe('/apps/drilling-programs');
     expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -229,6 +293,7 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /User Access/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -239,6 +304,7 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
     expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
@@ -248,7 +314,39 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
+    expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
+  });
+
+  test('basic users with Drilling Programs enabled see that app and can generate a PDF', async () => {
+    const { postJson } = require('./lib/api');
+    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
+
+    expect(await screen.findByRole('heading', { name: /Generate field-ready PDF programs/i })).toBeTruthy();
+    expect(await screen.findByText(/North Pad Program/i)).toBeTruthy();
+    expect(await screen.findByText(/OpenAI document request failed/i)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Program title/i), { target: { value: 'Generated Test Program' } });
+    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Well 12-34' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate PDF/i }));
+
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('generateDrillingProgramPdf', expect.objectContaining({ templateId: 'template-1' }), { authed: true }));
+    expect(await screen.findByText(/Drilling program PDF generated/i)).toBeTruthy();
+    expect(await screen.findByText(/Generated Test Program/i)).toBeTruthy();
+  });
+
+  test('admin users can manage Drilling Programs templates', async () => {
+    const { postJson } = require('./lib/api');
+    renderAt('/apps/drilling-programs', 'admin');
+
+    expect(await screen.findByRole('heading', { name: /Generate field-ready PDF programs/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Admin Instruction Library/i })).toBeTruthy();
+    const templateNameInput = await screen.findByLabelText(/Template name/i);
+    expect(templateNameInput.value).toBe('Standard Drilling Program');
+    fireEvent.change(templateNameInput, { target: { value: 'Updated Program Template' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save template/i }));
+
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminSaveDrillingProgramTemplate', expect.objectContaining({ name: 'Updated Program Template' }), { authed: true }));
   });
 
   test('admin users can open Quotes mini-app pages', async () => {
@@ -411,6 +509,7 @@ describe('mini-app portal routing', () => {
     expect(screen.getByLabelText(/Temporary password/i).getAttribute('minLength')).toBe('6');
     expect(screen.getByRole('button', { name: /Quotes/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Testing Offline/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Drilling Programs/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Close/i }));
     fireEvent.click(screen.getByRole('button', { name: /Edit/i }));

@@ -10,9 +10,10 @@ test('temporary password validation rejects shorter values', () => {
   assert.equal(__testables.isValidTemporaryPassword('12345'), false);
 });
 
-test('managed mini app normalization includes quotes and drilling fluids only', () => {
-  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-fluids-report', 'account']), [
+test('managed mini app normalization includes access-managed apps only', () => {
+  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-fluids-report', 'drilling-programs', 'account']), [
     'quotes',
     'drilling-fluids-report',
+    'drilling-programs',
   ]);
 });
