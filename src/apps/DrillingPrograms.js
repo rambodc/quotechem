@@ -394,7 +394,7 @@ export default function DrillingPrograms() {
           <div className="program-panel-head">
             <div>
               <h2>Admin Instruction Library</h2>
-              <span>Build templates from ordered sections and selectable instruction options.</span>
+              <span>Write specific instructions for each section. The AI will not invent technical values that are not provided here or in the job form.</span>
             </div>
             <button type="button" className="secondary-action" onClick={() => editTemplate(emptyTemplateDraft())}>
               <FiPlus size={16} />
@@ -450,7 +450,12 @@ export default function DrillingPrograms() {
                             </label>
                             <label>
                               <span>Instructions</span>
-                              <textarea rows={4} value={option.instructions} onChange={(event) => updateOption(section.id, option.id, { instructions: event.target.value })} />
+                              <textarea
+                                rows={6}
+                                placeholder="Describe exactly what this PDF section should include. Add required headings, tables, wording style, field values to use, and what should be left as Not specified."
+                                value={option.instructions}
+                                onChange={(event) => updateOption(section.id, option.id, { instructions: event.target.value })}
+                              />
                             </label>
                             <label className="asset-upload">
                               <FiUploadCloud size={16} />

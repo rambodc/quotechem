@@ -307,11 +307,17 @@ function fallbackProgramContent({ template, job, selectedOptions }) {
   return {
     title: job.programTitle || template.name || 'Drilling Program',
     subtitle: [job.wellName, job.location].filter(Boolean).join(' - '),
-    summary: job.notes || template.description || 'Generated drilling program based on the selected instruction set.',
+    summary:
+      job.notes ||
+      template.description ||
+      'This drilling program was generated from the selected admin instruction set. Fields not provided by the user or template are intentionally left unspecified.',
     sections: selectedOptions.map(({ section, option }) => ({
       title: section.title,
       body: option.instructions,
-      bullets: [],
+      bullets: [
+        job.extraRequirements ? `Additional requirement: ${job.extraRequirements}` : '',
+        'Confirm all operational values against the approved field program before execution.',
+      ].filter(Boolean),
       table: [],
       notes: section.description,
       assetIds: (option.assets || []).map((asset) => asset.id),
@@ -364,9 +370,12 @@ async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
   const fallback = fallbackProgramContent({ template, job, selectedOptions });
   const prompt = [
     'Create a professional drilling program PDF draft as strict JSON.',
-    'Use the selected admin instructions as the controlling source. Do not invent operational requirements that conflict with instructions.',
+    'Use the selected admin instructions as the controlling source.',
+    'Do not invent depths, formations, mud weights, casing sizes, equipment, dates, safety limits, regulatory requirements, costs, or operational values.',
+    'If a value is not present in the job details or admin instructions, write "Not specified" or omit the claim.',
+    'If the admin instructions are generic or incomplete, produce a concise template-based section that says what should be completed, not fake technical facts.',
     'Return JSON with title, subtitle, summary, and sections. Each section has title, body, bullets, table, notes, and assetIds.',
-    'Keep the content polished, concise, practical, and suitable for a one-pass generated PDF.',
+    'Keep the content polished, concise, practical, and suitable for a one-pass generated PDF. Avoid filler.',
     'Job details:',
     JSON.stringify(job),
     'Template:',
@@ -398,7 +407,7 @@ async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
         {
           role: 'system',
           content:
-            'You are a drilling program technical writer. Return valid JSON only. Do not include markdown fences.',
+            'You are a drilling program technical writer. Return valid JSON only. Stay grounded in the supplied job details and admin instructions. Never fabricate technical field values. Do not include markdown fences.',
         },
         { role: 'user', content: prompt },
       ],
@@ -488,46 +497,71 @@ function drawKeyValue(doc, label, value) {
   doc.font('Helvetica').fillColor('#0f172a').text(value);
 }
 
+function ensurePdfSpace(doc, requiredHeight = 90) {
+  if (doc.y + requiredHeight > 720) doc.addPage();
+}
+
+function drawSectionHeading(doc, title) {
+  ensurePdfSpace(doc, 100);
+  doc.moveDown(1);
+  doc.font('Helvetica-Bold').fontSize(15).fillColor('#0f2a56').text(title || 'Program Section', { lineGap: 2 });
+  doc.moveDown(0.25);
+}
+
+function drawProgramTable(doc, table = []) {
+  const rows = table
+    .map((row) => (Array.isArray(row) ? row.map(asString).filter(Boolean) : []))
+    .filter((row) => row.length);
+  if (!rows.length) return;
+
+  ensurePdfSpace(doc, 80);
+  doc.moveDown(0.5);
+  for (const row of rows) {
+    ensurePdfSpace(doc, 24);
+    doc.font('Helvetica').fontSize(9).fillColor('#0f172a').text(row.join('  |  '), {
+      lineGap: 2,
+    });
+  }
+}
+
 async function buildDrillingProgramPdf({ content, job, selectedOptions }) {
   const doc = new PDFDocument({ size: 'LETTER', margin: 54, bufferPages: true });
   const assetsById = collectProgramAssets(selectedOptions);
 
-  doc.fillColor('#0f2a56').font('Helvetica-Bold').fontSize(25).text(content.title || 'Drilling Program', { lineGap: 3 });
-  if (content.subtitle) doc.moveDown(0.25).font('Helvetica').fontSize(12).fillColor('#475569').text(content.subtitle);
-  doc.moveDown(1);
+  doc.fillColor('#0f2a56').font('Helvetica-Bold').fontSize(24).text(content.title || 'Drilling Program', { lineGap: 3 });
+  if (content.subtitle) doc.moveDown(0.2).font('Helvetica').fontSize(11).fillColor('#475569').text(content.subtitle);
+  doc.moveDown(0.8);
   doc.rect(54, doc.y, 504, 1).fill('#d8e5f2');
-  doc.moveDown(1);
+  doc.moveDown(0.8);
   doc.fontSize(10).fillColor('#0f172a');
   drawKeyValue(doc, 'Customer', job.customer);
   drawKeyValue(doc, 'Well', job.wellName);
   drawKeyValue(doc, 'Location', job.location);
   drawKeyValue(doc, 'Rig', job.rig);
   drawKeyValue(doc, 'Date', job.programDate);
-  doc.moveDown(1);
+  doc.moveDown(0.8);
   doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f2a56').text('Summary');
-  doc.font('Helvetica').fontSize(10.5).fillColor('#0f172a').text(content.summary || '', { lineGap: 3 });
+  doc.font('Helvetica').fontSize(10).fillColor('#0f172a').text(content.summary || '', { lineGap: 3 });
 
   for (const section of content.sections || []) {
-    doc.addPage();
-    doc.font('Helvetica-Bold').fontSize(18).fillColor('#0f2a56').text(section.title, { lineGap: 3 });
-    doc.moveDown(0.6);
-    if (section.body) doc.font('Helvetica').fontSize(10.5).fillColor('#0f172a').text(section.body, { lineGap: 3 });
+    drawSectionHeading(doc, section.title);
+    if (section.body) {
+      ensurePdfSpace(doc, 80);
+      doc.font('Helvetica').fontSize(10).fillColor('#0f172a').text(section.body, { lineGap: 3 });
+    }
     if (section.bullets?.length) {
-      doc.moveDown(0.6);
+      doc.moveDown(0.45);
       for (const bullet of section.bullets) {
-        doc.font('Helvetica').fontSize(10).fillColor('#0f172a').text(`• ${bullet}`, { indent: 12, lineGap: 2 });
+        ensurePdfSpace(doc, 24);
+        doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(`- ${bullet}`, { indent: 12, lineGap: 2 });
       }
     }
-    if (section.table?.length) {
-      doc.moveDown(0.7);
-      for (const row of section.table) {
-        doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(row.filter(Boolean).join('    |    '));
-      }
-    }
+    drawProgramTable(doc, section.table || []);
     if (section.notes) {
-      doc.moveDown(0.7);
+      ensurePdfSpace(doc, 50);
+      doc.moveDown(0.5);
       doc.font('Helvetica-Bold').fontSize(10).fillColor('#475569').text('Notes');
-      doc.font('Helvetica').fontSize(9.5).fillColor('#475569').text(section.notes, { lineGap: 2 });
+      doc.font('Helvetica').fontSize(9).fillColor('#475569').text(section.notes, { lineGap: 2 });
     }
 
     const imageAsset = (section.assetIds || []).map((id) => assetsById.get(id)).find((asset) => asset?.contentType?.startsWith('image/'));
