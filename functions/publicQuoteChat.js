@@ -425,7 +425,7 @@ async function buildOpenAIReferenceInputs(selectedOptions = []) {
 
 async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
   const apiKey = readSecret(OPENAI_API_KEY);
-  const model = asString(process.env.OPENAI_DOCUMENT_MODEL) || asString(process.env.OPENAI_MODEL) || 'gpt-4o-mini';
+  const model = asString(process.env.OPENAI_DOCUMENT_MODEL) || 'gpt-5.5';
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
 
   const fallback = fallbackProgramContent({ template, job, selectedOptions });
@@ -469,7 +469,7 @@ async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
     },
     body: JSON.stringify({
       model,
-      temperature: 0.2,
+      reasoning: { effort: 'medium' },
       input: [
         {
           role: 'system',
@@ -488,6 +488,7 @@ async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
         },
       ],
       text: {
+        verbosity: 'medium',
         format: {
           type: 'json_schema',
           name: 'drilling_program_pdf',
@@ -575,7 +576,8 @@ function drawKeyValue(doc, label, value) {
 }
 
 function ensurePdfSpace(doc, requiredHeight = 90) {
-  if (doc.y + requiredHeight > 720) doc.addPage();
+  const bottomLimit = doc.page.height - 54;
+  if (doc.y + requiredHeight > bottomLimit) doc.addPage();
 }
 
 function drawSectionHeading(doc, title) {
@@ -601,26 +603,107 @@ function drawProgramTable(doc, table = []) {
   }
 }
 
+function drawRoundedRect(doc, x, y, width, height, color, stroke = '#d8e5f2') {
+  doc.roundedRect(x, y, width, height, 10).fillAndStroke(color, stroke);
+}
+
+function drawMetricCard(doc, x, y, width, label, value, accent) {
+  drawRoundedRect(doc, x, y, width, 58, '#ffffff', '#d8e5f2');
+  doc.roundedRect(x, y, width, 8, 5).fill(accent);
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#475569').text(label.toUpperCase(), x + 10, y + 17, { width: width - 20 });
+  doc.font('Helvetica-Bold').fontSize(16).fillColor('#0f172a').text(value || 'Not specified', x + 10, y + 31, { width: width - 20 });
+}
+
+function drawWellPathGraphic(doc, x, y, width, height) {
+  drawRoundedRect(doc, x, y, width, height, '#f8fafc', '#cbd8e6');
+  doc.font('Helvetica-Bold').fontSize(12).fillColor('#0f172a').text('Well Section Visual - Fluid Path and Hole Program', x + 16, y + 14);
+  doc.font('Helvetica').fontSize(7).fillColor('#64748b').text('Illustrative schematic generated from program data', x + 16, y + 29);
+
+  const groundY = y + 70;
+  const verticalX = x + 96;
+  const heelY = y + height - 78;
+  const toeX = x + width - 52;
+  doc.lineWidth(3).strokeColor('#775a3a').moveTo(x + 38, groundY).lineTo(x + width - 26, groundY).stroke();
+  doc.lineWidth(5).strokeColor('#1f2937').moveTo(verticalX, groundY).lineTo(verticalX, heelY - 16).quadraticCurveTo(verticalX, heelY, verticalX + 44, heelY).lineTo(toeX, heelY).stroke();
+  doc.lineWidth(2).strokeColor('#0b5fc0').moveTo(verticalX + 8, groundY - 6).lineTo(verticalX + 8, heelY - 20).quadraticCurveTo(verticalX + 8, heelY - 6, verticalX + 50, heelY - 6).lineTo(toeX - 18, heelY - 6).stroke();
+
+  doc.fillColor('#0b5fc0').font('Helvetica-Bold').fontSize(9).text('Blue: mud pumped down drill pipe', x + width - 210, y + 45);
+  doc.fillColor('#14823b').text('Green: returns up annulus', x + width - 210, y + 59);
+  doc.strokeColor('#14823b').lineWidth(1.8);
+  for (const arrowX of [verticalX - 14, verticalX - 8, toeX - 260, toeX - 160, toeX - 60]) {
+    if (arrowX < verticalX + 20) {
+      doc.moveTo(arrowX, heelY - 42).lineTo(arrowX, heelY - 58).stroke();
+      doc.moveTo(arrowX - 4, heelY - 53).lineTo(arrowX, heelY - 59).lineTo(arrowX + 4, heelY - 53).stroke();
+    } else {
+      doc.moveTo(arrowX + 18, heelY + 13).lineTo(arrowX, heelY + 13).stroke();
+      doc.moveTo(arrowX + 6, heelY + 9).lineTo(arrowX, heelY + 13).lineTo(arrowX + 6, heelY + 17).stroke();
+    }
+  }
+
+  const stages = [
+    ['Surface Gel Slurry', '#14823b'],
+    ['Top Hole Floc Water', '#0b5fc0'],
+    ['Intermediate Polymer', '#e38119'],
+    ['Main Amine Polymer', '#b93636'],
+  ];
+  let stageX = x + 16;
+  const stageY = y + height - 34;
+  for (const [label, color] of stages) {
+    const stageW = label.length > 18 ? 165 : 96;
+    doc.roundedRect(stageX, stageY, stageW, 12, 3).fill(color);
+    doc.font('Helvetica-Bold').fontSize(5.8).fillColor('#ffffff').text(label, stageX + 4, stageY + 3, { width: stageW - 8, align: 'center' });
+    stageX += stageW + 3;
+  }
+}
+
+function drawProgramCoverPage(doc, { content, job }) {
+  doc.rect(0, 0, 792, 118).fill('#0f5a2d');
+  doc.font('Helvetica-Bold').fontSize(28).fillColor('#ffffff').text('Drilling Fluid Program', 36, 30);
+  doc.font('Helvetica').fontSize(12).fillColor('#ecfdf5').text(content.subtitle || [job.wellName, job.location].filter(Boolean).join(' - ') || 'Mud program', 36, 65);
+  doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#d9f99d').text('GENERATED PROGRAM - REVIEW ALL FIELD VALUES BEFORE USE', 36, 88);
+  drawRoundedRect(doc, 650, 28, 96, 52, '#ffffff', '#ffffff');
+  doc.font('Helvetica-Bold').fontSize(22).fillColor('#0f5a2d').text('QC', 650, 42, { width: 96, align: 'center' });
+  doc.font('Helvetica').fontSize(7).fillColor('#0f5a2d').text('QuoteChem', 650, 66, { width: 96, align: 'center' });
+
+  drawRoundedRect(doc, 36, 148, 256, 178, '#ffffff', '#d8e5f2');
+  doc.roundedRect(36, 148, 256, 24, 8).fill('#16833c');
+  doc.font('Helvetica-Bold').fontSize(12).fillColor('#ffffff').text('Program Header', 48, 155);
+  const headerRows = [
+    ['Customer', job.customer],
+    ['Well Name', job.wellName],
+    ['Location', job.location],
+    ['Rig', job.rig],
+    ['Program Date', job.programDate],
+  ];
+  let rowY = 188;
+  for (const [label, value] of headerRows) {
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#475569').text(label, 52, rowY, { width: 76 });
+    doc.font('Helvetica').fontSize(8).fillColor('#0f172a').text(value || 'Not specified', 132, rowY, { width: 140 });
+    rowY += 24;
+  }
+
+  drawMetricCard(doc, 36, 342, 120, 'Well', job.wellName, '#16833c');
+  drawMetricCard(doc, 170, 342, 122, 'Rig', job.rig, '#0b5fc0');
+  drawMetricCard(doc, 36, 414, 120, 'Location', job.location, '#e38119');
+  drawMetricCard(doc, 170, 414, 122, 'Date', job.programDate, '#b93636');
+  drawWellPathGraphic(doc, 320, 148, 430, 270);
+
+  drawRoundedRect(doc, 36, 490, 714, 76, '#fffdf3', '#eab308');
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#ca6a10').text('Purpose of this program', 52, 506);
+  doc.font('Helvetica').fontSize(8.5).fillColor('#0f172a').text(content.summary || 'Program generated from selected instructions and uploaded references.', 52, 526, {
+    width: 680,
+    lineGap: 2,
+  });
+}
+
 async function buildDrillingProgramPdf({ content, job, selectedOptions }) {
-  const doc = new PDFDocument({ size: 'LETTER', margin: 54, bufferPages: true });
+  const doc = new PDFDocument({ size: 'LETTER', layout: 'landscape', margin: 36, bufferPages: true });
   const assetsById = collectProgramAssets(selectedOptions);
 
-  doc.fillColor('#0f2a56').font('Helvetica-Bold').fontSize(24).text(content.title || 'Drilling Program', { lineGap: 3 });
-  if (content.subtitle) doc.moveDown(0.2).font('Helvetica').fontSize(11).fillColor('#475569').text(content.subtitle);
-  doc.moveDown(0.8);
-  doc.rect(54, doc.y, 504, 1).fill('#d8e5f2');
-  doc.moveDown(0.8);
-  doc.fontSize(10).fillColor('#0f172a');
-  drawKeyValue(doc, 'Customer', job.customer);
-  drawKeyValue(doc, 'Well', job.wellName);
-  drawKeyValue(doc, 'Location', job.location);
-  drawKeyValue(doc, 'Rig', job.rig);
-  drawKeyValue(doc, 'Date', job.programDate);
-  doc.moveDown(0.8);
-  doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f2a56').text('Summary');
-  doc.font('Helvetica').fontSize(10).fillColor('#0f172a').text(content.summary || '', { lineGap: 3 });
+  drawProgramCoverPage(doc, { content, job });
 
   for (const section of content.sections || []) {
+    if (doc.y > 485) doc.addPage();
     drawSectionHeading(doc, section.title);
     if (section.body) {
       ensurePdfSpace(doc, 80);
@@ -655,8 +738,8 @@ async function buildDrillingProgramPdf({ content, job, selectedOptions }) {
   const pages = doc.bufferedPageRange();
   for (let i = 0; i < pages.count; i += 1) {
     doc.switchToPage(i);
-    doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(`QuoteChem Drilling Program • Page ${i + 1} of ${pages.count}`, 54, 746, {
-      width: 504,
+    doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(`QuoteChem Drilling Program • Page ${i + 1} of ${pages.count}`, 36, doc.page.height - 24, {
+      width: doc.page.width - 72,
       align: 'center',
     });
   }
