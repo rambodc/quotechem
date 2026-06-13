@@ -11,6 +11,8 @@ const SESSION_COLLECTION = 'publicIntakeSessions';
 const RFQ_COLLECTION = 'publicRfqs';
 const DRILLING_PROGRAM_TEMPLATE_COLLECTION = 'drillingProgramTemplates';
 const DRILLING_PROGRAM_RUN_COLLECTION = 'drillingProgramRuns';
+const OPENAI_REFERENCE_FILE_MAX_BYTES = 12 * 1024 * 1024;
+const OPENAI_REFERENCE_TOTAL_MAX_BYTES = 18 * 1024 * 1024;
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
@@ -362,15 +364,78 @@ function firestoreSafeGeneratedProgramContent(content = {}) {
   };
 }
 
+function isOpenAIReferenceAsset(asset = {}) {
+  const contentType = asString(asset.contentType).toLowerCase();
+  return contentType === 'application/pdf' || contentType.startsWith('image/');
+}
+
+async function buildOpenAIReferenceInputs(selectedOptions = []) {
+  const assetsByPath = new Map();
+  for (const { option } of selectedOptions) {
+    for (const asset of option.assets || []) {
+      if (asset.path && isOpenAIReferenceAsset(asset)) assetsByPath.set(asset.path, asset);
+    }
+  }
+
+  const contentItems = [];
+  const summaries = [];
+  let totalBytes = 0;
+
+  for (const asset of assetsByPath.values()) {
+    if (totalBytes >= OPENAI_REFERENCE_TOTAL_MAX_BYTES) {
+      summaries.push({ name: asset.name, contentType: asset.contentType, status: 'skipped_total_size_limit' });
+      continue;
+    }
+
+    try {
+      const [buffer] = await storage.bucket().file(asset.path).download();
+      if (!buffer?.length) continue;
+      if (buffer.length > OPENAI_REFERENCE_FILE_MAX_BYTES) {
+        summaries.push({ name: asset.name, contentType: asset.contentType, status: 'skipped_file_size_limit', bytes: buffer.length });
+        continue;
+      }
+      if (totalBytes + buffer.length > OPENAI_REFERENCE_TOTAL_MAX_BYTES) {
+        summaries.push({ name: asset.name, contentType: asset.contentType, status: 'skipped_total_size_limit', bytes: buffer.length });
+        continue;
+      }
+
+      const contentType = asString(asset.contentType).toLowerCase();
+      const base64 = buffer.toString('base64');
+      if (contentType === 'application/pdf') {
+        contentItems.push({
+          type: 'input_file',
+          filename: asset.name || 'reference.pdf',
+          file_data: `data:application/pdf;base64,${base64}`,
+        });
+      } else if (contentType.startsWith('image/')) {
+        contentItems.push({
+          type: 'input_image',
+          image_url: `data:${contentType};base64,${base64}`,
+        });
+      }
+      totalBytes += buffer.length;
+      summaries.push({ name: asset.name, contentType: asset.contentType, status: 'attached', bytes: buffer.length });
+    } catch (error) {
+      summaries.push({ name: asset.name, contentType: asset.contentType, status: 'failed_to_load', error: asString(error?.message || String(error)) });
+    }
+  }
+
+  return { contentItems, summaries };
+}
+
 async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
   const apiKey = readSecret(OPENAI_API_KEY);
   const model = asString(process.env.OPENAI_DOCUMENT_MODEL) || asString(process.env.OPENAI_MODEL) || 'gpt-4o-mini';
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
 
   const fallback = fallbackProgramContent({ template, job, selectedOptions });
+  const references = await buildOpenAIReferenceInputs(selectedOptions);
   const prompt = [
     'Create a professional drilling program PDF draft as strict JSON.',
     'Use the selected admin instructions as the controlling source.',
+    references.contentItems.length
+      ? 'Reference PDFs/images are attached. Study their structure, headings, tables, wording style, page organization, and visual intent. Use them as style/context examples while creating a new program for the provided job details.'
+      : 'No usable reference PDF/image content was attached. Use only the admin instructions and job details.',
     'Do not invent depths, formations, mud weights, casing sizes, equipment, dates, safety limits, regulatory requirements, costs, or operational values.',
     'If a value is not present in the job details or admin instructions, write "Not specified" or omit the claim.',
     'If the admin instructions are generic or incomplete, produce a concise template-based section that says what should be completed, not fake technical facts.',
@@ -392,6 +457,8 @@ async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
         assets: (option.assets || []).map((asset) => ({ id: asset.id, name: asset.name, contentType: asset.contentType })),
       }))
     ),
+    'Reference file load status:',
+    JSON.stringify(references.summaries),
   ].join('\n');
 
   const response = await fetch('https://api.openai.com/v1/responses', {
@@ -409,7 +476,16 @@ async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
           content:
             'You are a drilling program technical writer. Return valid JSON only. Stay grounded in the supplied job details and admin instructions. Never fabricate technical field values. Do not include markdown fences.',
         },
-        { role: 'user', content: prompt },
+        {
+          role: 'user',
+          content: [
+            ...references.contentItems,
+            {
+              type: 'input_text',
+              text: prompt,
+            },
+          ],
+        },
       ],
       text: {
         format: {
@@ -458,6 +534,7 @@ async function callOpenAIDrillingProgram({ template, job, selectedOptions }) {
   return {
     content: normalizeGeneratedProgramContent(parsed, fallback),
     model,
+    referenceFiles: references.summaries,
   };
 }
 
@@ -1934,6 +2011,7 @@ export const generateDrillingProgramPdf = onRequest(
           pdfUrl,
           generatedContent: firestoreSafeGeneratedProgramContent(generated.content),
           model: generated.model,
+          referenceFiles: generated.referenceFiles || [],
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -2229,4 +2307,5 @@ export const __testables = {
   isValidTemporaryPassword,
   normalizeMiniAppIds,
   firestoreSafeGeneratedProgramContent,
+  isOpenAIReferenceAsset,
 };

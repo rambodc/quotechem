@@ -41,3 +41,9 @@ test('generated drilling program content is Firestore-safe', () => {
     { cells: ['Density', '10.2 ppg'] },
   ]);
 });
+
+test('OpenAI reference asset filtering accepts PDFs and images', () => {
+  assert.equal(__testables.isOpenAIReferenceAsset({ contentType: 'application/pdf' }), true);
+  assert.equal(__testables.isOpenAIReferenceAsset({ contentType: 'image/png' }), true);
+  assert.equal(__testables.isOpenAIReferenceAsset({ contentType: 'text/plain' }), false);
+});
