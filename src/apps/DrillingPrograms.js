@@ -5,6 +5,7 @@ import { postJson } from '../lib/api';
 import './DrillingPrograms.css';
 
 const desktopQuery = '(min-width: 980px)';
+const SECTION_COLORS = ['#108a24', '#0b63ce', '#b45309', '#7c3aed', '#c026d3', '#0f766e', '#be123c'];
 
 const emptyOverview = {
   programTitle: '',
@@ -67,6 +68,10 @@ function inferWellProfile(section = {}, overview = {}) {
   }
 
   return 'vertical';
+}
+
+function sectionAccent(index = 0) {
+  return SECTION_COLORS[Math.abs(Number(index) || 0) % SECTION_COLORS.length];
 }
 
 function formatDate(value) {
@@ -159,6 +164,8 @@ function pagesFromExtraction(overview, sections) {
       ...emptySection,
       ...section,
       wellProfile: inferWellProfile(section, overview),
+      sectionNumber: index + 1,
+      sectionAccent: section.sectionAccent || sectionAccent(index),
     };
     pageList.push({
       id: section.id || `section-${index + 1}`,
@@ -781,138 +788,132 @@ function MudProgramPage({ page, overview }) {
 
   const data = page.data || {};
   const wellProfile = inferWellProfile(data, overview);
+  const accent = data.sectionAccent || sectionAccent((Number(data.sectionNumber) || 1) - 1);
+  const sectionTitle = data.name || page.title || 'Well Section';
+  const subtitleParts = [data.mudSystem, data.holeSize ? `${data.holeSize} OH` : '', data.casingSize ? `${data.casingSize} Casing` : ''].filter(Boolean);
   return (
-    <article className="mud-page">
-      <PageHeader title={data.name || page.title || 'Well Section'} subtitle={`${overview?.wellName || 'Well'} mud program section`} />
-      <section className="section-hero-band">
-        <InfoCard label="Interval" value={`${data.topDepth || '-'} to ${data.bottomDepth || '-'}`} />
-        <InfoCard label="Hole size" value={data.holeSize} />
-        <InfoCard label="Mud system" value={data.mudSystem} />
-        <InfoCard label="Well profile" value={wellProfile} />
-      </section>
-      <section className={`section-page-layout ${wellProfile}`}>
-        <WellPathModel section={data} overview={overview} profile={wellProfile} />
-        <div className="section-technical-stack">
-          <div className="mud-content-block section-summary-card">
-            <span className="section-kicker">Section Design</span>
-            <h2>{wellProfile === 'horizontal' ? 'Horizontal Well Path' : 'Vertical Well Path'}</h2>
-            <p>
-              {wellProfile === 'horizontal'
-                ? 'Build, land, and maintain the lateral with tight property control across the active interval.'
-                : 'Maintain stable vertical hole conditions while drilling through the selected interval.'}
-            </p>
-          </div>
-          <div className="mud-content-block">
-            <h2>Recommended Properties</h2>
-            <table>
-              <tbody>
-                <tr>
-                  <th>Density</th>
-                  <td>{data.densityRange || 'To be confirmed'}</td>
-                </tr>
-                <tr>
-                  <th>Viscosity</th>
-                  <td>{data.viscosityRange || 'To be confirmed'}</td>
-                </tr>
-                <tr>
-                  <th>Casing</th>
-                  <td>{data.casingSize || 'To be confirmed'}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-      <section className="mud-content-block">
-        <h2>Products and Treatment</h2>
-        <p>{data.keyProducts || 'Add recommended products, concentrations, and treatment notes for this section.'}</p>
-      </section>
-      <section className="mud-content-block accent">
-        <h2>Operational Notes</h2>
-        <p>{data.programNotes || data.riskNotes || 'Add risks, monitoring points, contingency notes, and field checks.'}</p>
+    <article className="mud-page mud-section-page" style={{ '--section-accent': accent }}>
+      <header className="section-print-header">
+        <h1>{overview?.programTitle || `Drilling Fluid Program - ${overview?.wellName || 'Well'}`}</h1>
+        <p>{sectionTitle}{subtitleParts.length ? ` - ${subtitleParts.join(' & ')}` : ''}</p>
+      </header>
+
+      <section className="section-print-table" aria-label={`${sectionTitle} program`}>
+        <div className="section-table-title properties">Properties</div>
+        <div className="section-table-title hole">Hole Section</div>
+        <div className="section-table-title procedures">Procedures</div>
+
+        <aside className="section-properties-column">
+          <PropertyStack
+            items={[
+              ['Profile', wellProfile],
+              ['Top', data.topDepth || '-'],
+              ['Bottom', data.bottomDepth || '-'],
+              ['Hole Size', data.holeSize || 'TBC'],
+              ['Casing', data.casingSize || 'TBC'],
+              ['Density', data.densityRange || 'TBC'],
+              ['Viscosity', data.viscosityRange || 'TBC'],
+              ['Mud System', data.mudSystem || 'TBC'],
+            ]}
+          />
+        </aside>
+
+        <HoleSectionDiagram section={data} profile={wellProfile} overview={overview} />
+
+        <ProcedureColumn section={data} />
       </section>
     </article>
   );
 }
 
-function WellPathModel({ section, overview, profile }) {
-  const isHorizontal = profile === 'horizontal';
-  const title = isHorizontal ? 'Horizontal trajectory model' : 'Vertical trajectory model';
-  const path = isHorizontal
-    ? 'M150 64 C150 176 152 246 218 300 C276 348 350 350 426 350'
-    : 'M154 64 C154 142 154 222 154 350';
-  const casingPath = isHorizontal
-    ? 'M150 64 C150 176 152 246 218 300 C276 348 350 350 426 350'
-    : 'M154 64 C154 142 154 222 154 350';
+function PropertyStack({ items }) {
+  return (
+    <dl className="section-property-stack">
+      {items.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value || 'TBC'}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function splitTextLines(value) {
+  return String(value || '')
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function ProcedureColumn({ section }) {
+  const groups = [
+    ['Mud Up / Treatment', section.keyProducts],
+    ['Operational Procedure', section.programNotes],
+    ['Risks / Contingencies', section.riskNotes],
+  ].filter(([, value]) => String(value || '').trim());
+
+  const fallback = [
+    ['Mud Up / Treatment', 'Add recommended products, concentrations, and treatment notes for this section.'],
+    ['Operational Procedure', 'Add drilling, monitoring, maintenance, and trip notes for the selected interval.'],
+    ['Risks / Contingencies', 'Add hole stability, losses, coal seams, casing, and field checks as required.'],
+  ];
 
   return (
-    <figure className={`well-model-card ${profile}`} aria-label={title}>
-      <svg className="well-model-svg" viewBox="0 0 520 440" role="img" aria-labelledby={`well-model-${profile}-title`}>
-        <title id={`well-model-${profile}-title`}>{title}</title>
-        <defs>
-          <linearGradient id={`wellSteel-${profile}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" />
-            <stop offset="55%" stopColor="#e8edf2" />
-            <stop offset="100%" stopColor="#b9c4cf" />
-          </linearGradient>
-          <linearGradient id={`wellBlue-${profile}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#2563eb" />
-            <stop offset="100%" stopColor="#0039d8" />
-          </linearGradient>
-          <filter id={`wellShadow-${profile}`} x="-20%" y="-20%" width="140%" height="150%">
-            <feDropShadow dx="0" dy="16" stdDeviation="14" floodColor="#0f172a" floodOpacity="0.16" />
-          </filter>
-        </defs>
-
-        <g className="model-grid" opacity="0.72">
-          <path d="M74 96 L252 18 L448 102 L266 190 Z" />
-          <path d="M74 96 L74 286 L266 386 L266 190" />
-          <path d="M448 102 L448 280 L266 386" />
-          {[0, 1, 2, 3].map((item) => (
-            <React.Fragment key={item}>
-              <path d={`M${112 + item * 45} ${80 - item * 8} L${304 + item * 45} ${164 - item * 8} L${304 + item * 45} ${354 - item * 2}`} />
-              <path d={`M${90 + item * 52} ${126 + item * 42} L${270 + item * 44} ${48 + item * 42} L${448} ${124 + item * 42}`} />
-            </React.Fragment>
+    <main className="section-procedure-column">
+      {(groups.length ? groups : fallback).map(([heading, body]) => (
+        <section key={heading} className="procedure-group">
+          <h2>{heading}</h2>
+          {splitTextLines(body).map((line, index) => (
+            <p key={`${heading}-${index}`}>{line}</p>
           ))}
-        </g>
+        </section>
+      ))}
+    </main>
+  );
+}
 
-        <g className="model-platform" filter={`url(#wellShadow-${profile})`}>
-          <path className="model-top-face" fill={`url(#wellSteel-${profile})`} d="M116 128 L260 68 L398 128 L252 196 Z" />
-          <path d="M116 128 L116 168 L252 240 L252 196 Z" />
-          <path d="M398 128 L398 168 L252 240 L252 196 Z" />
-          <path d="M168 158 L250 124 L332 160 L250 198 Z" />
-        </g>
+function HoleSectionDiagram({ section, overview, profile }) {
+  const isHorizontal = profile === 'horizontal';
+  const title = isHorizontal ? 'Horizontal drilled hole section' : 'Vertical drilled hole section';
 
-        <g className="model-rig">
-          <path d="M246 54 L208 170 L282 170 Z" />
-          <path d="M246 54 L246 178" />
-          <path d="M224 112 L270 112 M216 142 L278 142 M234 82 L260 82" />
-          <path d="M215 170 L188 204 M278 170 L308 204" />
-        </g>
-
-        <g className="model-blocks">
-          <path className="model-top-face" fill={`url(#wellSteel-${profile})`} d="M84 244 L132 222 L178 244 L130 268 Z" />
-          <path d="M84 244 L84 296 L130 324 L130 268 Z" />
-          <path d="M178 244 L178 294 L130 324 L130 268 Z" />
-          <path className="model-top-face" fill={`url(#wellSteel-${profile})`} d="M338 236 L386 214 L432 236 L384 260 Z" />
-          <path d="M338 236 L338 288 L384 316 L384 260 Z" />
-          <path d="M432 236 L432 286 L384 316 L384 260 Z" />
-        </g>
-
-        <path className="model-casing" d={casingPath} />
-        <path className="model-well-path" stroke={`url(#wellBlue-${profile})`} d={path} />
-        <path className="model-flow-dash" d={isHorizontal ? 'M184 316 L258 348 L426 348' : 'M126 130 L126 350'} />
-
-        <g className="model-bit" transform={isHorizontal ? 'translate(424 350) rotate(90)' : 'translate(154 350)'}>
-          <path d="M-14 0 L0 24 L14 0 Z" />
-          <circle cx="0" cy="4" r="5" />
-        </g>
+  return (
+    <figure className={`hole-section-card ${profile}`} aria-label={title}>
+      <svg viewBox="0 0 150 440" role="img" aria-labelledby={`hole-section-${profile}-title`}>
+        <title id={`hole-section-${profile}-title`}>{title}</title>
+        <defs>
+          <linearGradient id={`pipeShade-${profile}`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#8c99a8" />
+            <stop offset="15%" stopColor="#f8fafc" />
+            <stop offset="47%" stopColor="#dbe3eb" />
+            <stop offset="75%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#7b8794" />
+          </linearGradient>
+        </defs>
+        <line className="depth-line" x1="22" y1="42" x2="22" y2="398" />
+        <text x="12" y="56" textAnchor="middle" transform="rotate(-90 12 56)">TOP</text>
+        <text x="12" y="398" textAnchor="middle" transform="rotate(-90 12 398)">BOTTOM</text>
+        {isHorizontal ? (
+          <>
+            <rect className="pipe-fill" x="64" y="46" width="24" height="168" />
+            <path className="open-hole-fill" d="M76 214 C76 286 88 318 126 318" />
+            <path className="open-hole-highlight" d="M80 214 C80 280 91 308 126 309" />
+            <line className="open-hole-end" x1="126" y1="306" x2="126" y2="330" />
+          </>
+        ) : (
+          <>
+            <rect className="pipe-fill" x="64" y="46" width="24" height="130" />
+            <rect className="open-hole-rect" x="64" y="176" width="24" height="196" />
+            <rect className="open-hole-rect-highlight" x="76" y="176" width="5" height="196" />
+          </>
+        )}
+        <line className="marker-line" x1="38" y1="46" x2="112" y2="46" />
+        <line className="marker-line" x1="38" y1="372" x2="112" y2="372" />
       </svg>
-
       <figcaption>
-        <span>{profile}</span>
         <strong>{section.topDepth || 'Top'} to {section.bottomDepth || 'Bottom'}</strong>
-        <small>{overview?.wellName || 'Well'} / {section.holeSize || 'hole size pending'}</small>
+        <span>{profile} drilled hole</span>
+        <small>{overview?.wellName || 'Well'}</small>
       </figcaption>
     </figure>
   );

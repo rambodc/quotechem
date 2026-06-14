@@ -439,6 +439,11 @@
   gap: 18px;
 }
 
+.mud-section-page {
+  gap: 10px;
+  font-size: 0.82rem;
+}
+
 .mud-page-header {
   display: flex;
   justify-content: space-between;
@@ -608,162 +613,219 @@
 }
 
 .section-page-layout {
+  display: none;
+}
+
+.section-print-header {
   display: grid;
-  grid-template-columns: 2.92in minmax(0, 1fr);
-  gap: 16px;
-  align-items: stretch;
+  gap: 4px;
+  text-align: center;
 }
 
-.section-technical-stack {
-  min-width: 0;
-  display: grid;
-  gap: 14px;
-  align-content: start;
-}
-
-.section-summary-card {
-  background:
-    linear-gradient(135deg, rgba(11, 95, 192, 0.08), rgba(255, 255, 255, 0) 48%),
-    #ffffff;
-}
-
-.section-kicker {
-  display: block;
-  margin-bottom: 6px;
-  color: #0b5fc0;
-  font-size: 0.68rem;
-  font-weight: 950;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.well-model-card {
-  min-height: 4.15in;
+.section-print-header h1 {
   margin: 0;
-  border: 1px solid #d8e5f2;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 28% 16%, rgba(11, 95, 192, 0.12), transparent 26%),
-    linear-gradient(145deg, #ffffff 0%, #f8fafc 52%, #eef3f8 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  overflow: hidden;
+  color: #020617;
+  font-size: 1.42rem;
+  line-height: 1.12;
+}
+
+.section-print-header p {
+  margin: 0;
+  color: #020617;
+  font-size: 1.08rem;
+  font-weight: 850;
+}
+
+.section-print-table {
+  min-height: 8.55in;
+  display: grid;
+  grid-template-columns: 1.34in 1.28in minmax(0, 1fr);
+  grid-template-rows: 0.34in minmax(0, 1fr);
+  border: 1px solid #9ca3af;
+  background: #ffffff;
+}
+
+.section-table-title {
+  display: grid;
+  place-items: center;
+  border-bottom: 1px solid #9ca3af;
+  background: var(--section-accent);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.section-table-title.properties,
+.section-table-title.hole {
+  border-right: 1px solid #9ca3af;
+}
+
+.section-properties-column,
+.hole-section-card,
+.section-procedure-column {
+  min-height: 0;
+}
+
+.section-properties-column,
+.hole-section-card {
+  border-right: 1px solid #9ca3af;
+}
+
+.section-property-stack {
+  margin: 0;
+  padding: 11px 9px;
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+
+.section-property-stack div {
+  display: grid;
+  gap: 2px;
+}
+
+.section-property-stack dt {
+  color: #020617;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.section-property-stack dd {
+  margin: 0;
+  color: #111827;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+
+.hole-section-card {
+  margin: 0;
+  padding: 8px 6px 10px;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+  background: #ffffff;
 }
 
-.well-model-svg {
+.hole-section-card svg {
   width: 100%;
-  min-height: 310px;
+  height: 100%;
+  min-height: 5.9in;
   display: block;
 }
 
-.model-grid path {
+.hole-section-card text {
+  fill: #4b5563;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.depth-line {
+  stroke: #9ca3af;
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.marker-line {
+  stroke: #64748b;
+  stroke-width: 1;
+}
+
+.pipe-fill {
+  fill: url('#pipeShade-vertical');
+  stroke: #6b7280;
+  stroke-width: 1;
+}
+
+.hole-section-card.horizontal .pipe-fill {
+  fill: url('#pipeShade-horizontal');
+}
+
+.open-hole-rect {
+  fill: var(--section-accent);
+  stroke: #1f2937;
+  stroke-width: 1;
+}
+
+.open-hole-rect-highlight {
+  fill: rgba(255, 255, 255, 0.42);
+}
+
+.open-hole-fill {
   fill: none;
-  stroke: #cfd8e3;
+  stroke: var(--section-accent);
+  stroke-width: 24;
+  stroke-linecap: butt;
+  stroke-linejoin: round;
+}
+
+.open-hole-highlight {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.44);
+  stroke-width: 5;
+  stroke-linecap: butt;
+}
+
+.open-hole-end {
+  stroke: #1f2937;
   stroke-width: 1.2;
-  vector-effect: non-scaling-stroke;
 }
 
-.model-platform path,
-.model-blocks path {
-  stroke: #c4ced8;
-  stroke-width: 1.1;
-  vector-effect: non-scaling-stroke;
+.hole-section-card figcaption {
+  border-top: 1px solid #d1d5db;
+  padding-top: 6px;
+  text-align: center;
 }
 
-.model-platform path:nth-child(2),
-.model-blocks path:nth-child(2),
-.model-blocks path:nth-child(5) {
-  fill: #d9e0e7;
-}
-
-.model-platform path:nth-child(3),
-.model-blocks path:nth-child(3),
-.model-blocks path:nth-child(6) {
-  fill: #f7f9fb;
-}
-
-.model-platform path:nth-child(4) {
-  fill: #ffffff;
-}
-
-.model-rig path {
-  fill: none;
-  stroke: #0047ff;
-  stroke-width: 3.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.model-rig path:first-child {
-  fill: rgba(37, 99, 235, 0.08);
-}
-
-.model-casing {
-  fill: none;
-  stroke: #e2e8f0;
-  stroke-width: 25;
-  stroke-linecap: round;
-  filter: drop-shadow(0 10px 10px rgba(15, 23, 42, 0.16));
-}
-
-.model-well-path {
-  fill: none;
-  stroke-width: 9;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.model-flow-dash {
-  fill: none;
-  stroke: #0047ff;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-dasharray: 7 9;
-  opacity: 0.78;
-}
-
-.model-bit path {
-  fill: #ffffff;
-  stroke: #0047ff;
-  stroke-width: 2;
-}
-
-.model-bit circle {
-  fill: #0047ff;
-}
-
-.well-model-card figcaption {
-  border-top: 1px solid #d8e5f2;
-  background: rgba(255, 255, 255, 0.76);
-  padding: 12px 14px 14px;
-}
-
-.well-model-card figcaption span,
-.well-model-card figcaption strong,
-.well-model-card figcaption small {
+.hole-section-card figcaption strong,
+.hole-section-card figcaption span,
+.hole-section-card figcaption small {
   display: block;
 }
 
-.well-model-card figcaption span {
-  color: #0b5fc0;
+.hole-section-card figcaption strong {
+  color: #020617;
+  font-size: 0.78rem;
+}
+
+.hole-section-card figcaption span,
+.hole-section-card figcaption small {
+  color: #4b5563;
   font-size: 0.68rem;
-  font-weight: 950;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.well-model-card figcaption strong {
-  margin-top: 3px;
-  color: #0d2b50;
-  font-size: 1rem;
-}
-
-.well-model-card figcaption small {
-  margin-top: 3px;
-  color: #64748b;
   font-weight: 800;
+}
+
+.section-procedure-column {
+  padding: 10px 12px 12px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.procedure-group {
+  break-inside: avoid;
+}
+
+.procedure-group h2 {
+  margin: 0 0 2px;
+  color: #020617;
+  font-size: 0.86rem;
+  line-height: 1.1;
+}
+
+.procedure-group p {
+  margin: 0;
+  color: #111827;
+  font-size: 0.76rem;
+  line-height: 1.22;
+  font-weight: 650;
+}
+
+.procedure-group p::before {
+  content: '* ';
+  font-weight: 900;
 }
 
 .mud-content-block table {
