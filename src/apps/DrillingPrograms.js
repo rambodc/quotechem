@@ -35,7 +35,39 @@ const emptySection = {
   keyProducts: '',
   riskNotes: '',
   programNotes: '',
+  wellProfile: '',
 };
+
+function normalizeWellProfile(value) {
+  const profile = String(value || '').trim().toLowerCase();
+  if (['horizontal', 'lateral', 'curve'].includes(profile)) return 'horizontal';
+  if (['vertical', 'surface', 'intermediate'].includes(profile)) return 'vertical';
+  return '';
+}
+
+function inferWellProfile(section = {}, overview = {}) {
+  const explicit = normalizeWellProfile(section.wellProfile || section.profileType || section.trajectory);
+  if (explicit) return explicit;
+
+  const searchable = [
+    section.name,
+    section.mudSystem,
+    section.riskNotes,
+    section.programNotes,
+    section.keyProducts,
+    overview.lateralLength,
+    overview.kickoffPoint,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (/\b(horizontal|lateral|curve|build|heel|toe|kickoff|k lateral|production hole)\b/.test(searchable)) {
+    return 'horizontal';
+  }
+
+  return 'vertical';
+}
 
 function formatDate(value) {
   if (!value) return 'Not saved yet';
@@ -123,12 +155,17 @@ function pagesFromExtraction(overview, sections) {
   ];
 
   sections.forEach((section, index) => {
+    const sectionData = {
+      ...emptySection,
+      ...section,
+      wellProfile: inferWellProfile(section, overview),
+    };
     pageList.push({
       id: section.id || `section-${index + 1}`,
       type: 'section',
       title: section.name || `Section ${index + 1}`,
       sectionId: section.id || `section-${index + 1}`,
-      data: { ...emptySection, ...section },
+      data: sectionData,
     });
   });
 
@@ -525,6 +562,7 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
       <div className="section-table" role="table" aria-label="Extracted well sections">
         <div className="section-row header" role="row">
           <span>Name</span>
+          <span>Profile</span>
           <span>Top</span>
           <span>Bottom</span>
           <span>Hole</span>
@@ -534,6 +572,14 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
         {draft.sections.map((section) => (
           <div className="section-row" role="row" key={section.id}>
             <input aria-label={`${section.name || 'Section'} name`} value={section.name} onChange={(event) => updateSection(section.id, 'name', event.target.value)} />
+            <select
+              aria-label={`${section.name || 'Section'} well profile`}
+              value={normalizeWellProfile(section.wellProfile) || inferWellProfile(section, draft.overview)}
+              onChange={(event) => updateSection(section.id, 'wellProfile', event.target.value)}
+            >
+              <option value="vertical">Vertical</option>
+              <option value="horizontal">Horizontal</option>
+            </select>
             <input aria-label={`${section.name || 'Section'} top depth`} value={section.topDepth} onChange={(event) => updateSection(section.id, 'topDepth', event.target.value)} />
             <input aria-label={`${section.name || 'Section'} bottom depth`} value={section.bottomDepth} onChange={(event) => updateSection(section.id, 'bottomDepth', event.target.value)} />
             <input aria-label={`${section.name || 'Section'} hole size`} value={section.holeSize} onChange={(event) => updateSection(section.id, 'holeSize', event.target.value)} />
@@ -658,6 +704,7 @@ function OverviewEditor({ page, updatePageData }) {
 function SectionEditor({ page, updatePageData }) {
   const fields = [
     ['name', 'Section name'],
+    ['wellProfile', 'Well profile', 'select'],
     ['topDepth', 'Top depth'],
     ['bottomDepth', 'Bottom depth'],
     ['holeSize', 'Hole size'],
@@ -672,7 +719,12 @@ function SectionEditor({ page, updatePageData }) {
   return fields.map(([key, label, type]) => (
     <label key={key}>
       {label}
-      {type === 'textarea' ? (
+      {type === 'select' ? (
+        <select value={normalizeWellProfile(page.data?.[key]) || 'vertical'} onChange={(event) => updatePageData(key, event.target.value)}>
+          <option value="vertical">Vertical</option>
+          <option value="horizontal">Horizontal</option>
+        </select>
+      ) : type === 'textarea' ? (
         <textarea rows={4} value={page.data?.[key] || ''} onChange={(event) => updatePageData(key, event.target.value)} />
       ) : (
         <input value={page.data?.[key] || ''} onChange={(event) => updatePageData(key, event.target.value)} />
@@ -728,6 +780,7 @@ function MudProgramPage({ page, overview }) {
   }
 
   const data = page.data || {};
+  const wellProfile = inferWellProfile(data, overview);
   return (
     <article className="mud-page">
       <PageHeader title={data.name || page.title || 'Well Section'} subtitle={`${overview?.wellName || 'Well'} mud program section`} />
@@ -735,31 +788,39 @@ function MudProgramPage({ page, overview }) {
         <InfoCard label="Interval" value={`${data.topDepth || '-'} to ${data.bottomDepth || '-'}`} />
         <InfoCard label="Hole size" value={data.holeSize} />
         <InfoCard label="Mud system" value={data.mudSystem} />
+        <InfoCard label="Well profile" value={wellProfile} />
       </section>
-      <section className="mud-two-column">
-        <div className="mud-content-block">
-          <h2>Recommended Properties</h2>
-          <table>
-            <tbody>
-              <tr>
-                <th>Density</th>
-                <td>{data.densityRange || 'To be confirmed'}</td>
-              </tr>
-              <tr>
-                <th>Viscosity</th>
-                <td>{data.viscosityRange || 'To be confirmed'}</td>
-              </tr>
-              <tr>
-                <th>Casing</th>
-                <td>{data.casingSize || 'To be confirmed'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div className="section-depth-visual">
-          <span>{data.topDepth || 'Top'}</span>
-          <div />
-          <span>{data.bottomDepth || 'Bottom'}</span>
+      <section className={`section-page-layout ${wellProfile}`}>
+        <WellPathModel section={data} overview={overview} profile={wellProfile} />
+        <div className="section-technical-stack">
+          <div className="mud-content-block section-summary-card">
+            <span className="section-kicker">Section Design</span>
+            <h2>{wellProfile === 'horizontal' ? 'Horizontal Well Path' : 'Vertical Well Path'}</h2>
+            <p>
+              {wellProfile === 'horizontal'
+                ? 'Build, land, and maintain the lateral with tight property control across the active interval.'
+                : 'Maintain stable vertical hole conditions while drilling through the selected interval.'}
+            </p>
+          </div>
+          <div className="mud-content-block">
+            <h2>Recommended Properties</h2>
+            <table>
+              <tbody>
+                <tr>
+                  <th>Density</th>
+                  <td>{data.densityRange || 'To be confirmed'}</td>
+                </tr>
+                <tr>
+                  <th>Viscosity</th>
+                  <td>{data.viscosityRange || 'To be confirmed'}</td>
+                </tr>
+                <tr>
+                  <th>Casing</th>
+                  <td>{data.casingSize || 'To be confirmed'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
       <section className="mud-content-block">
@@ -771,6 +832,89 @@ function MudProgramPage({ page, overview }) {
         <p>{data.programNotes || data.riskNotes || 'Add risks, monitoring points, contingency notes, and field checks.'}</p>
       </section>
     </article>
+  );
+}
+
+function WellPathModel({ section, overview, profile }) {
+  const isHorizontal = profile === 'horizontal';
+  const title = isHorizontal ? 'Horizontal trajectory model' : 'Vertical trajectory model';
+  const path = isHorizontal
+    ? 'M150 64 C150 176 152 246 218 300 C276 348 350 350 426 350'
+    : 'M154 64 C154 142 154 222 154 350';
+  const casingPath = isHorizontal
+    ? 'M150 64 C150 176 152 246 218 300 C276 348 350 350 426 350'
+    : 'M154 64 C154 142 154 222 154 350';
+
+  return (
+    <figure className={`well-model-card ${profile}`} aria-label={title}>
+      <svg className="well-model-svg" viewBox="0 0 520 440" role="img" aria-labelledby={`well-model-${profile}-title`}>
+        <title id={`well-model-${profile}-title`}>{title}</title>
+        <defs>
+          <linearGradient id={`wellSteel-${profile}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="55%" stopColor="#e8edf2" />
+            <stop offset="100%" stopColor="#b9c4cf" />
+          </linearGradient>
+          <linearGradient id={`wellBlue-${profile}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#0039d8" />
+          </linearGradient>
+          <filter id={`wellShadow-${profile}`} x="-20%" y="-20%" width="140%" height="150%">
+            <feDropShadow dx="0" dy="16" stdDeviation="14" floodColor="#0f172a" floodOpacity="0.16" />
+          </filter>
+        </defs>
+
+        <g className="model-grid" opacity="0.72">
+          <path d="M74 96 L252 18 L448 102 L266 190 Z" />
+          <path d="M74 96 L74 286 L266 386 L266 190" />
+          <path d="M448 102 L448 280 L266 386" />
+          {[0, 1, 2, 3].map((item) => (
+            <React.Fragment key={item}>
+              <path d={`M${112 + item * 45} ${80 - item * 8} L${304 + item * 45} ${164 - item * 8} L${304 + item * 45} ${354 - item * 2}`} />
+              <path d={`M${90 + item * 52} ${126 + item * 42} L${270 + item * 44} ${48 + item * 42} L${448} ${124 + item * 42}`} />
+            </React.Fragment>
+          ))}
+        </g>
+
+        <g className="model-platform" filter={`url(#wellShadow-${profile})`}>
+          <path className="model-top-face" fill={`url(#wellSteel-${profile})`} d="M116 128 L260 68 L398 128 L252 196 Z" />
+          <path d="M116 128 L116 168 L252 240 L252 196 Z" />
+          <path d="M398 128 L398 168 L252 240 L252 196 Z" />
+          <path d="M168 158 L250 124 L332 160 L250 198 Z" />
+        </g>
+
+        <g className="model-rig">
+          <path d="M246 54 L208 170 L282 170 Z" />
+          <path d="M246 54 L246 178" />
+          <path d="M224 112 L270 112 M216 142 L278 142 M234 82 L260 82" />
+          <path d="M215 170 L188 204 M278 170 L308 204" />
+        </g>
+
+        <g className="model-blocks">
+          <path className="model-top-face" fill={`url(#wellSteel-${profile})`} d="M84 244 L132 222 L178 244 L130 268 Z" />
+          <path d="M84 244 L84 296 L130 324 L130 268 Z" />
+          <path d="M178 244 L178 294 L130 324 L130 268 Z" />
+          <path className="model-top-face" fill={`url(#wellSteel-${profile})`} d="M338 236 L386 214 L432 236 L384 260 Z" />
+          <path d="M338 236 L338 288 L384 316 L384 260 Z" />
+          <path d="M432 236 L432 286 L384 316 L384 260 Z" />
+        </g>
+
+        <path className="model-casing" d={casingPath} />
+        <path className="model-well-path" stroke={`url(#wellBlue-${profile})`} d={path} />
+        <path className="model-flow-dash" d={isHorizontal ? 'M184 316 L258 348 L426 348' : 'M126 130 L126 350'} />
+
+        <g className="model-bit" transform={isHorizontal ? 'translate(424 350) rotate(90)' : 'translate(154 350)'}>
+          <path d="M-14 0 L0 24 L14 0 Z" />
+          <circle cx="0" cy="4" r="5" />
+        </g>
+      </svg>
+
+      <figcaption>
+        <span>{profile}</span>
+        <strong>{section.topDepth || 'Top'} to {section.bottomDepth || 'Bottom'}</strong>
+        <small>{overview?.wellName || 'Well'} / {section.holeSize || 'hole size pending'}</small>
+      </figcaption>
+    </figure>
   );
 }
 
