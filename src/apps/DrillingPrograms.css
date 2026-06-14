@@ -701,76 +701,215 @@
 
 .hole-section-card {
   margin: 0;
-  padding: 8px 6px 10px;
+  padding: 8px 7px 10px;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   align-items: center;
   background: #ffffff;
 }
 
-.hole-section-card svg {
+.hole-css-diagram {
+  --hole-width: 26px;
+  position: relative;
   width: 100%;
-  height: 100%;
-  min-height: 5.9in;
-  display: block;
+  min-height: 6.04in;
+  overflow: hidden;
 }
 
-.hole-section-card text {
-  fill: #4b5563;
-  font-size: 8px;
-  font-weight: 900;
+.depth-rail {
+  position: absolute;
+  top: 7%;
+  bottom: 9%;
+  left: 18%;
+  border-left: 1px dashed #9ca3af;
+}
+
+.depth-word,
+.depth-value {
+  position: absolute;
+  color: #4b5563;
+  font-weight: 950;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.depth-line {
-  stroke: #9ca3af;
-  stroke-width: 1;
-  stroke-dasharray: 3 4;
+.depth-word {
+  left: 4%;
+  font-size: 0.54rem;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
 }
 
-.marker-line {
-  stroke: #64748b;
-  stroke-width: 1;
+.depth-word.top {
+  top: 8%;
 }
 
-.pipe-fill {
-  fill: url('#pipeShade-vertical');
-  stroke: #6b7280;
-  stroke-width: 1;
+.depth-word.bottom {
+  bottom: 8%;
 }
 
-.hole-section-card.horizontal .pipe-fill {
-  fill: url('#pipeShade-horizontal');
+.depth-value {
+  max-width: 0.92in;
+  color: #111827;
+  font-size: 0.62rem;
+  line-height: 1.05;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: none;
 }
 
-.open-hole-rect {
-  fill: var(--section-accent);
-  stroke: #1f2937;
-  stroke-width: 1;
+.depth-value.top {
+  top: 6%;
+  left: 43%;
+  transform: translateX(-50%);
 }
 
-.open-hole-rect-highlight {
-  fill: rgba(255, 255, 255, 0.42);
+.depth-value.bottom {
+  bottom: 5%;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.open-hole-fill {
-  fill: none;
-  stroke: var(--section-accent);
-  stroke-width: 24;
-  stroke-linecap: butt;
-  stroke-linejoin: round;
+.hole-marker {
+  position: absolute;
+  left: 38%;
+  width: 42%;
+  height: 1px;
+  background: #64748b;
 }
 
-.open-hole-highlight {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.44);
-  stroke-width: 5;
-  stroke-linecap: butt;
+.hole-marker.top {
+  top: 14%;
 }
 
-.open-hole-end {
-  stroke: #1f2937;
-  stroke-width: 1.2;
+.hole-marker.bottom {
+  bottom: 15%;
+}
+
+.hole-casing,
+.hole-open {
+  position: absolute;
+  display: block;
+  border: 1px solid #1f2937;
+  box-sizing: border-box;
+}
+
+.hole-casing {
+  left: 50%;
+  top: 14%;
+  width: var(--hole-width);
+  height: 31%;
+  transform: translateX(-50%);
+  background:
+    linear-gradient(90deg, #8c99a8 0%, #f8fafc 16%, #dbe3eb 47%, #ffffff 74%, #7b8794 100%);
+}
+
+.hole-open {
+  background:
+    linear-gradient(90deg, rgba(17, 24, 39, 0.28), transparent 16% 72%, rgba(17, 24, 39, 0.26)),
+    linear-gradient(90deg, var(--section-accent), var(--section-accent));
+  box-shadow: inset 7px 0 0 rgba(255, 255, 255, 0.38), inset -5px 0 0 rgba(17, 24, 39, 0.18);
+}
+
+.vertical-run {
+  left: 50%;
+  top: 45%;
+  width: var(--hole-width);
+  height: 40%;
+  transform: translateX(-50%);
+}
+
+.horizontal-run,
+.curve-run {
+  display: none;
+}
+
+.hole-section-card.horizontal .hole-casing {
+  top: 14%;
+  height: 25%;
+}
+
+.hole-section-card.horizontal .vertical-run {
+  display: none;
+}
+
+.hole-section-card.horizontal .horizontal-run {
+  display: block;
+  top: 55%;
+  left: 31%;
+  width: 55%;
+  height: var(--hole-width);
+  box-shadow: inset 0 7px 0 rgba(255, 255, 255, 0.38), inset 0 -5px 0 rgba(17, 24, 39, 0.18);
+}
+
+.hole-section-card.horizontal .depth-value.top {
+  top: 50%;
+  left: 29%;
+}
+
+.hole-section-card.horizontal .depth-value.bottom {
+  top: 50%;
+  left: 86%;
+  bottom: auto;
+}
+
+.hole-section-card.horizontal .hole-marker.top {
+  top: 58%;
+  left: 28%;
+  width: 10%;
+}
+
+.hole-section-card.horizontal .hole-marker.bottom {
+  top: 58%;
+  bottom: auto;
+  left: 82%;
+  width: 10%;
+}
+
+.hole-section-card.both .hole-casing {
+  top: 14%;
+  height: 32%;
+}
+
+.hole-section-card.both .vertical-run {
+  top: 46%;
+  height: 21%;
+}
+
+.hole-section-card.both .curve-run {
+  display: block;
+  left: 50%;
+  top: 61%;
+  width: 44%;
+  height: 18%;
+  border-top: 0;
+  border-right: 0;
+  border-width: var(--hole-width);
+  border-style: solid;
+  border-color: transparent transparent var(--section-accent) var(--section-accent);
+  border-radius: 0 0 0 70px;
+  background: transparent;
+  box-shadow: inset 6px -6px 0 rgba(255, 255, 255, 0.28);
+}
+
+.hole-section-card.both .horizontal-run {
+  display: block;
+  top: calc(79% - var(--hole-width));
+  left: 72%;
+  width: 17%;
+  height: var(--hole-width);
+  box-shadow: inset 0 7px 0 rgba(255, 255, 255, 0.38), inset 0 -5px 0 rgba(17, 24, 39, 0.18);
+}
+
+.hole-section-card.both .depth-value.bottom {
+  bottom: 17%;
+  left: 86%;
+}
+
+.hole-section-card.both .hole-marker.bottom {
+  bottom: 21%;
+  left: 78%;
+  width: 16%;
 }
 
 .hole-section-card figcaption {

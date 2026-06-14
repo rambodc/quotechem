@@ -41,7 +41,8 @@ const emptySection = {
 
 function normalizeWellProfile(value) {
   const profile = String(value || '').trim().toLowerCase();
-  if (['horizontal', 'lateral', 'curve'].includes(profile)) return 'horizontal';
+  if (['both', 'curve', 'build', 'vertical-horizontal', 'vertical + horizontal', 'vertical and horizontal'].includes(profile)) return 'both';
+  if (['horizontal', 'lateral'].includes(profile)) return 'horizontal';
   if (['vertical', 'surface', 'intermediate'].includes(profile)) return 'vertical';
   return '';
 }
@@ -63,7 +64,11 @@ function inferWellProfile(section = {}, overview = {}) {
     .join(' ')
     .toLowerCase();
 
-  if (/\b(horizontal|lateral|curve|build|heel|toe|kickoff|k lateral|production hole)\b/.test(searchable)) {
+  if (/\b(curve|build|kickoff|heel|landing|build section|vertical.*lateral|vertical.*horizontal)\b/.test(searchable)) {
+    return 'both';
+  }
+
+  if (/\b(horizontal|lateral|toe|k lateral|production hole)\b/.test(searchable)) {
     return 'horizontal';
   }
 
@@ -72,6 +77,12 @@ function inferWellProfile(section = {}, overview = {}) {
 
 function sectionAccent(index = 0) {
   return SECTION_COLORS[Math.abs(Number(index) || 0) % SECTION_COLORS.length];
+}
+
+function displayWellProfile(value) {
+  const profile = normalizeWellProfile(value) || 'vertical';
+  if (profile === 'both') return 'vertical + horizontal';
+  return profile;
 }
 
 function formatDate(value) {
@@ -130,7 +141,23 @@ function normalizeDraft(draft = {}) {
         name: section.name || `Section ${index + 1}`,
       }))
     : [];
-  const pages = Array.isArray(draft.pages) && draft.pages.length ? draft.pages : pagesFromExtraction(overview, sections);
+  const pages = Array.isArray(draft.pages) && draft.pages.length
+    ? draft.pages.map((page, index) => {
+        if (page?.type !== 'section') return page;
+        const sectionIndex = sections.findIndex((section) => section.id && section.id === page.sectionId);
+        const colorIndex = sectionIndex >= 0 ? sectionIndex : Math.max(index - 1, 0);
+        const pageData = { ...emptySection, ...(page.data || {}) };
+        return {
+          ...page,
+          data: {
+            ...pageData,
+            wellProfile: inferWellProfile(pageData, overview),
+            sectionNumber: pageData.sectionNumber || colorIndex + 1,
+            sectionAccent: pageData.sectionAccent || sectionAccent(colorIndex),
+          },
+        };
+      })
+    : pagesFromExtraction(overview, sections);
   return {
     draftId: draft.draftId || draft.id || '',
     status: draft.status || 'local',
@@ -586,6 +613,7 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
             >
               <option value="vertical">Vertical</option>
               <option value="horizontal">Horizontal</option>
+              <option value="both">Both / curve</option>
             </select>
             <input aria-label={`${section.name || 'Section'} top depth`} value={section.topDepth} onChange={(event) => updateSection(section.id, 'topDepth', event.target.value)} />
             <input aria-label={`${section.name || 'Section'} bottom depth`} value={section.bottomDepth} onChange={(event) => updateSection(section.id, 'bottomDepth', event.target.value)} />
@@ -730,6 +758,7 @@ function SectionEditor({ page, updatePageData }) {
         <select value={normalizeWellProfile(page.data?.[key]) || 'vertical'} onChange={(event) => updatePageData(key, event.target.value)}>
           <option value="vertical">Vertical</option>
           <option value="horizontal">Horizontal</option>
+          <option value="both">Both / curve</option>
         </select>
       ) : type === 'textarea' ? (
         <textarea rows={4} value={page.data?.[key] || ''} onChange={(event) => updatePageData(key, event.target.value)} />
@@ -806,7 +835,7 @@ function MudProgramPage({ page, overview }) {
         <aside className="section-properties-column">
           <PropertyStack
             items={[
-              ['Profile', wellProfile],
+              ['Profile', displayWellProfile(wellProfile)],
               ['Top', data.topDepth || '-'],
               ['Bottom', data.bottomDepth || '-'],
               ['Hole Size', data.holeSize || 'TBC'],
@@ -875,44 +904,27 @@ function ProcedureColumn({ section }) {
 
 function HoleSectionDiagram({ section, overview, profile }) {
   const isHorizontal = profile === 'horizontal';
-  const title = isHorizontal ? 'Horizontal drilled hole section' : 'Vertical drilled hole section';
+  const isBoth = profile === 'both';
+  const title = isBoth ? 'Vertical and horizontal drilled hole section' : isHorizontal ? 'Horizontal drilled hole section' : 'Vertical drilled hole section';
 
   return (
     <figure className={`hole-section-card ${profile}`} aria-label={title}>
-      <svg viewBox="0 0 150 440" role="img" aria-labelledby={`hole-section-${profile}-title`}>
-        <title id={`hole-section-${profile}-title`}>{title}</title>
-        <defs>
-          <linearGradient id={`pipeShade-${profile}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#8c99a8" />
-            <stop offset="15%" stopColor="#f8fafc" />
-            <stop offset="47%" stopColor="#dbe3eb" />
-            <stop offset="75%" stopColor="#ffffff" />
-            <stop offset="100%" stopColor="#7b8794" />
-          </linearGradient>
-        </defs>
-        <line className="depth-line" x1="22" y1="42" x2="22" y2="398" />
-        <text x="12" y="56" textAnchor="middle" transform="rotate(-90 12 56)">TOP</text>
-        <text x="12" y="398" textAnchor="middle" transform="rotate(-90 12 398)">BOTTOM</text>
-        {isHorizontal ? (
-          <>
-            <rect className="pipe-fill" x="64" y="46" width="24" height="168" />
-            <path className="open-hole-fill" d="M76 214 C76 286 88 318 126 318" />
-            <path className="open-hole-highlight" d="M80 214 C80 280 91 308 126 309" />
-            <line className="open-hole-end" x1="126" y1="306" x2="126" y2="330" />
-          </>
-        ) : (
-          <>
-            <rect className="pipe-fill" x="64" y="46" width="24" height="130" />
-            <rect className="open-hole-rect" x="64" y="176" width="24" height="196" />
-            <rect className="open-hole-rect-highlight" x="76" y="176" width="5" height="196" />
-          </>
-        )}
-        <line className="marker-line" x1="38" y1="46" x2="112" y2="46" />
-        <line className="marker-line" x1="38" y1="372" x2="112" y2="372" />
-      </svg>
+      <div className="hole-css-diagram" role="img" aria-label={title}>
+        <span className="depth-rail" aria-hidden />
+        <span className="depth-word top">TOP</span>
+        <span className="depth-word bottom">BOTTOM</span>
+        <span className="depth-value top">{section.topDepth || 'Top'}</span>
+        <span className="depth-value bottom">{section.bottomDepth || 'Bottom'}</span>
+        <span className="hole-marker top" aria-hidden />
+        <span className="hole-marker bottom" aria-hidden />
+        <span className="hole-casing" aria-hidden />
+        <span className="hole-open vertical-run" aria-hidden />
+        <span className="hole-open horizontal-run" aria-hidden />
+        <span className="hole-open curve-run" aria-hidden />
+      </div>
       <figcaption>
         <strong>{section.topDepth || 'Top'} to {section.bottomDepth || 'Bottom'}</strong>
-        <span>{profile} drilled hole</span>
+        <span>{displayWellProfile(profile)} drilled hole</span>
         <small>{overview?.wellName || 'Well'}</small>
       </figcaption>
     </figure>
