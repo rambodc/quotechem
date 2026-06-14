@@ -11,8 +11,10 @@ const SESSION_COLLECTION = 'publicIntakeSessions';
 const RFQ_COLLECTION = 'publicRfqs';
 const DRILLING_PROGRAM_TEMPLATE_COLLECTION = 'drillingProgramTemplates';
 const DRILLING_PROGRAM_RUN_COLLECTION = 'drillingProgramRuns';
+const MUD_PROGRAM_DRAFT_COLLECTION = 'mudProgramDrafts';
 const OPENAI_REFERENCE_FILE_MAX_BYTES = 12 * 1024 * 1024;
 const OPENAI_REFERENCE_TOTAL_MAX_BYTES = 18 * 1024 * 1024;
+const MUD_PROGRAM_SOURCE_MAX_BYTES = 25 * 1024 * 1024;
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
@@ -277,6 +279,346 @@ function mapProgramRunDoc(doc) {
     createdAt: toIso(data.createdAt),
     updatedAt: toIso(data.updatedAt),
   };
+}
+
+const emptyMudOverview = {
+  programTitle: '',
+  operator: '',
+  mudCompany: 'QuoteChem',
+  wellName: '',
+  uwi: '',
+  rig: '',
+  location: '',
+  programDate: '',
+  totalMd: '',
+  lateralLength: '',
+  kickoffPoint: '',
+  objective: '',
+  sourceSummary: '',
+};
+
+const emptyMudSection = {
+  id: '',
+  name: '',
+  topDepth: '',
+  bottomDepth: '',
+  holeSize: '',
+  casingSize: '',
+  mudSystem: '',
+  densityRange: '',
+  viscosityRange: '',
+  keyProducts: '',
+  riskNotes: '',
+  programNotes: '',
+};
+
+function isPdfContentType(value) {
+  return asString(value).toLowerCase() === 'application/pdf';
+}
+
+function parsePdfDataUrl(value) {
+  const raw = asString(value);
+  const match = raw.match(/^data:([^;]+);base64,([a-zA-Z0-9+/=\s]+)$/);
+  if (!match) {
+    const err = new Error('PDF file data is required');
+    err.status = 400;
+    throw err;
+  }
+  const contentType = asString(match[1]).toLowerCase();
+  if (!isPdfContentType(contentType)) {
+    const err = new Error('Only PDF files are supported');
+    err.status = 400;
+    throw err;
+  }
+  const buffer = Buffer.from(match[2].replace(/\s/g, ''), 'base64');
+  if (!buffer.length || buffer.length > MUD_PROGRAM_SOURCE_MAX_BYTES) {
+    const err = new Error('PDF must be smaller than 25 MB');
+    err.status = 400;
+    throw err;
+  }
+  if (buffer.slice(0, 4).toString('utf8') !== '%PDF') {
+    const err = new Error('Uploaded file does not look like a PDF');
+    err.status = 400;
+    throw err;
+  }
+  return { contentType, buffer };
+}
+
+function normalizeMudOverview(value = {}) {
+  return {
+    programTitle: asString(value.programTitle).slice(0, 180),
+    operator: asString(value.operator || value.customer).slice(0, 160),
+    mudCompany: asString(value.mudCompany).slice(0, 160) || 'QuoteChem',
+    wellName: asString(value.wellName).slice(0, 160),
+    uwi: asString(value.uwi || value.api).slice(0, 100),
+    rig: asString(value.rig).slice(0, 160),
+    location: asString(value.location).slice(0, 220),
+    programDate: asString(value.programDate || value.date).slice(0, 60),
+    totalMd: asString(value.totalMd || value.totalDepth).slice(0, 80),
+    lateralLength: asString(value.lateralLength).slice(0, 80),
+    kickoffPoint: asString(value.kickoffPoint || value.kop).slice(0, 80),
+    objective: asString(value.objective).slice(0, 3000),
+    sourceSummary: asString(value.sourceSummary || value.summary).slice(0, 3000),
+  };
+}
+
+function normalizeMudSections(value = []) {
+  const sections = Array.isArray(value) ? value : [];
+  return sections.slice(0, 16).map((section, index) => ({
+    id: normalizeDocId(section.id) || `section-${index + 1}`,
+    name: asString(section.name || section.title).slice(0, 160) || `Section ${index + 1}`,
+    topDepth: asString(section.topDepth || section.fromDepth).slice(0, 80),
+    bottomDepth: asString(section.bottomDepth || section.toDepth).slice(0, 80),
+    holeSize: asString(section.holeSize).slice(0, 80),
+    casingSize: asString(section.casingSize).slice(0, 80),
+    mudSystem: asString(section.mudSystem).slice(0, 180),
+    densityRange: asString(section.densityRange || section.mudWeight).slice(0, 120),
+    viscosityRange: asString(section.viscosityRange).slice(0, 120),
+    keyProducts: asString(section.keyProducts || section.products).slice(0, 3000),
+    riskNotes: asString(section.riskNotes || section.risks).slice(0, 3000),
+    programNotes: asString(section.programNotes || section.notes).slice(0, 3000),
+  }));
+}
+
+function normalizeMudPages(value = [], overview = emptyMudOverview, sections = []) {
+  const pages = Array.isArray(value) ? value : [];
+  if (!pages.length) return buildMudProgramPagesFromExtraction({ overview, sections });
+  return pages.slice(0, 20).map((page, index) => ({
+    id: normalizeDocId(page.id) || (index === 0 ? 'overview' : `section-${index}`),
+    type: asString(page.type) === 'section' ? 'section' : 'overview',
+    title: asString(page.title).slice(0, 180) || (index === 0 ? 'Mud Program Overview' : `Section ${index}`),
+    sectionId: normalizeDocId(page.sectionId),
+    data: typeof page.data === 'object' && page.data ? page.data : {},
+  }));
+}
+
+function buildMudProgramPagesFromExtraction({ overview = {}, sections = [] } = {}) {
+  const normalizedOverview = normalizeMudOverview(overview);
+  const normalizedSections = normalizeMudSections(sections);
+  return [
+    {
+      id: 'overview',
+      type: 'overview',
+      title: normalizedOverview.programTitle || `${normalizedOverview.wellName || 'Well'} Mud Program Overview`,
+      data: {
+        ...normalizedOverview,
+        executiveSummary:
+          normalizedOverview.sourceSummary ||
+          normalizedOverview.objective ||
+          'Review the extracted drilling program details and confirm mud program requirements before export.',
+      },
+    },
+    ...normalizedSections.map((section) => ({
+      id: section.id,
+      type: 'section',
+      title: section.name,
+      sectionId: section.id,
+      data: section,
+    })),
+  ];
+}
+
+function mapMudProgramDraftDoc(doc) {
+  const data = doc.data() || {};
+  const overview = normalizeMudOverview(data.overview || {});
+  const sections = normalizeMudSections(data.sections || []);
+  return {
+    draftId: doc.id,
+    status: asString(data.status) || 'uploaded',
+    sourceFileName: asString(data.sourceFileName),
+    sourcePdfPath: asString(data.sourcePdfPath),
+    sourcePdfUrl: asString(data.sourcePdfUrl),
+    overview,
+    sections,
+    pages: normalizeMudPages(data.pages || [], overview, sections),
+    extractionError: asString(data.extractionError),
+    createdBy: asString(data.createdBy),
+    createdByEmail: asString(data.createdByEmail),
+    createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt),
+  };
+}
+
+function parseOpenAIJson(raw) {
+  const text = asString(raw).replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(text.slice(start, end + 1));
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+}
+
+async function ensureMudProgramAccess(req) {
+  const user = await authenticateRequest(req);
+  const userSnap = await db.collection('users').doc(user.uid).get();
+  const appUser = userSnap.data() || {};
+  const allowed = user.role === 'admin' || normalizeMiniAppIds(appUser.enabledMiniApps)?.includes('drilling-programs');
+  if (!allowed) {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
+  }
+  return user;
+}
+
+async function loadOwnedMudDraft(draftId, user) {
+  const id = normalizeDocId(draftId);
+  if (!id) {
+    const err = new Error('draftId is required');
+    err.status = 400;
+    throw err;
+  }
+  const ref = db.collection(MUD_PROGRAM_DRAFT_COLLECTION).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    const err = new Error('Draft not found');
+    err.status = 404;
+    throw err;
+  }
+  const data = snap.data() || {};
+  if (user.role !== 'admin' && asString(data.createdBy) !== user.uid) {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
+  }
+  return { ref, snap, data };
+}
+
+async function callOpenAIMudExtraction({ pdfBuffer, fileName }) {
+  const apiKey = readSecret(OPENAI_API_KEY);
+  const model = process.env.OPENAI_DOCUMENT_MODEL || 'gpt-5.5';
+  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+
+  const prompt = [
+    'You are extracting data from an oil-company drilling program PDF so QuoteChem can build a portrait mud program.',
+    'Return strict JSON only with keys overview and sections.',
+    'overview keys: programTitle, operator, mudCompany, wellName, uwi, rig, location, programDate, totalMd, lateralLength, kickoffPoint, objective, sourceSummary.',
+    'sections is an array. Each section keys: id, name, topDepth, bottomDepth, holeSize, casingSize, mudSystem, densityRange, viscosityRange, keyProducts, riskNotes, programNotes.',
+    'Do not invent exact values. If the source does not contain a value, leave it blank or write a concise note in programNotes/riskNotes.',
+    `Source file name: ${fileName || 'drilling-program.pdf'}`,
+  ].join('\n');
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: prompt,
+            },
+            {
+              type: 'input_file',
+              filename: fileName || 'drilling-program.pdf',
+              file_data: `data:application/pdf;base64,${pdfBuffer.toString('base64')}`,
+            },
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'mud_program_extraction',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              overview: {
+                type: 'object',
+                additionalProperties: false,
+                properties: Object.fromEntries(Object.keys(emptyMudOverview).map((key) => [key, { type: 'string' }])),
+                required: Object.keys(emptyMudOverview),
+              },
+              sections: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: Object.fromEntries(Object.keys(emptyMudSection).map((key) => [key, { type: 'string' }])),
+                  required: Object.keys(emptyMudSection),
+                },
+              },
+            },
+            required: ['overview', 'sections'],
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const failureText = await response.text();
+    throw new Error(`OpenAI mud program extraction failed: ${response.status} ${failureText}`);
+  }
+
+  const data = await response.json();
+  const parsed = parseOpenAIJson(extractResponsesText(data));
+  return {
+    overview: normalizeMudOverview(parsed.overview || {}),
+    sections: normalizeMudSections(parsed.sections || []),
+    model,
+  };
+}
+
+async function callOpenAIMudPageImprove({ draft, page, instruction }) {
+  const apiKey = readSecret(OPENAI_API_KEY);
+  const model = process.env.OPENAI_DOCUMENT_MODEL || 'gpt-5.5';
+  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: [
+                'Improve one editable QuoteChem mud program page.',
+                'Return strict JSON with the same shape as the provided page: id, type, title, sectionId, data.',
+                'Keep field values editable and concise. Do not invent exact technical values not present in the draft.',
+                `User instruction: ${instruction || 'Improve clarity and field usefulness.'}`,
+                `Draft overview: ${JSON.stringify(draft.overview || {})}`,
+                `Current page: ${JSON.stringify(page || {})}`,
+              ].join('\n'),
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const failureText = await response.text();
+    throw new Error(`OpenAI mud page improvement failed: ${response.status} ${failureText}`);
+  }
+
+  const parsed = parseOpenAIJson(extractResponsesText(await response.json()));
+  return normalizeMudPages([parsed], draft.overview, draft.sections)[0];
 }
 
 function selectedProgramOptions(template, selections = {}) {
@@ -1924,203 +2266,223 @@ export const adminUpdateUserAccess = onRequest({ region: REGION }, async (req, r
   }
 });
 
-export const adminListDrillingProgramTemplates = onRequest({ region: REGION }, async (req, res) => {
-  if (preflight(req, res)) return;
-  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
-
-  try {
-    await requireAdmin(req);
-    const snap = await db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).orderBy('updatedAt', 'desc').limit(100).get();
-    setCors(res);
-    res.status(200).json({ ok: true, items: snap.docs.map(mapProgramTemplateDoc) });
-  } catch (error) {
-    const status = Number(error?.status) || 500;
-    logger.error('[adminListDrillingProgramTemplates] failed', { error: error?.message || String(error) });
-    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list drilling program templates');
-  }
-});
-
-export const adminSaveDrillingProgramTemplate = onRequest({ region: REGION }, async (req, res) => {
-  if (preflight(req, res)) return;
-  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
-
-  try {
-    const adminUser = await requireAdmin(req);
-    const templateId = normalizeDocId(req.body?.id) || randomUUID();
-    const template = normalizeProgramTemplate(req.body || {});
-    const validationError = validateProgramTemplate(template);
-    if (validationError) return jsonError(res, 400, validationError);
-
-    const ref = db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).doc(templateId);
-    const existing = await ref.get();
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    await ref.set(
-      {
-        ...template,
-        updatedAt: now,
-        updatedBy: adminUser.uid,
-        ...(existing.exists ? {} : { createdAt: now, createdBy: adminUser.uid }),
-      },
-      { merge: true }
-    );
-
-    const saved = await ref.get();
-    setCors(res);
-    res.status(200).json({ ok: true, template: mapProgramTemplateDoc(saved) });
-  } catch (error) {
-    const status = Number(error?.status) || 500;
-    logger.error('[adminSaveDrillingProgramTemplate] failed', { error: error?.message || String(error) });
-    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to save drilling program template');
-  }
-});
-
-export const listDrillingProgramTemplates = onRequest({ region: REGION }, async (req, res) => {
-  if (preflight(req, res)) return;
-  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
-
-  try {
-    const user = await authenticateRequest(req);
-    const userSnap = await db.collection('users').doc(user.uid).get();
-    const appUser = userSnap.data() || {};
-    const allowed = user.role === 'admin' || normalizeMiniAppIds(appUser.enabledMiniApps)?.includes('drilling-programs');
-    if (!allowed) return jsonError(res, 403, 'Forbidden');
-
-    const snap = await db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).orderBy('updatedAt', 'desc').limit(100).get();
-    const items = snap.docs
-      .map(mapProgramTemplateDoc)
-      .filter((template) => user.role === 'admin' || template.published);
-
-    setCors(res);
-    res.status(200).json({ ok: true, items });
-  } catch (error) {
-    const status = Number(error?.status) || 500;
-    logger.error('[listDrillingProgramTemplates] failed', { error: error?.message || String(error) });
-    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list drilling program templates');
-  }
-});
-
-export const listDrillingProgramRuns = onRequest({ region: REGION }, async (req, res) => {
-  if (preflight(req, res)) return;
-  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
-
-  try {
-    const user = await authenticateRequest(req);
-    const snap = await db.collection(DRILLING_PROGRAM_RUN_COLLECTION).orderBy('createdAt', 'desc').limit(100).get();
-    const items = snap.docs
-      .map(mapProgramRunDoc)
-      .filter((run) => user.role === 'admin' || run.createdBy === user.uid);
-
-    setCors(res);
-    res.status(200).json({ ok: true, items });
-  } catch (error) {
-    const status = Number(error?.status) || 500;
-    logger.error('[listDrillingProgramRuns] failed', { error: error?.message || String(error) });
-    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list drilling program runs');
-  }
-});
-
-export const generateDrillingProgramPdf = onRequest(
-  {
-    region: REGION,
-    timeoutSeconds: 120,
-    memory: '1GiB',
-    secrets: [OPENAI_API_KEY],
-  },
+export const createMudProgramDraft = onRequest(
+  { region: REGION, timeoutSeconds: 120, memory: '1GiB' },
   async (req, res) => {
     if (preflight(req, res)) return;
     if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
-    let runRef = null;
     try {
-      const user = await authenticateRequest(req);
-      const userSnap = await db.collection('users').doc(user.uid).get();
-      const appUser = userSnap.data() || {};
-      const allowed = user.role === 'admin' || normalizeMiniAppIds(appUser.enabledMiniApps)?.includes('drilling-programs');
-      if (!allowed) return jsonError(res, 403, 'Forbidden');
+      const user = await ensureMudProgramAccess(req);
+      const fileName = asString(req.body?.fileName).slice(0, 180) || 'drilling-program.pdf';
+      const contentType = asString(req.body?.contentType).toLowerCase() || 'application/pdf';
+      if (!isPdfContentType(contentType)) return jsonError(res, 400, 'Only PDF files are supported');
 
-      const templateId = normalizeDocId(req.body?.templateId);
-      if (!templateId) return jsonError(res, 400, 'templateId is required');
-      const templateSnap = await db.collection(DRILLING_PROGRAM_TEMPLATE_COLLECTION).doc(templateId).get();
-      if (!templateSnap.exists) return jsonError(res, 404, 'Template not found');
-      const template = mapProgramTemplateDoc(templateSnap);
-      if (user.role !== 'admin' && !template.published) return jsonError(res, 403, 'Template is not published');
-
-      const job = normalizeProgramJob(req.body?.job || {});
-      if (!job.programTitle) return jsonError(res, 400, 'Program title is required');
-      if (!job.wellName) return jsonError(res, 400, 'Well name is required');
-      const selectedOptions = selectedProgramOptions(template, req.body?.selections || {});
-      if (!selectedOptions.length) return jsonError(res, 400, 'At least one section option is required');
-
-      const runId = randomUUID();
-      runRef = db.collection(DRILLING_PROGRAM_RUN_COLLECTION).doc(runId);
-      const now = admin.firestore.FieldValue.serverTimestamp();
-      await runRef.set({
-        templateId,
-        templateName: template.name,
-        programTitle: job.programTitle,
-        status: 'generating',
-        job,
-        selections: req.body?.selections || {},
-        createdBy: user.uid,
-        createdByEmail: user.email,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const generated = await callOpenAIDrillingProgram({ template, job, selectedOptions });
-      const pdfBuffer = await buildDrillingProgramPdf({ content: generated.content, job, selectedOptions });
-      const pdfPath = `drillingPrograms/generated/${user.uid}/${runId}.pdf`;
+      const { buffer } = parsePdfDataUrl(req.body?.fileData);
+      const draftId = randomUUID();
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '-').slice(-140) || 'drilling-program.pdf';
+      const pdfPath = `drillingPrograms/sourcePdfs/${user.uid}/${draftId}/${safeName}`;
       const bucket = storage.bucket();
       const file = bucket.file(pdfPath);
       const downloadToken = randomUUID();
-      await file.save(pdfBuffer, {
+      await file.save(buffer, {
         contentType: 'application/pdf',
         resumable: false,
         metadata: {
           cacheControl: 'private, max-age=0, no-cache',
           metadata: {
             createdBy: user.uid,
-            runId,
+            draftId,
             firebaseStorageDownloadTokens: downloadToken,
           },
         },
       });
-      const pdfUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(pdfPath)}?alt=media&token=${downloadToken}`;
+      const sourcePdfUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(pdfPath)}?alt=media&token=${downloadToken}`;
 
-      await runRef.set(
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      const ref = db.collection(MUD_PROGRAM_DRAFT_COLLECTION).doc(draftId);
+      await ref.set({
+        status: 'uploaded',
+        sourceFileName: fileName,
+        sourcePdfPath: pdfPath,
+        sourcePdfUrl,
+        overview: emptyMudOverview,
+        sections: [],
+        pages: [],
+        createdBy: user.uid,
+        createdByEmail: user.email,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const saved = await ref.get();
+      setCors(res);
+      res.status(200).json({ ok: true, draft: mapMudProgramDraftDoc(saved) });
+    } catch (error) {
+      const status = Number(error?.status) || 500;
+      logger.error('[createMudProgramDraft] failed', { error: error?.message || String(error) });
+      return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to create mud program draft');
+    }
+  }
+);
+
+export const extractMudProgramDraft = onRequest(
+  { region: REGION, timeoutSeconds: 180, memory: '1GiB', secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    if (preflight(req, res)) return;
+    if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+    let draftRef = null;
+    try {
+      const user = await ensureMudProgramAccess(req);
+      const loaded = await loadOwnedMudDraft(req.body?.draftId, user);
+      draftRef = loaded.ref;
+      const pdfPath = asString(loaded.data.sourcePdfPath);
+      if (!pdfPath) return jsonError(res, 400, 'Draft does not have a source PDF');
+
+      await draftRef.set(
         {
-          status: 'completed',
-          pdfPath,
-          pdfUrl,
-          generatedContent: firestoreSafeGeneratedProgramContent(generated.content),
-          model: generated.model,
-          referenceFiles: generated.referenceFiles || [],
+          status: 'extracting',
+          extractionError: '',
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
 
-      const updatedRun = await runRef.get();
+      const [pdfBuffer] = await storage.bucket().file(pdfPath).download();
+      const extraction = await callOpenAIMudExtraction({
+        pdfBuffer,
+        fileName: asString(loaded.data.sourceFileName) || 'drilling-program.pdf',
+      });
+      const pages = buildMudProgramPagesFromExtraction(extraction);
+      await draftRef.set(
+        {
+          status: 'review_ready',
+          overview: extraction.overview,
+          sections: extraction.sections,
+          pages,
+          extractionModel: extraction.model,
+          extractionError: '',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      const saved = await draftRef.get();
       setCors(res);
-      res.status(200).json({ ok: true, run: mapProgramRunDoc(updatedRun) });
+      res.status(200).json({ ok: true, draft: mapMudProgramDraftDoc(saved) });
     } catch (error) {
       const status = Number(error?.status) || 500;
-      const message = status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to generate drilling program PDF';
-      if (runRef) {
-        await runRef.set(
+      const message = status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to extract mud program draft';
+      if (draftRef) {
+        await draftRef.set(
           {
-            status: 'failed',
-            error: message,
+            status: 'extraction_failed',
+            extractionError: message,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true }
         ).catch(() => {});
       }
-      logger.error('[generateDrillingProgramPdf] failed', { error: message });
+      logger.error('[extractMudProgramDraft] failed', { error: message });
       return jsonError(res, status, message);
     }
   }
 );
+
+export const updateMudProgramDraft = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureMudProgramAccess(req);
+    const { ref } = await loadOwnedMudDraft(req.body?.draftId, user);
+    const overview = normalizeMudOverview(req.body?.overview || {});
+    const sections = normalizeMudSections(req.body?.sections || []);
+    const pages = normalizeMudPages(req.body?.pages || [], overview, sections);
+    const status = asString(req.body?.status).slice(0, 80) || 'editing';
+
+    await ref.set(
+      {
+        status,
+        overview,
+        sections,
+        pages,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid,
+      },
+      { merge: true }
+    );
+
+    const saved = await ref.get();
+    setCors(res);
+    res.status(200).json({ ok: true, draft: mapMudProgramDraftDoc(saved) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[updateMudProgramDraft] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to update mud program draft');
+  }
+});
+
+export const improveMudProgramPage = onRequest(
+  { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    if (preflight(req, res)) return;
+    if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+    try {
+      const user = await ensureMudProgramAccess(req);
+      const { ref, snap } = await loadOwnedMudDraft(req.body?.draftId, user);
+      const draft = mapMudProgramDraftDoc(snap);
+      const pageId = normalizeDocId(req.body?.pageId);
+      const page = draft.pages.find((item) => item.id === pageId);
+      if (!page) return jsonError(res, 404, 'Page not found');
+
+      const improvedPage = await callOpenAIMudPageImprove({
+        draft,
+        page,
+        instruction: asString(req.body?.instruction).slice(0, 2000),
+      });
+      const pages = draft.pages.map((item) => (item.id === page.id ? { ...improvedPage, id: page.id, type: page.type, sectionId: page.sectionId } : item));
+      await ref.set(
+        {
+          status: 'editing',
+          pages,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedBy: user.uid,
+        },
+        { merge: true }
+      );
+
+      setCors(res);
+      res.status(200).json({ ok: true, page: pages.find((item) => item.id === page.id), draft: { ...draft, pages } });
+    } catch (error) {
+      const status = Number(error?.status) || 500;
+      logger.error('[improveMudProgramPage] failed', { error: error?.message || String(error) });
+      return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to improve mud program page');
+    }
+  }
+);
+
+export const listMudProgramDrafts = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureMudProgramAccess(req);
+    const snap = await db.collection(MUD_PROGRAM_DRAFT_COLLECTION).orderBy('updatedAt', 'desc').limit(100).get();
+    const items = snap.docs
+      .map(mapMudProgramDraftDoc)
+      .filter((draft) => user.role === 'admin' || draft.createdBy === user.uid);
+
+    setCors(res);
+    res.status(200).json({ ok: true, items });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[listMudProgramDrafts] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list mud program drafts');
+  }
+});
 
 export const adminListLeads = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
@@ -2389,6 +2751,10 @@ export const adminGetCustomerTimeline = onRequest({ region: REGION }, async (req
 export const __testables = {
   isValidTemporaryPassword,
   normalizeMiniAppIds,
+  isPdfContentType,
+  normalizeMudOverview,
+  normalizeMudSections,
+  buildMudProgramPagesFromExtraction,
   firestoreSafeGeneratedProgramContent,
   isOpenAIReferenceAsset,
 };

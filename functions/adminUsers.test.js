@@ -18,32 +18,31 @@ test('managed mini app normalization includes access-managed apps only', () => {
   ]);
 });
 
-test('generated drilling program content is Firestore-safe', () => {
-  const safe = __testables.firestoreSafeGeneratedProgramContent({
-    title: 'Program',
+test('mud program extraction page builder creates overview and section pages', () => {
+  const pages = __testables.buildMudProgramPagesFromExtraction({
+    overview: {
+      programTitle: 'North Pad Mud Program',
+      wellName: 'Well 12-34',
+      sourceSummary: 'Extracted source summary.',
+    },
     sections: [
       {
-        title: 'Hydraulics',
-        body: 'Body',
-        bullets: ['One'],
-        table: [
-          ['Property', 'Value'],
-          ['Density', '10.2 ppg'],
-        ],
-        notes: 'Notes',
-        assetIds: ['asset-1'],
+        id: 'surface',
+        name: 'Surface Hole',
+        topDepth: '0 m',
+        bottomDepth: '650 m',
       },
     ],
   });
 
-  assert.deepEqual(safe.sections[0].table, [
-    { cells: ['Property', 'Value'] },
-    { cells: ['Density', '10.2 ppg'] },
-  ]);
+  assert.equal(pages.length, 2);
+  assert.equal(pages[0].type, 'overview');
+  assert.equal(pages[0].data.executiveSummary, 'Extracted source summary.');
+  assert.equal(pages[1].type, 'section');
+  assert.equal(pages[1].title, 'Surface Hole');
 });
 
-test('OpenAI reference asset filtering accepts PDFs and images', () => {
-  assert.equal(__testables.isOpenAIReferenceAsset({ contentType: 'application/pdf' }), true);
-  assert.equal(__testables.isOpenAIReferenceAsset({ contentType: 'image/png' }), true);
-  assert.equal(__testables.isOpenAIReferenceAsset({ contentType: 'text/plain' }), false);
+test('mud program PDF validation only accepts application PDFs', () => {
+  assert.equal(__testables.isPdfContentType('application/pdf'), true);
+  assert.equal(__testables.isPdfContentType('image/png'), false);
 });

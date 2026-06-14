@@ -5,27 +5,81 @@ let mockAuthUser = null;
 let mockProfile = { role: 'user', firstName: '', lastName: '', enabledMiniApps: null };
 let mockLocalReports = [];
 
-const mockDrillingProgramTemplate = {
-  id: 'template-1',
-  name: 'Standard Drilling Program',
-  description: 'Standard generated program.',
-  published: true,
+const mockMudProgramDraft = {
+  draftId: 'draft-1',
+  status: 'review_ready',
+  sourceFileName: 'operator-drilling-program.pdf',
+  overview: {
+    programTitle: 'North Pad Mud Program',
+    operator: 'North Operator',
+    mudCompany: 'QuoteChem',
+    wellName: 'Well 12-34',
+    uwi: '100/12-34',
+    rig: 'Rig 22',
+    location: 'Muskeg Pad',
+    programDate: '2026-06-13',
+    totalMd: '3200 m',
+    lateralLength: '1100 m',
+    kickoffPoint: '2100 m',
+    objective: 'Build a field-ready mud program from the drilling source.',
+    sourceSummary: 'Source PDF describes surface and production intervals.',
+  },
   sections: [
     {
-      id: 'overview',
-      title: 'Program Overview',
-      description: 'Opening program section.',
-      required: true,
-      options: [
-        {
-          id: 'standard',
-          label: 'Standard',
-          instructions: 'Write a standard drilling program overview.',
-          assets: [],
-        },
-      ],
+      id: 'section-1',
+      name: 'Surface Hole',
+      topDepth: '0 m',
+      bottomDepth: '650 m',
+      holeSize: '311 mm',
+      casingSize: '244.5 mm',
+      mudSystem: 'Fresh water gel',
+      densityRange: '1000-1050 kg/m3',
+      viscosityRange: '35-45 s/L',
+      keyProducts: 'Bentonite, caustic, soda ash',
+      riskNotes: 'Monitor losses and hole cleaning.',
+      programNotes: 'Keep simple water-based treatment.',
     },
   ],
+  pages: [
+    {
+      id: 'overview',
+      type: 'overview',
+      title: 'North Pad Mud Program',
+      data: {
+        programTitle: 'North Pad Mud Program',
+        operator: 'North Operator',
+        mudCompany: 'QuoteChem',
+        wellName: 'Well 12-34',
+        rig: 'Rig 22',
+        location: 'Muskeg Pad',
+        totalMd: '3200 m',
+        lateralLength: '1100 m',
+        objective: 'Build a field-ready mud program from the drilling source.',
+        executiveSummary: 'Source PDF describes surface and production intervals.',
+      },
+    },
+    {
+      id: 'section-1',
+      type: 'section',
+      title: 'Surface Hole',
+      sectionId: 'section-1',
+      data: {
+        name: 'Surface Hole',
+        topDepth: '0 m',
+        bottomDepth: '650 m',
+        holeSize: '311 mm',
+        casingSize: '244.5 mm',
+        mudSystem: 'Fresh water gel',
+        densityRange: '1000-1050 kg/m3',
+        viscosityRange: '35-45 s/L',
+        keyProducts: 'Bentonite, caustic, soda ash',
+        riskNotes: 'Monitor losses and hole cleaning.',
+        programNotes: 'Keep simple water-based treatment.',
+      },
+    },
+  ],
+  createdAt: '2026-06-13T11:00:00.000Z',
+  updatedAt: '2026-06-13T12:00:00.000Z',
 };
 
 jest.mock('./firebase', () => ({
@@ -82,6 +136,22 @@ beforeEach(() => {
 
   mockLocalReports = [];
   window.localStorage.clear();
+  window.innerWidth = 1280;
+  window.print = jest.fn();
+  window.matchMedia = jest.fn((query) => ({
+    matches: !query.includes('max-width'),
+    media: query,
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+  }));
+  global.FileReader = class {
+    readAsDataURL(file) {
+      this.result = `data:${file.type || 'application/pdf'};base64,JVBERi0xLjQK`;
+      setTimeout(() => this.onload && this.onload());
+    }
+  };
   auth.currentUser = mockAuthUser;
   document.head.querySelectorAll('link[rel="manifest"]').forEach((node) => node.remove());
   const manifestLink = document.createElement('link');
@@ -211,45 +281,28 @@ beforeEach(() => {
         ],
       });
     }
-    if (path === 'listDrillingProgramTemplates') {
-      return Promise.resolve({ items: [mockDrillingProgramTemplate] });
+    if (path === 'listMudProgramDrafts') {
+      return Promise.resolve({ items: [mockMudProgramDraft] });
     }
-    if (path === 'listDrillingProgramRuns') {
-      return Promise.resolve({
-        items: [
-          {
-            runId: 'run-1',
-            templateName: 'Standard Drilling Program',
-            programTitle: 'North Pad Program',
-            status: 'completed',
-            pdfUrl: 'https://example.com/north-pad.pdf',
-            createdAt: '2026-06-13T12:00:00.000Z',
-          },
-          {
-            runId: 'run-2',
-            templateName: 'Standard Drilling Program',
-            programTitle: 'Failed Program',
-            status: 'failed',
-            error: 'OpenAI document request failed',
-            createdAt: '2026-06-13T11:00:00.000Z',
-          },
-        ],
-      });
+    if (path === 'createMudProgramDraft') {
+      return Promise.resolve({ draft: { ...mockMudProgramDraft, draftId: 'draft-new', pages: [] } });
     }
-    if (path === 'generateDrillingProgramPdf') {
+    if (path === 'extractMudProgramDraft') {
+      return Promise.resolve({ draft: { ...mockMudProgramDraft, draftId: 'draft-new' } });
+    }
+    if (path === 'updateMudProgramDraft') {
+      return Promise.resolve({ draft: mockMudProgramDraft });
+    }
+    if (path === 'improveMudProgramPage') {
       return Promise.resolve({
-        run: {
-          runId: 'run-new',
-          templateName: 'Standard Drilling Program',
-          programTitle: 'Generated Test Program',
-          status: 'completed',
-          pdfUrl: 'https://example.com/generated.pdf',
-          createdAt: '2026-06-13T13:00:00.000Z',
+        page: {
+          ...mockMudProgramDraft.pages[0],
+          data: {
+            ...mockMudProgramDraft.pages[0].data,
+            executiveSummary: 'Improved field-ready overview from AI.',
+          },
         },
       });
-    }
-    if (path === 'adminSaveDrillingProgramTemplate') {
-      return Promise.resolve({ template: mockDrillingProgramTemplate });
     }
     return Promise.resolve({});
   });
@@ -318,35 +371,65 @@ describe('mini-app portal routing', () => {
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
-  test('basic users with Drilling Programs enabled see that app and can generate a PDF', async () => {
+  test('basic users with Drilling Programs enabled can upload and review a mud program draft', async () => {
     const { postJson } = require('./lib/api');
     renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
 
-    expect(await screen.findByRole('heading', { name: /Generate field-ready PDF programs/i })).toBeTruthy();
-    expect(await screen.findByText(/North Pad Program/i)).toBeTruthy();
-    expect(await screen.findByText(/OpenAI document request failed/i)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Build portrait mud programs/i })).toBeTruthy();
+    expect(await screen.findByText(/operator-drilling-program.pdf/i)).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText(/Program title/i), { target: { value: 'Generated Test Program' } });
-    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Well 12-34' } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate PDF/i }));
+    const file = new File(['pdf'], 'new-drilling-program.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByLabelText(/Choose PDF file/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: /Upload and extract/i }));
 
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('generateDrillingProgramPdf', expect.objectContaining({ templateId: 'template-1' }), { authed: true }));
-    expect(await screen.findByText(/Drilling program PDF generated/i)).toBeTruthy();
-    expect(await screen.findByText(/Generated Test Program/i)).toBeTruthy();
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('createMudProgramDraft', expect.objectContaining({ fileName: 'new-drilling-program.pdf' }), { authed: true }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('extractMudProgramDraft', { draftId: 'draft-new' }, { authed: true }));
+    expect(await screen.findByRole('heading', { name: /Review extraction/i })).toBeTruthy();
+    expect(screen.getByDisplayValue('Well 12-34')).toBeTruthy();
   });
 
-  test('admin users can manage Drilling Programs templates', async () => {
+  test('Drilling Programs review creates editable pages and updates preview fields', async () => {
+    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
+
+    fireEvent.click(await screen.findByRole('button', { name: /North Pad Mud Program/i }));
+    expect(await screen.findByRole('button', { name: /Print \/ Save PDF/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Review extraction/i }));
+    expect(await screen.findByRole('heading', { name: /Review extraction/i })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Edited Well 99' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create editable pages/i }));
+
+    expect(await screen.findByText(/Edited Well 99 overview/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Executive summary/i), { target: { value: 'Updated mud program summary.' } });
+    await waitFor(() => expect(screen.getAllByText(/Updated mud program summary/i).length).toBeGreaterThanOrEqual(2));
+  });
+
+  test('Drilling Programs AI assistant updates only the selected page and print is available', async () => {
     const { postJson } = require('./lib/api');
-    renderAt('/apps/drilling-programs', 'admin');
+    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
 
-    expect(await screen.findByRole('heading', { name: /Generate field-ready PDF programs/i })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: /Admin Instruction Library/i })).toBeTruthy();
-    const templateNameInput = await screen.findByLabelText(/Template name/i);
-    expect(templateNameInput.value).toBe('Standard Drilling Program');
-    fireEvent.change(templateNameInput, { target: { value: 'Updated Program Template' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save template/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /North Pad Mud Program/i }));
+    fireEvent.change(await screen.findByLabelText(/Instruction for this page/i), { target: { value: 'Make the overview stronger.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Improve selected page/i }));
 
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminSaveDrillingProgramTemplate', expect.objectContaining({ name: 'Updated Program Template' }), { authed: true }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('improveMudProgramPage', expect.objectContaining({ draftId: 'draft-1', pageId: 'overview' }), { authed: true }));
+    await waitFor(() => expect(screen.getAllByText(/Improved field-ready overview/i).length).toBeGreaterThanOrEqual(2));
+    fireEvent.click(screen.getByRole('button', { name: /Print \/ Save PDF/i }));
+    expect(window.print).toHaveBeenCalled();
+  });
+
+  test('Drilling Programs shows a desktop-only message on mobile widths', async () => {
+    window.matchMedia = jest.fn((query) => ({
+      matches: query.includes('max-width') ? true : false,
+      media: query,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+    }));
+    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
+
+    expect(await screen.findByRole('heading', { name: /desktop-only/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Upload and extract/i })).not.toBeTruthy();
   });
 
   test('admin users can open Quotes mini-app pages', async () => {

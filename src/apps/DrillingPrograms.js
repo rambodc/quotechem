@@ -1,53 +1,44 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
-import { FiDownload, FiFileText, FiPlus, FiRefreshCw, FiSave, FiUploadCloud } from 'react-icons/fi';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { FiCheckCircle, FiCpu, FiFileText, FiPrinter, FiRefreshCw, FiUploadCloud } from 'react-icons/fi';
 import { UserContext } from '../App';
-import { storage } from '../firebase';
 import { postJson } from '../lib/api';
 import './DrillingPrograms.css';
 
-const emptyJob = {
+const desktopQuery = '(min-width: 980px)';
+
+const emptyOverview = {
   programTitle: '',
-  customer: '',
+  operator: '',
+  mudCompany: 'QuoteChem',
   wellName: '',
-  location: '',
+  uwi: '',
   rig: '',
+  location: '',
   programDate: '',
-  notes: '',
-  extraRequirements: '',
+  totalMd: '',
+  lateralLength: '',
+  kickoffPoint: '',
+  objective: '',
+  sourceSummary: '',
 };
 
-function emptyTemplateDraft() {
-  return {
-    id: '',
-    name: '',
-    description: '',
-    published: false,
-    sections: [
-      {
-        id: `section-${Date.now()}`,
-        title: 'Program Overview',
-        description: '',
-        required: true,
-        options: [
-          {
-            id: `option-${Date.now()}`,
-            label: 'Standard',
-            instructions: '',
-            assets: [],
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function fieldValue(object, key) {
-  return typeof object?.[key] === 'string' ? object[key] : '';
-}
+const emptySection = {
+  id: '',
+  name: '',
+  topDepth: '',
+  bottomDepth: '',
+  holeSize: '',
+  casingSize: '',
+  mudSystem: '',
+  densityRange: '',
+  viscosityRange: '',
+  keyProducts: '',
+  riskNotes: '',
+  programNotes: '',
+};
 
 function formatDate(value) {
-  if (!value) return 'Not dated';
+  if (!value) return 'Not saved yet';
   try {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
   } catch {
@@ -55,448 +46,752 @@ function formatDate(value) {
   }
 }
 
-function getRequiredSelections(template, selections) {
-  const missing = [];
-  for (const section of template?.sections || []) {
-    if (section.required !== false && !selections[section.id]) missing.push(section.title || 'Untitled section');
-  }
-  return missing;
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    if (typeof window.matchMedia === 'function') return window.matchMedia(desktopQuery).matches;
+    return window.innerWidth >= 980;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (typeof window.matchMedia !== 'function') {
+      const onResize = () => setIsDesktop(window.innerWidth >= 980);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+    const media = window.matchMedia(desktopQuery);
+    const onChange = () => setIsDesktop(media.matches);
+    onChange();
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', onChange);
+      return () => media.removeEventListener('change', onChange);
+    }
+    media.addListener(onChange);
+    return () => media.removeListener(onChange);
+  }, []);
+
+  return isDesktop;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Unable to read PDF file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeDraft(draft = {}) {
+  const overview = { ...emptyOverview, ...(draft.overview || {}) };
+  const sections = Array.isArray(draft.sections) && draft.sections.length
+    ? draft.sections.map((section, index) => ({
+        ...emptySection,
+        ...section,
+        id: section.id || `section-${index + 1}`,
+        name: section.name || `Section ${index + 1}`,
+      }))
+    : [];
+  const pages = Array.isArray(draft.pages) && draft.pages.length ? draft.pages : pagesFromExtraction(overview, sections);
+  return {
+    draftId: draft.draftId || draft.id || '',
+    status: draft.status || 'local',
+    sourceFileName: draft.sourceFileName || draft.fileName || '',
+    overview,
+    sections,
+    pages,
+    extractionError: draft.extractionError || draft.error || '',
+    updatedAt: draft.updatedAt || '',
+    createdAt: draft.createdAt || '',
+  };
+}
+
+function pagesFromExtraction(overview, sections) {
+  const pageList = [
+    {
+      id: 'overview',
+      type: 'overview',
+      title: overview.programTitle || `${overview.wellName || 'Well'} Mud Program Overview`,
+      data: {
+        ...overview,
+        executiveSummary:
+          overview.sourceSummary ||
+          'Review the extracted drilling program details, confirm the planned intervals, and refine the mud program before export.',
+      },
+    },
+  ];
+
+  sections.forEach((section, index) => {
+    pageList.push({
+      id: section.id || `section-${index + 1}`,
+      type: 'section',
+      title: section.name || `Section ${index + 1}`,
+      sectionId: section.id || `section-${index + 1}`,
+      data: { ...emptySection, ...section },
+    });
+  });
+
+  return pageList;
+}
+
+function safePages(draft) {
+  if (!draft) return [];
+  return Array.isArray(draft.pages) && draft.pages.length
+    ? draft.pages
+    : pagesFromExtraction(draft.overview || emptyOverview, draft.sections || []);
+}
+
+function pageLabel(page, index) {
+  return page.type === 'overview' ? 'Overview' : `Section ${index}`;
 }
 
 export default function DrillingPrograms() {
   const user = useContext(UserContext);
-  const isAdmin = user?.role === 'admin';
-  const [templates, setTemplates] = useState([]);
-  const [runs, setRuns] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [job, setJob] = useState(emptyJob);
-  const [selections, setSelections] = useState({});
+  const isDesktop = useIsDesktop();
+  const [stage, setStage] = useState('upload');
+  const [drafts, setDrafts] = useState([]);
+  const [draft, setDraft] = useState(null);
+  const [selectedPageId, setSelectedPageId] = useState('overview');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [assistantPrompt, setAssistantPrompt] = useState('');
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [adminSaving, setAdminSaving] = useState(false);
-  const [uploadingAsset, setUploadingAsset] = useState('');
-  const [templateDraft, setTemplateDraft] = useState(emptyTemplateDraft);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [improving, setImproving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const saveTimerRef = useRef(null);
+  const lastSavedRef = useRef('');
 
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.id === selectedTemplateId) || null,
-    [templates, selectedTemplateId]
-  );
+  const pages = useMemo(() => safePages(draft), [draft]);
+  const selectedPage = pages.find((page) => page.id === selectedPageId) || pages[0] || null;
 
-  const loadData = useCallback(async () => {
+  const loadDrafts = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [templateData, runData] = await Promise.all([
-        postJson('listDrillingProgramTemplates', {}, { authed: true }),
-        postJson('listDrillingProgramRuns', {}, { authed: true }),
-      ]);
-      const nextTemplates = Array.isArray(templateData.items) ? templateData.items : [];
-      setTemplates(nextTemplates);
-      setRuns(Array.isArray(runData.items) ? runData.items : []);
-      setSelectedTemplateId((current) => current || nextTemplates[0]?.id || '');
-      setTemplateDraft((current) => {
-        if (!isAdmin || current.id || current.name || !nextTemplates[0]) return current;
-        return JSON.parse(JSON.stringify(nextTemplates[0]));
-      });
+      const data = await postJson('listMudProgramDrafts', {}, { authed: true });
+      setDrafts(Array.isArray(data.items) ? data.items.map(normalizeDraft) : []);
     } catch (err) {
-      setError(err?.message || 'Unable to load drilling programs.');
+      setError(err?.message || 'Unable to load mud program drafts.');
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadDrafts();
+  }, [loadDrafts]);
 
   useEffect(() => {
-    if (!selectedTemplate) return;
-    const defaults = {};
-    for (const section of selectedTemplate.sections || []) {
-      const firstOption = section.options?.[0];
-      if (firstOption) defaults[section.id] = firstOption.id;
+    if (!draft?.draftId || stage === 'upload') return undefined;
+    const serializable = JSON.stringify({
+      overview: draft.overview,
+      sections: draft.sections,
+      pages: draft.pages,
+      status: draft.status,
+    });
+    if (!lastSavedRef.current) {
+      lastSavedRef.current = serializable;
+      return undefined;
     }
-    setSelections(defaults);
-  }, [selectedTemplate]);
+    if (serializable === lastSavedRef.current) return undefined;
 
-  const updateJob = (key, value) => {
-    setJob((prev) => ({ ...prev, [key]: value }));
+    window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(async () => {
+      setSaving(true);
+      try {
+        await postJson(
+          'updateMudProgramDraft',
+          {
+            draftId: draft.draftId,
+            overview: draft.overview,
+            sections: draft.sections,
+            pages: draft.pages,
+            status: draft.status,
+          },
+          { authed: true }
+        );
+        lastSavedRef.current = serializable;
+      } catch (err) {
+        setError(err?.message || 'Unable to autosave draft.');
+      } finally {
+        setSaving(false);
+      }
+    }, 700);
+
+    return () => window.clearTimeout(saveTimerRef.current);
+  }, [draft, stage]);
+
+  const openDraft = (nextDraft) => {
+    const normalized = normalizeDraft(nextDraft);
+    setDraft(normalized);
+    setSelectedPageId(normalized.pages[0]?.id || 'overview');
+    setStage(normalized.pages.length ? 'editor' : 'review');
+    lastSavedRef.current = JSON.stringify({
+      overview: normalized.overview,
+      sections: normalized.sections,
+      pages: normalized.pages,
+      status: normalized.status,
+    });
+    setMessage('');
+    setError('');
   };
 
-  const generatePdf = async (event) => {
+  const uploadAndExtract = async (event) => {
     event.preventDefault();
-    if (!selectedTemplate) {
-      setError('Choose a template first.');
+    if (!selectedFile) {
+      setError('Choose a drilling program PDF first.');
+      return;
+    }
+    if (selectedFile.type && selectedFile.type !== 'application/pdf') {
+      setError('Only PDF files are supported in this version.');
       return;
     }
 
-    const missing = getRequiredSelections(selectedTemplate, selections);
-    if (missing.length) {
-      setError(`Choose an option for: ${missing.join(', ')}`);
-      return;
-    }
-
-    setGenerating(true);
-    setError('');
+    setUploading(true);
     setMessage('');
+    setError('');
     try {
-      const data = await postJson(
-        'generateDrillingProgramPdf',
+      const fileData = await fileToDataUrl(selectedFile);
+      const created = await postJson(
+        'createMudProgramDraft',
         {
-          templateId: selectedTemplate.id,
-          job,
-          selections,
+          fileName: selectedFile.name,
+          contentType: selectedFile.type || 'application/pdf',
+          fileData,
         },
         { authed: true }
       );
-      setMessage('Drilling program PDF generated.');
-      setRuns((prev) => [data.run, ...prev.filter((run) => run.runId !== data.run?.runId)]);
+      const extracted = await postJson('extractMudProgramDraft', { draftId: created.draft?.draftId }, { authed: true });
+      const normalized = normalizeDraft(extracted.draft || created.draft);
+      setDraft(normalized);
+      setStage('review');
+      setSelectedPageId('overview');
+      setMessage('Extraction complete. Review the well data before creating pages.');
+      lastSavedRef.current = '';
+      await loadDrafts();
     } catch (err) {
-      setError(err?.message || 'Unable to generate PDF.');
-      await loadData();
+      setError(err?.message || 'Unable to extract this drilling program.');
     } finally {
-      setGenerating(false);
+      setUploading(false);
     }
   };
 
-  const editTemplate = (template) => {
-    setTemplateDraft(JSON.parse(JSON.stringify(template || emptyTemplateDraft())));
-    setMessage('');
-    setError('');
+  const updateOverview = (key, value) => {
+    setDraft((prev) => ({ ...prev, overview: { ...prev.overview, [key]: value } }));
   };
 
-  const updateDraft = (patch) => {
-    setTemplateDraft((prev) => ({ ...prev, ...patch }));
-  };
-
-  const updateSection = (sectionId, patch) => {
-    setTemplateDraft((prev) => ({
+  const updateSection = (sectionId, key, value) => {
+    setDraft((prev) => ({
       ...prev,
-      sections: prev.sections.map((section) => (section.id === sectionId ? { ...section, ...patch } : section)),
-    }));
-  };
-
-  const updateOption = (sectionId, optionId, patch) => {
-    setTemplateDraft((prev) => ({
-      ...prev,
-      sections: prev.sections.map((section) =>
-        section.id === sectionId
-          ? {
-              ...section,
-              options: section.options.map((option) => (option.id === optionId ? { ...option, ...patch } : option)),
-            }
-          : section
-      ),
+      sections: prev.sections.map((section) => (section.id === sectionId ? { ...section, [key]: value } : section)),
     }));
   };
 
   const addSection = () => {
-    setTemplateDraft((prev) => ({
-      ...prev,
-      sections: [
-        ...prev.sections,
-        {
-          id: `section-${Date.now()}`,
-          title: '',
-          description: '',
-          required: true,
-          options: [{ id: `option-${Date.now()}`, label: 'Standard', instructions: '', assets: [] }],
-        },
-      ],
-    }));
+    setDraft((prev) => {
+      const id = `section-${Date.now()}`;
+      return {
+        ...prev,
+        sections: [...prev.sections, { ...emptySection, id, name: `Section ${prev.sections.length + 1}` }],
+      };
+    });
   };
 
-  const addOption = (sectionId) => {
-    setTemplateDraft((prev) => ({
+  const createPages = () => {
+    setDraft((prev) => {
+      const pages = pagesFromExtraction(prev.overview, prev.sections);
+      setSelectedPageId(pages[0]?.id || 'overview');
+      return { ...prev, status: 'editing', pages };
+    });
+    setStage('editor');
+    setMessage('Editable mud program pages created.');
+  };
+
+  const updatePageData = (key, value) => {
+    if (!selectedPage) return;
+    setDraft((prev) => ({
       ...prev,
-      sections: prev.sections.map((section) =>
-        section.id === sectionId
-          ? {
-              ...section,
-              options: [...section.options, { id: `option-${Date.now()}`, label: '', instructions: '', assets: [] }],
-            }
-          : section
+      pages: prev.pages.map((page) =>
+        page.id === selectedPage.id ? { ...page, data: { ...page.data, [key]: value }, title: key === 'name' ? value : page.title } : page
       ),
     }));
   };
 
-  const uploadAsset = async (sectionId, optionId, file) => {
-    if (!file) return;
-    const key = `${sectionId}:${optionId}`;
-    setUploadingAsset(key);
+  const improveSelectedPage = async () => {
+    if (!draft?.draftId || !selectedPage) return;
+    setImproving(true);
+    setMessage('');
     setError('');
     try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').slice(-120);
-      const path = `drillingPrograms/templates/${templateDraft.id || 'new-template'}/${Date.now()}-${safeName}`;
-      const fileRef = storageRef(storage, path);
-      await uploadBytes(fileRef, file, { contentType: file.type || 'application/octet-stream' });
-      const url = await getDownloadURL(fileRef);
-      const asset = {
-        id: `asset-${Date.now()}`,
-        name: file.name,
-        path,
-        url,
-        contentType: file.type || 'application/octet-stream',
-      };
-      updateOption(sectionId, optionId, {
-        assets: [...((templateDraft.sections.find((section) => section.id === sectionId)?.options || []).find((option) => option.id === optionId)?.assets || []), asset],
-      });
+      const data = await postJson(
+        'improveMudProgramPage',
+        {
+          draftId: draft.draftId,
+          pageId: selectedPage.id,
+          instruction: assistantPrompt || 'Improve this mud program page using the uploaded drilling program source.',
+        },
+        { authed: true }
+      );
+      const improvedPage = data.page;
+      setDraft((prev) => ({
+        ...prev,
+        pages: prev.pages.map((page) => (page.id === improvedPage.id ? improvedPage : page)),
+      }));
+      setAssistantPrompt('');
+      setMessage('Selected page improved.');
     } catch (err) {
-      setError(err?.message || 'Unable to upload asset.');
+      setError(err?.message || 'Unable to improve selected page.');
     } finally {
-      setUploadingAsset('');
+      setImproving(false);
     }
   };
 
-  const saveTemplate = async (event) => {
-    event.preventDefault();
-    setAdminSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      const data = await postJson('adminSaveDrillingProgramTemplate', templateDraft, { authed: true });
-      setMessage('Template saved.');
-      setTemplateDraft(JSON.parse(JSON.stringify(data.template)));
-      await loadData();
-    } catch (err) {
-      setError(err?.message || 'Unable to save template.');
-    } finally {
-      setAdminSaving(false);
-    }
-  };
+  if (!isDesktop) {
+    return (
+      <div className="drilling-programs-page desktop-required">
+        <FiFileText aria-hidden="true" />
+        <h1>Drilling Programs is desktop-only</h1>
+        <p>
+          This mud program editor needs a wide screen for the page preview, field editor, and print layout. Open this
+          mini app on a desktop or laptop to upload a drilling program PDF and build the final mud program.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <section className="drilling-programs-page">
+    <div className="drilling-programs-page">
       <header className="programs-hero">
         <div>
           <p>Drilling Programs</p>
-          <h1>Generate field-ready PDF programs from managed instructions.</h1>
-          <span>Choose a template, fill in job details, and let QuoteChem assemble a saved PDF.</span>
+          <h1>Build portrait mud programs from an uploaded drilling program PDF.</h1>
+          <span>
+            Upload the oil-company drilling program, review the extracted well sections, edit each printable page, then
+            export through browser print or Save as PDF.
+          </span>
         </div>
-        <button type="button" className="secondary-action" onClick={loadData} disabled={loading}>
-          <FiRefreshCw size={16} />
-          Refresh
-        </button>
+        <div className="program-status">
+          <strong>{user?.email || 'Signed in'}</strong>
+          <span>{saving ? 'Autosaving...' : 'Autosave ready'}</span>
+        </div>
       </header>
 
-      {error ? <p className="program-message error">{error}</p> : null}
-      {message ? <p className="program-message success">{message}</p> : null}
+      {message ? <div className="program-alert success">{message}</div> : null}
+      {error ? <div className="program-alert error">{error}</div> : null}
 
-      <div className="programs-grid">
-        <form className="program-panel generator-panel" onSubmit={generatePdf}>
-          <div className="program-panel-head">
-            <h2>Create PDF</h2>
-            <span>{templates.length} template{templates.length === 1 ? '' : 's'}</span>
+      {stage === 'upload' ? (
+        <UploadStage
+          selectedFile={selectedFile}
+          setSelectedFile={setSelectedFile}
+          uploading={uploading}
+          onSubmit={uploadAndExtract}
+          loading={loading}
+          drafts={drafts}
+          onOpenDraft={openDraft}
+        />
+      ) : null}
+
+      {stage === 'review' && draft ? (
+        <ReviewStage
+          draft={draft}
+          updateOverview={updateOverview}
+          updateSection={updateSection}
+          addSection={addSection}
+          onBack={() => setStage('upload')}
+          onCreatePages={createPages}
+        />
+      ) : null}
+
+      {stage === 'editor' && draft ? (
+        <EditorStage
+          draft={draft}
+          pages={pages}
+          selectedPage={selectedPage}
+          selectedPageId={selectedPageId}
+          setSelectedPageId={setSelectedPageId}
+          updatePageData={updatePageData}
+          assistantPrompt={assistantPrompt}
+          setAssistantPrompt={setAssistantPrompt}
+          improveSelectedPage={improveSelectedPage}
+          improving={improving}
+          onReview={() => setStage('review')}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function UploadStage({ selectedFile, setSelectedFile, uploading, onSubmit, loading, drafts, onOpenDraft }) {
+  return (
+    <div className="program-upload-grid">
+      <form className="program-panel upload-panel" onSubmit={onSubmit}>
+        <div className="panel-title">
+          <FiUploadCloud aria-hidden="true" />
+          <div>
+            <h2>Upload drilling program PDF</h2>
+            <p>Use the oil-company drilling program or stick diagram PDF as the source.</p>
           </div>
+        </div>
+        <label className="drop-zone">
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+          />
+          <FiFileText aria-hidden="true" />
+          <strong>{selectedFile ? selectedFile.name : 'Choose PDF file'}</strong>
+          <span>AI extraction starts after upload. You will review everything before pages are created.</span>
+        </label>
+        <button className="primary-action" type="submit" disabled={uploading}>
+          {uploading ? <FiRefreshCw aria-hidden="true" /> : <FiCpu aria-hidden="true" />}
+          {uploading ? 'Extracting source PDF...' : 'Upload and extract'}
+        </button>
+      </form>
 
-          <label>
-            <span>Template</span>
-            <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)} required>
-              <option value="">Choose a template</option>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
+      <aside className="program-panel draft-list-panel">
+        <div className="program-panel-head">
+          <h2>Recent drafts</h2>
+          <span>{loading ? 'Loading' : `${drafts.length} drafts`}</span>
+        </div>
+        <div className="draft-list">
+          {drafts.length ? (
+            drafts.map((item) => (
+              <button key={item.draftId} className="draft-card" type="button" onClick={() => onOpenDraft(item)}>
+                <strong>{item.overview.programTitle || item.overview.wellName || item.sourceFileName || 'Untitled mud program'}</strong>
+                <span>{item.sourceFileName || 'Uploaded source PDF'}</span>
+                <small>{formatDate(item.updatedAt || item.createdAt)}</small>
+              </button>
+            ))
+          ) : (
+            <p className="muted">No mud program drafts yet.</p>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack, onCreatePages }) {
+  return (
+    <div className="program-panel review-panel">
+      <div className="program-panel-head">
+        <div>
+          <h2>Review extraction</h2>
+          <span>Correct the AI-filled well data and section intervals before creating pages.</span>
+        </div>
+        <button className="secondary-action" type="button" onClick={onBack}>
+          Upload another PDF
+        </button>
+      </div>
+      {draft.extractionError ? <div className="program-alert error">{draft.extractionError}</div> : null}
+      <div className="review-grid">
+        {[
+          ['programTitle', 'Program title'],
+          ['operator', 'Operator'],
+          ['mudCompany', 'Mud company'],
+          ['wellName', 'Well name'],
+          ['uwi', 'UWI / API'],
+          ['rig', 'Rig'],
+          ['location', 'Location'],
+          ['programDate', 'Date'],
+          ['totalMd', 'Total MD'],
+          ['lateralLength', 'Lateral length'],
+          ['kickoffPoint', 'Kickoff point'],
+        ].map(([key, label]) => (
+          <label key={key}>
+            {label}
+            <input value={draft.overview[key] || ''} onChange={(event) => updateOverview(key, event.target.value)} />
           </label>
-
-          <div className="job-grid">
-            {[
-              ['programTitle', 'Program title'],
-              ['customer', 'Customer / company'],
-              ['wellName', 'Well name'],
-              ['location', 'Location'],
-              ['rig', 'Rig'],
-              ['programDate', 'Date'],
-            ].map(([key, label]) => (
-              <label key={key}>
-                <span>{label}</span>
-                <input type={key === 'programDate' ? 'date' : 'text'} value={fieldValue(job, key)} onChange={(event) => updateJob(key, event.target.value)} required={key === 'programTitle' || key === 'wellName'} />
-              </label>
-            ))}
-          </div>
-
-          <label>
-            <span>Program notes</span>
-            <textarea rows={3} value={job.notes} onChange={(event) => updateJob('notes', event.target.value)} />
-          </label>
-
-          <label>
-            <span>Extra requirements</span>
-            <textarea rows={3} value={job.extraRequirements} onChange={(event) => updateJob('extraRequirements', event.target.value)} />
-          </label>
-
-          {selectedTemplate ? (
-            <div className="section-choice-list">
-              {(selectedTemplate.sections || []).map((section) => (
-                <fieldset key={section.id} className="section-choice">
-                  <legend>{section.title}</legend>
-                  {section.description ? <p>{section.description}</p> : null}
-                  <div className="choice-options">
-                    {(section.options || []).map((option) => (
-                      <label key={option.id} className={selections[section.id] === option.id ? 'selected' : ''}>
-                        <input
-                          type="radio"
-                          name={section.id}
-                          value={option.id}
-                          checked={selections[section.id] === option.id}
-                          onChange={() => setSelections((prev) => ({ ...prev, [section.id]: option.id }))}
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              ))}
-            </div>
-          ) : null}
-
-          <button type="submit" className="primary-action" disabled={generating || !selectedTemplate}>
-            <FiFileText size={16} />
-            {generating ? 'Generating...' : 'Generate PDF'}
-          </button>
-        </form>
-
-        <section className="program-panel">
-          <div className="program-panel-head">
-            <h2>History</h2>
-            <span>{runs.length} run{runs.length === 1 ? '' : 's'}</span>
-          </div>
-          <div className="run-list">
-            {runs.map((run) => (
-              <article key={run.runId} className={`run-card ${run.status}`}>
-                <div>
-                  <strong>{run.programTitle || run.templateName || 'Drilling Program'}</strong>
-                  <span>{formatDate(run.createdAt)}</span>
-                  {run.error ? <p>{run.error}</p> : null}
-                </div>
-                {run.pdfUrl ? (
-                  <a className="download-link" href={run.pdfUrl} target="_blank" rel="noreferrer">
-                    <FiDownload size={15} />
-                    PDF
-                  </a>
-                ) : (
-                  <span className="run-status">{run.status || 'pending'}</span>
-                )}
-              </article>
-            ))}
-            {!loading && runs.length === 0 ? <p className="muted">No PDFs generated yet.</p> : null}
-            {loading ? <p className="muted">Loading...</p> : null}
-          </div>
-        </section>
+        ))}
+        <label className="span-2">
+          Objective / source summary
+          <textarea
+            rows={4}
+            value={draft.overview.objective || draft.overview.sourceSummary || ''}
+            onChange={(event) => updateOverview('objective', event.target.value)}
+          />
+        </label>
       </div>
 
-      {isAdmin ? (
-        <section className="program-panel admin-template-panel">
-          <div className="program-panel-head">
-            <div>
-              <h2>Admin Instruction Library</h2>
-              <span>Write specific instructions for each section. The AI will not invent technical values that are not provided here or in the job form.</span>
-            </div>
-            <button type="button" className="secondary-action" onClick={() => editTemplate(emptyTemplateDraft())}>
-              <FiPlus size={16} />
-              New template
-            </button>
+      <div className="section-review-head">
+        <h3>Well sections</h3>
+        <button className="secondary-action" type="button" onClick={addSection}>
+          Add section
+        </button>
+      </div>
+      <div className="section-table" role="table" aria-label="Extracted well sections">
+        <div className="section-row header" role="row">
+          <span>Name</span>
+          <span>Top</span>
+          <span>Bottom</span>
+          <span>Hole</span>
+          <span>Mud system</span>
+          <span>Notes</span>
+        </div>
+        {draft.sections.map((section) => (
+          <div className="section-row" role="row" key={section.id}>
+            <input aria-label={`${section.name || 'Section'} name`} value={section.name} onChange={(event) => updateSection(section.id, 'name', event.target.value)} />
+            <input aria-label={`${section.name || 'Section'} top depth`} value={section.topDepth} onChange={(event) => updateSection(section.id, 'topDepth', event.target.value)} />
+            <input aria-label={`${section.name || 'Section'} bottom depth`} value={section.bottomDepth} onChange={(event) => updateSection(section.id, 'bottomDepth', event.target.value)} />
+            <input aria-label={`${section.name || 'Section'} hole size`} value={section.holeSize} onChange={(event) => updateSection(section.id, 'holeSize', event.target.value)} />
+            <input aria-label={`${section.name || 'Section'} mud system`} value={section.mudSystem} onChange={(event) => updateSection(section.id, 'mudSystem', event.target.value)} />
+            <input aria-label={`${section.name || 'Section'} notes`} value={section.programNotes || section.riskNotes || ''} onChange={(event) => updateSection(section.id, 'programNotes', event.target.value)} />
           </div>
+        ))}
+      </div>
+      <button className="primary-action" type="button" onClick={onCreatePages}>
+        <FiCheckCircle aria-hidden="true" />
+        Create editable pages
+      </button>
+    </div>
+  );
+}
 
-          <div className="template-admin-grid">
-            <div className="template-list">
-              {templates.map((template) => (
-                <button key={template.id} type="button" onClick={() => editTemplate(template)} className={templateDraft.id === template.id ? 'active' : ''}>
-                  <strong>{template.name}</strong>
-                  <span>{template.published ? 'Published' : 'Draft'}</span>
-                </button>
-              ))}
-            </div>
+function EditorStage({
+  draft,
+  pages,
+  selectedPage,
+  selectedPageId,
+  setSelectedPageId,
+  updatePageData,
+  assistantPrompt,
+  setAssistantPrompt,
+  improveSelectedPage,
+  improving,
+  onReview,
+}) {
+  return (
+    <div className="mud-editor">
+      <aside className="mud-editor-sidebar">
+        <div className="sidebar-section">
+          <h2>Pages</h2>
+          <div className="page-tabs">
+            {pages.map((page, index) => (
+              <button
+                key={page.id}
+                type="button"
+                className={page.id === selectedPageId ? 'active' : ''}
+                onClick={() => setSelectedPageId(page.id)}
+              >
+                <span>{pageLabel(page, index)}</span>
+                <strong>{page.title || page.data?.name || 'Untitled'}</strong>
+              </button>
+            ))}
+          </div>
+        </div>
 
-            <form className="template-editor" onSubmit={saveTemplate}>
-              <div className="job-grid">
-                <label>
-                  <span>Template name</span>
-                  <input required value={templateDraft.name} onChange={(event) => updateDraft({ name: event.target.value })} />
-                </label>
-                <label className="publish-toggle">
-                  <input type="checkbox" checked={Boolean(templateDraft.published)} onChange={(event) => updateDraft({ published: event.target.checked })} />
-                  <span>Published</span>
-                </label>
-              </div>
-              <label>
-                <span>Description</span>
-                <textarea rows={2} value={templateDraft.description} onChange={(event) => updateDraft({ description: event.target.value })} />
-              </label>
+        <div className="sidebar-section">
+          <h2>Properties</h2>
+          {selectedPage?.type === 'overview' ? (
+            <OverviewEditor page={selectedPage} updatePageData={updatePageData} />
+          ) : (
+            <SectionEditor page={selectedPage} updatePageData={updatePageData} />
+          )}
+        </div>
 
-              <div className="template-sections">
-                {templateDraft.sections.map((section) => (
-                  <article key={section.id} className="template-section-card">
-                    <label>
-                      <span>Section title</span>
-                      <input required value={section.title} onChange={(event) => updateSection(section.id, { title: event.target.value })} />
-                    </label>
-                    <label>
-                      <span>Section description</span>
-                      <textarea rows={2} value={section.description || ''} onChange={(event) => updateSection(section.id, { description: event.target.value })} />
-                    </label>
-                    <div className="option-list">
-                      {(section.options || []).map((option) => {
-                        const uploadKey = `${section.id}:${option.id}`;
-                        return (
-                          <div key={option.id} className="option-card">
-                            <label>
-                              <span>Option label</span>
-                              <input required value={option.label} onChange={(event) => updateOption(section.id, option.id, { label: event.target.value })} />
-                            </label>
-                            <label>
-                              <span>Instructions</span>
-                              <textarea
-                                rows={6}
-                                placeholder="Describe exactly what this PDF section should include. Add required headings, tables, wording style, field values to use, and what should be left as Not specified."
-                                value={option.instructions}
-                                onChange={(event) => updateOption(section.id, option.id, { instructions: event.target.value })}
-                              />
-                            </label>
-                            <label className="asset-upload">
-                              <FiUploadCloud size={16} />
-                              <span>{uploadingAsset === uploadKey ? 'Uploading...' : 'Upload reference file'}</span>
-                              <input type="file" disabled={uploadingAsset === uploadKey} onChange={(event) => uploadAsset(section.id, option.id, event.target.files?.[0])} />
-                            </label>
-                            {option.assets?.length ? (
-                              <div className="asset-list">
-                                {option.assets.map((asset) => (
-                                  <a key={asset.id || asset.path} href={asset.url} target="_blank" rel="noreferrer">
-                                    {asset.name || 'Reference file'}
-                                  </a>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <button type="button" className="secondary-action" onClick={() => addOption(section.id)}>
-                      <FiPlus size={15} />
-                      Add option
-                    </button>
-                  </article>
-                ))}
-              </div>
+        <div className="sidebar-section assistant-box">
+          <h2>AI assistant</h2>
+          <label>
+            Instruction for this page
+            <textarea
+              rows={4}
+              value={assistantPrompt}
+              onChange={(event) => setAssistantPrompt(event.target.value)}
+              placeholder="Example: make the recommendations more detailed and field-ready."
+            />
+          </label>
+          <button className="secondary-action" type="button" onClick={improveSelectedPage} disabled={improving}>
+            {improving ? <FiRefreshCw aria-hidden="true" /> : <FiCpu aria-hidden="true" />}
+            {improving ? 'Improving...' : 'Improve selected page'}
+          </button>
+        </div>
+      </aside>
 
-              <div className="template-actions">
-                <button type="button" className="secondary-action" onClick={addSection}>
-                  <FiPlus size={16} />
-                  Add section
-                </button>
-                <button type="submit" className="primary-action" disabled={adminSaving}>
-                  <FiSave size={16} />
-                  {adminSaving ? 'Saving...' : 'Save template'}
-                </button>
-              </div>
-            </form>
+      <main className="mud-preview-workspace">
+        <div className="mud-editor-toolbar">
+          <div>
+            <strong>{draft.overview.programTitle || 'Mud Program Draft'}</strong>
+            <span>{draft.sourceFileName || 'Source PDF'}</span>
+          </div>
+          <button className="secondary-action" type="button" onClick={onReview}>
+            Review extraction
+          </button>
+          <button className="primary-action" type="button" onClick={() => window.print()}>
+            <FiPrinter aria-hidden="true" />
+            Print / Save PDF
+          </button>
+        </div>
+        <div className="print-pages">
+          <MudProgramPage page={selectedPage} overview={draft.overview} />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function OverviewEditor({ page, updatePageData }) {
+  const fields = [
+    ['programTitle', 'Program title'],
+    ['operator', 'Operator'],
+    ['mudCompany', 'Mud company'],
+    ['wellName', 'Well name'],
+    ['rig', 'Rig'],
+    ['location', 'Location'],
+    ['totalMd', 'Total MD'],
+    ['executiveSummary', 'Executive summary', 'textarea'],
+  ];
+  return fields.map(([key, label, type]) => (
+    <label key={key}>
+      {label}
+      {type === 'textarea' ? (
+        <textarea rows={4} value={page.data?.[key] || ''} onChange={(event) => updatePageData(key, event.target.value)} />
+      ) : (
+        <input value={page.data?.[key] || ''} onChange={(event) => updatePageData(key, event.target.value)} />
+      )}
+    </label>
+  ));
+}
+
+function SectionEditor({ page, updatePageData }) {
+  const fields = [
+    ['name', 'Section name'],
+    ['topDepth', 'Top depth'],
+    ['bottomDepth', 'Bottom depth'],
+    ['holeSize', 'Hole size'],
+    ['casingSize', 'Casing size'],
+    ['mudSystem', 'Mud system'],
+    ['densityRange', 'Density range'],
+    ['viscosityRange', 'Viscosity range'],
+    ['keyProducts', 'Key products', 'textarea'],
+    ['programNotes', 'Program notes', 'textarea'],
+    ['riskNotes', 'Risk notes', 'textarea'],
+  ];
+  return fields.map(([key, label, type]) => (
+    <label key={key}>
+      {label}
+      {type === 'textarea' ? (
+        <textarea rows={4} value={page.data?.[key] || ''} onChange={(event) => updatePageData(key, event.target.value)} />
+      ) : (
+        <input value={page.data?.[key] || ''} onChange={(event) => updatePageData(key, event.target.value)} />
+      )}
+    </label>
+  ));
+}
+
+function MudProgramPage({ page, overview }) {
+  if (!page) return null;
+  if (page.type === 'overview') {
+    const data = page.data || {};
+    return (
+      <article className="mud-page">
+        <PageHeader title={data.programTitle || 'Mud Program'} subtitle={`${data.wellName || 'Well'} overview`} />
+        <section className="mud-cover-band">
+          <div>
+            <span>Prepared by</span>
+            <strong>{data.mudCompany || 'QuoteChem'}</strong>
+          </div>
+          <div>
+            <span>Operator</span>
+            <strong>{data.operator || 'Not provided'}</strong>
+          </div>
+          <div>
+            <span>Rig</span>
+            <strong>{data.rig || 'Not provided'}</strong>
           </div>
         </section>
-      ) : null}
-    </section>
+        <section className="mud-page-grid">
+          <InfoCard label="Well" value={data.wellName} />
+          <InfoCard label="Location" value={data.location} />
+          <InfoCard label="Total MD" value={data.totalMd} />
+          <InfoCard label="Lateral" value={data.lateralLength} />
+        </section>
+        <section className="mud-content-block">
+          <h2>Program Objective</h2>
+          <p>{data.objective || data.executiveSummary || 'Confirm the drilling objective and mud program basis before export.'}</p>
+        </section>
+        <section className="mud-diagram">
+          <div className="diagram-wellbore">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <h2>Well Plan Snapshot</h2>
+            <p>{data.executiveSummary || 'The extracted drilling program data will be turned into section pages for review.'}</p>
+          </div>
+        </section>
+      </article>
+    );
+  }
+
+  const data = page.data || {};
+  return (
+    <article className="mud-page">
+      <PageHeader title={data.name || page.title || 'Well Section'} subtitle={`${overview?.wellName || 'Well'} mud program section`} />
+      <section className="section-hero-band">
+        <InfoCard label="Interval" value={`${data.topDepth || '-'} to ${data.bottomDepth || '-'}`} />
+        <InfoCard label="Hole size" value={data.holeSize} />
+        <InfoCard label="Mud system" value={data.mudSystem} />
+      </section>
+      <section className="mud-two-column">
+        <div className="mud-content-block">
+          <h2>Recommended Properties</h2>
+          <table>
+            <tbody>
+              <tr>
+                <th>Density</th>
+                <td>{data.densityRange || 'To be confirmed'}</td>
+              </tr>
+              <tr>
+                <th>Viscosity</th>
+                <td>{data.viscosityRange || 'To be confirmed'}</td>
+              </tr>
+              <tr>
+                <th>Casing</th>
+                <td>{data.casingSize || 'To be confirmed'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="section-depth-visual">
+          <span>{data.topDepth || 'Top'}</span>
+          <div />
+          <span>{data.bottomDepth || 'Bottom'}</span>
+        </div>
+      </section>
+      <section className="mud-content-block">
+        <h2>Products and Treatment</h2>
+        <p>{data.keyProducts || 'Add recommended products, concentrations, and treatment notes for this section.'}</p>
+      </section>
+      <section className="mud-content-block accent">
+        <h2>Operational Notes</h2>
+        <p>{data.programNotes || data.riskNotes || 'Add risks, monitoring points, contingency notes, and field checks.'}</p>
+      </section>
+    </article>
+  );
+}
+
+function PageHeader({ title, subtitle }) {
+  return (
+    <header className="mud-page-header">
+      <div>
+        <span>QuoteChem Mud Program</span>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <strong>QC</strong>
+    </header>
+  );
+}
+
+function InfoCard({ label, value }) {
+  return (
+    <div className="mud-info-card">
+      <span>{label}</span>
+      <strong>{value || 'Not provided'}</strong>
+    </div>
   );
 }
