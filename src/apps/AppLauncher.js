@@ -17,9 +17,13 @@ export default function AppLauncher({ user }) {
         {apps.map((app) => {
           const Icon = app.icon;
           return (
-            <Link key={app.id} to={app.defaultPath} className="mini-app-tile">
+            <Link key={app.id} to={app.defaultPath} className={`mini-app-tile app-${app.id}`}>
               <span className={`mini-app-icon ${app.id}`}>
-                <Icon size={34} aria-hidden />
+                {app.iconImage ? (
+                  <img src={`${process.env.PUBLIC_URL}${app.iconImage}`} alt="" width="200" height="200" loading="eager" />
+                ) : (
+                  <Icon size={34} aria-hidden />
+                )}
               </span>
               <span className="mini-app-label">{app.label}</span>
             </Link>

@@ -20,52 +20,169 @@
 
 .mini-app-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  gap: 20px 16px;
-  max-width: 760px;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 28px 18px;
+  max-width: 820px;
+  perspective: 900px;
 }
 
 .mini-app-tile {
   min-width: 0;
   display: grid;
   justify-items: center;
-  gap: 9px;
+  gap: 10px;
   color: #0f172a;
   text-decoration: none;
   font-weight: 700;
+  outline: none;
+  opacity: 0;
+  transform: translateY(18px) scale(0.92);
+  animation: appTileEnter 620ms cubic-bezier(0.2, 0.9, 0.2, 1.18) forwards;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mini-app-tile.app-quotes {
+  --tile-accent: #0284c7;
+  --tile-glow-soft: rgba(14, 165, 233, 0.28);
+  --tile-glow-strong: rgba(14, 165, 233, 0.36);
+  --tile-focus: #7dd3fc;
+}
+
+.mini-app-tile.app-drilling-fluids-report {
+  --tile-accent: #059669;
+  --tile-glow-soft: rgba(16, 185, 129, 0.28);
+  --tile-glow-strong: rgba(16, 185, 129, 0.36);
+  --tile-focus: #86efac;
+}
+
+.mini-app-tile.app-drilling-programs {
+  --tile-accent: #c026d3;
+  --tile-glow-soft: rgba(217, 70, 239, 0.26);
+  --tile-glow-strong: rgba(217, 70, 239, 0.34);
+  --tile-focus: #f0abfc;
+}
+
+.mini-app-tile.app-user-access {
+  --tile-accent: #d97706;
+  --tile-glow-soft: rgba(245, 158, 11, 0.3);
+  --tile-glow-strong: rgba(245, 158, 11, 0.38);
+  --tile-focus: #fcd34d;
+}
+
+.mini-app-tile.app-account {
+  --tile-accent: #475569;
+  --tile-glow-soft: rgba(100, 116, 139, 0.28);
+  --tile-glow-strong: rgba(100, 116, 139, 0.36);
+  --tile-focus: #cbd5e1;
+}
+
+.mini-app-tile:nth-child(1) {
+  animation-delay: 50ms;
+}
+
+.mini-app-tile:nth-child(2) {
+  animation-delay: 125ms;
+}
+
+.mini-app-tile:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+.mini-app-tile:nth-child(4) {
+  animation-delay: 275ms;
+}
+
+.mini-app-tile:nth-child(5) {
+  animation-delay: 350ms;
 }
 
 .mini-app-icon {
-  width: 82px;
+  position: relative;
+  width: 94px;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
-  border-radius: 22px;
+  border-radius: 24px;
   color: #ffffff;
   background: linear-gradient(145deg, #0b5fc0, #1394d8);
-  box-shadow: 0 14px 28px rgba(15, 42, 86, 0.18);
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  box-shadow:
+    0 18px 30px rgba(15, 23, 42, 0.18),
+    0 8px 16px var(--tile-glow-soft, rgba(14, 165, 233, 0.28));
+  overflow: hidden;
+  transform: translateZ(0) rotateX(0deg) rotateY(0deg);
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 240ms ease,
+    box-shadow 240ms ease;
+  will-change: transform;
 }
 
-.mini-app-icon.account {
-  background: linear-gradient(145deg, #334155, #0f766e);
+.mini-app-icon::before,
+.mini-app-icon::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
 }
 
-.mini-app-icon.drilling-fluids-report {
-  background: linear-gradient(145deg, #020617, #0ea5e9);
+.mini-app-icon::before {
+  inset: -38%;
+  background: linear-gradient(115deg, transparent 34%, rgba(255, 255, 255, 0.72) 48%, transparent 62%);
+  transform: translateX(-72%) rotate(8deg);
 }
 
-.mini-app-icon.drilling-programs {
-  background: linear-gradient(145deg, #1f2937, #0b5fc0);
+.mini-app-icon::after {
+  inset: -5px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  opacity: 0.62;
 }
 
-.mini-app-icon.user-access {
-  background: linear-gradient(145deg, #4f46e5, #9333ea);
+.mini-app-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+  transition: transform 260ms ease, filter 260ms ease;
 }
 
-.mini-app-tile:hover .mini-app-icon {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 34px rgba(15, 42, 86, 0.24);
+.mini-app-icon svg {
+  position: relative;
+  z-index: 1;
+}
+
+.mini-app-tile:hover .mini-app-icon,
+.mini-app-tile:focus-visible .mini-app-icon {
+  transform: translateY(-8px) rotateX(8deg) rotateY(-8deg) scale(1.08);
+  filter: saturate(1.12) contrast(1.04);
+  box-shadow:
+    0 28px 40px rgba(15, 23, 42, 0.24),
+    0 14px 26px var(--tile-glow-strong, rgba(14, 165, 233, 0.36));
+}
+
+.mini-app-tile:hover .mini-app-icon::before,
+.mini-app-tile:focus-visible .mini-app-icon::before {
+  opacity: 1;
+  animation: iconShine 780ms ease;
+}
+
+.mini-app-tile:hover .mini-app-icon img,
+.mini-app-tile:focus-visible .mini-app-icon img {
+  transform: scale(1.045);
+}
+
+.mini-app-tile:active .mini-app-icon {
+  transform: translateY(-2px) scale(0.96);
+  transition-duration: 90ms;
+}
+
+.mini-app-tile:focus-visible .mini-app-icon {
+  outline: 3px solid var(--tile-focus, #7dd3fc);
+  outline-offset: 5px;
 }
 
 .mini-app-label {
@@ -74,6 +191,38 @@
   overflow-wrap: anywhere;
   text-align: center;
   font-size: 0.9rem;
+  line-height: 1.18;
+  transition: transform 220ms ease, color 220ms ease;
+}
+
+.mini-app-tile:hover .mini-app-label,
+.mini-app-tile:focus-visible .mini-app-label {
+  color: var(--tile-accent, #0284c7);
+  transform: translateY(-1px);
+}
+
+@keyframes appTileEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.92) rotateX(16deg);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.04) rotateX(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateX(0deg);
+  }
+}
+
+@keyframes iconShine {
+  from {
+    transform: translateX(-72%) rotate(8deg);
+  }
+  to {
+    transform: translateX(72%) rotate(8deg);
+  }
 }
 
 @media (max-width: 640px) {
@@ -83,11 +232,32 @@
 
   .mini-app-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 18px 10px;
+    gap: 22px 10px;
   }
 
   .mini-app-icon {
-    width: min(76px, 24vw);
-    border-radius: 20px;
+    width: min(86px, 25vw);
+    border-radius: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-app-tile,
+  .mini-app-icon,
+  .mini-app-icon img,
+  .mini-app-label {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .mini-app-tile:hover .mini-app-icon,
+  .mini-app-tile:focus-visible .mini-app-icon,
+  .mini-app-tile:hover .mini-app-icon img,
+  .mini-app-tile:focus-visible .mini-app-icon img,
+  .mini-app-tile:hover .mini-app-label,
+  .mini-app-tile:focus-visible .mini-app-label {
+    transform: none;
   }
 }
