@@ -59,15 +59,22 @@ Migrated session messages.
 Lead records for quote handoff.
 
 ## Email Templates for Testing
-`sendTestEmail` supports:
-- `basic`
-- `quote_status`
+Admin email test sends support:
+- `userInvite`
+- `existingUserAccess`
+- `rfqConfirmation`
+- `genericNotification`
 
 ## Secrets Required
 - `OPENAI_API_KEY`
-- `SENDGRID_API_KEY`
-- `QUOTECHEM_FROM_EMAIL`
+- `EMAIL_SMTP_USER`
+- `EMAIL_SMTP_PASSWORD`
+- `EMAIL_FROM_ADDRESS`
 - `QUOTECHEM_SALES_EMAIL`
 
 Optional env:
 - `OPENAI_MODEL`
+- `EMAIL_SMTP_HOST`
+- `EMAIL_SMTP_PORT`
+- `EMAIL_SMTP_SECURE`
+- `EMAIL_FROM_NAME`

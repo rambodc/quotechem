@@ -90,6 +90,7 @@ jest.mock('./firebase', () => ({
 
 jest.mock('firebase/auth', () => ({
   onAuthStateChanged: jest.fn(),
+  signInWithCustomToken: jest.fn(),
   signInWithEmailAndPassword: jest.fn(),
   signOut: jest.fn(),
   updatePassword: jest.fn(),
@@ -128,7 +129,7 @@ jest.mock('./apps/drillingFluidsStore', () => ({
 }));
 
 beforeEach(() => {
-  const { onAuthStateChanged, signOut, updatePassword } = require('firebase/auth');
+  const { onAuthStateChanged, signInWithCustomToken, signOut, updatePassword } = require('firebase/auth');
   const { getDoc, onSnapshot, serverTimestamp, setDoc } = require('firebase/firestore');
   const { postJson } = require('./lib/api');
   const { auth } = require('./firebase');
@@ -228,6 +229,7 @@ beforeEach(() => {
     return unsubscribe;
   });
   signOut.mockImplementation(() => Promise.resolve());
+  signInWithCustomToken.mockImplementation(() => Promise.resolve());
   updatePassword.mockImplementation(() => Promise.resolve());
 
   getDoc.mockImplementation(() => Promise.resolve({ exists: () => true }));
@@ -252,7 +254,7 @@ beforeEach(() => {
     return Promise.resolve(updated);
   });
 
-  postJson.mockImplementation((path) => {
+  postJson.mockImplementation((path, body) => {
     if (path === 'adminDashboardSummary') {
       return Promise.resolve({
         summary: {
@@ -279,8 +281,55 @@ beforeEach(() => {
             enabledMiniApps: ['drilling-fluids-report'],
           },
         ],
+        invites: [
+          {
+            inviteId: 'invite-1',
+            email: 'pending@example.com',
+            status: 'pending',
+            expiresAt: Date.now() + 86400000,
+          },
+        ],
       });
     }
+    if (path === 'adminInviteUser') return Promise.resolve({ mode: 'invited', invite: { email: 'new@example.com', status: 'pending' } });
+    if (path === 'adminResendInvite') return Promise.resolve({ ok: true });
+    if (path === 'adminListEmailTemplates') {
+      return Promise.resolve({
+        items: [
+          {
+            templateId: 'userInvite',
+            label: 'User invitation',
+            subject: 'Finish your QuoteChem registration',
+            text: 'Finish registration: {{inviteUrl}}',
+            html: '<p>{{inviterName}} invited you.</p>',
+            actionLabel: 'Finish registration',
+            footer: 'Footer',
+          },
+          {
+            templateId: 'rfqConfirmation',
+            label: 'RFQ confirmation',
+            subject: 'QuoteChem Request Received',
+            text: 'Thanks',
+            html: '<p>Thanks</p>',
+            actionLabel: '',
+            footer: 'Footer',
+          },
+        ],
+      });
+    }
+    if (path === 'adminSaveEmailTemplate') return Promise.resolve({ template: { ...(body || {}), templateId: 'userInvite', label: 'User invitation' } });
+    if (path === 'adminSendTestEmail') return Promise.resolve({ messageId: 'message-1' });
+    if (path === 'previewInvite') {
+      return Promise.resolve({
+        invite: {
+          email: 'invited@example.com',
+          status: 'pending',
+          firstName: 'Invited',
+          lastName: 'User',
+        },
+      });
+    }
+    if (path === 'acceptInvite') return Promise.resolve({ email: 'invited@example.com', customToken: 'custom-token' });
     if (path === 'listMudProgramDrafts') {
       return Promise.resolve({ items: [mockMudProgramDraft] });
     }
@@ -577,30 +626,70 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('heading', { name: 'Account' })).toBeTruthy();
   });
 
-  test('User Access shows the list first and opens add and edit drawers', async () => {
+  test('User Access sends invites, resends pending invites, and edits users', async () => {
+    const { postJson } = require('./lib/api');
     renderAt('/apps/user-access', 'admin');
 
     expect(await screen.findByRole('heading', { name: 'User Access' })).toBeTruthy();
     expect(await screen.findByText('Riley Chen')).toBeTruthy();
     expect(await screen.findByText('user@example.com')).toBeTruthy();
+    expect(await screen.findByText('pending@example.com')).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Add user/i }));
-    expect(await screen.findByRole('heading', { name: 'Add User' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Resend/i }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminResendInvite', { inviteId: 'invite-1' }, { authed: true }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Send invite/i }));
+    expect(await screen.findByRole('heading', { name: 'Send Invite' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^Email$/i), { target: { value: 'new@example.com' } });
     expect(screen.getByLabelText(/First name/i)).toBeTruthy();
     expect(screen.getByLabelText(/Last name/i)).toBeTruthy();
-    expect(screen.getByLabelText(/Temporary password/i).getAttribute('minLength')).toBe('6');
+    expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
     expect(screen.getByRole('button', { name: /Quotes/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Testing Offline/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Drilling Programs/i })).toBeTruthy();
+    const sendButtons = screen.getAllByRole('button', { name: /^Send invite$/i });
+    fireEvent.click(sendButtons[sendButtons.length - 1]);
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminInviteUser', expect.objectContaining({ email: 'new@example.com' }), { authed: true }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Close/i }));
     fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
     expect(await screen.findByRole('heading', { name: 'Edit User' })).toBeTruthy();
     expect(screen.getByDisplayValue('Riley')).toBeTruthy();
     expect(screen.getByDisplayValue('Chen')).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
     expect(screen.getByDisplayValue('user@example.com').disabled).toBe(true);
+  });
+
+  test('User Access manages email templates and sends test email', async () => {
+    const { postJson } = require('./lib/api');
+    renderAt('/apps/user-access', 'admin');
+
+    expect(await screen.findByRole('heading', { name: 'Email Templates' })).toBeTruthy();
+    expect(await screen.findByDisplayValue('Finish your QuoteChem registration')).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue('Finish your QuoteChem registration'), { target: { value: 'Updated invite subject' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save template/i }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminSaveEmailTemplate', expect.objectContaining({ subject: 'Updated invite subject' }), { authed: true }));
+
+    fireEvent.change(screen.getByPlaceholderText('test@example.com'), { target: { value: 'admin@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send test/i }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminSendTestEmail', { templateId: 'userInvite', to: 'admin@example.com' }, { authed: true }));
+  });
+
+  test('invite registration previews invite and accepts with custom token sign in', async () => {
+    const { signInWithCustomToken } = require('firebase/auth');
+    const { postJson } = require('./lib/api');
+    renderSignedOutAt('/invite/test-token');
+
+    expect(await screen.findByRole('heading', { name: /Finish registration/i })).toBeTruthy();
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('previewInvite', { token: 'test-token' }));
+    expect(screen.getByDisplayValue('invited@example.com')).toBeTruthy();
+    expect(screen.getByDisplayValue('Invited')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: '123456' } });
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
+
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('acceptInvite', expect.objectContaining({ token: 'test-token', password: '123456' })));
+    await waitFor(() => expect(signInWithCustomToken).toHaveBeenCalledWith(expect.anything(), 'custom-token'));
   });
 
   test('Change Password only requires a six character minimum', async () => {

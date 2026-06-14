@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { __testables } from './publicQuoteChat.js';
+import { __emailTestables } from './email.js';
 
 test('temporary password validation accepts six characters', () => {
   assert.equal(__testables.isValidTemporaryPassword('123456'), true);
@@ -45,4 +46,18 @@ test('mud program extraction page builder creates overview and section pages', (
 test('mud program PDF validation only accepts application PDFs', () => {
   assert.equal(__testables.isPdfContentType('application/pdf'), true);
   assert.equal(__testables.isPdfContentType('image/png'), false);
+});
+
+test('QuoteChem email templates render invite links', () => {
+  const rendered = __emailTestables.buildTemplatedEmail({
+    templateId: 'userInvite',
+    data: {
+      inviterName: 'Rambod',
+      inviteUrl: 'https://quotechem.com/invite/token',
+    },
+  });
+
+  assert.equal(rendered.subject, 'Finish your QuoteChem registration');
+  assert.match(rendered.text, /https:\/\/quotechem\.com\/invite\/token/);
+  assert.match(rendered.html, /Finish registration/);
 });

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FiEdit2, FiPlus, FiX } from 'react-icons/fi';
+import { FiEdit2, FiMail, FiPlus, FiRefreshCw, FiSend, FiX } from 'react-icons/fi';
 import { postJson } from '../lib/api';
 import { ACCESS_MANAGED_MINI_APPS, defaultMiniAppIdsForRole } from '../apps/miniApps';
 import './UserAccess.css';
@@ -18,7 +18,6 @@ function buildEmptyDraft() {
     firstName: '',
     lastName: '',
     email: '',
-    password: '',
     role: 'user',
     enabledMiniApps: managedDefaults('user'),
   };
@@ -40,6 +39,12 @@ function displayNameForUser(user) {
   return name || 'No name set';
 }
 
+function formatInviteStatus(invite) {
+  if (!invite?.expiresAt) return invite?.status || 'pending';
+  if (invite.status === 'pending' && Number(invite.expiresAt) < Date.now()) return 'expired';
+  return invite.status || 'pending';
+}
+
 function MiniAppToggle({ app, checked, onChange }) {
   const Icon = app.icon;
   return (
@@ -54,6 +59,11 @@ function MiniAppToggle({ app, checked, onChange }) {
 
 export default function UserAccess() {
   const [users, setUsers] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateDraft, setTemplateDraft] = useState(null);
+  const [testEmail, setTestEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -68,6 +78,7 @@ export default function UserAccess() {
     try {
       const data = await postJson('adminListUsers', {}, { authed: true });
       setUsers(Array.isArray(data.items) ? data.items : []);
+      setInvites(Array.isArray(data.invites) ? data.invites : []);
     } catch (err) {
       setError(err?.message || 'Failed to load users.');
     } finally {
@@ -75,9 +86,27 @@ export default function UserAccess() {
     }
   }, []);
 
+  const loadTemplates = useCallback(async () => {
+    try {
+      const data = await postJson('adminListEmailTemplates', {}, { authed: true });
+      const items = Array.isArray(data.items) ? data.items : [];
+      setTemplates(items);
+      setSelectedTemplateId((current) => current || items[0]?.templateId || '');
+      setTemplateDraft((current) => current || items[0] || null);
+    } catch (err) {
+      setError(err?.message || 'Failed to load email templates.');
+    }
+  }, []);
+
   useEffect(() => {
     loadUsers();
-  }, [loadUsers]);
+    loadTemplates();
+  }, [loadUsers, loadTemplates]);
+
+  useEffect(() => {
+    const selected = templates.find((template) => template.templateId === selectedTemplateId);
+    if (selected) setTemplateDraft({ ...selected });
+  }, [selectedTemplateId, templates]);
 
   const openCreate = () => {
     setError('');
@@ -94,7 +123,6 @@ export default function UserAccess() {
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       email: user.email || '',
-      password: '',
       role: user.role || 'user',
       enabledMiniApps: normalizeEnabled(user.enabledMiniApps, user.role || 'user'),
     });
@@ -107,9 +135,8 @@ export default function UserAccess() {
     setDraft(buildEmptyDraft());
   };
 
-  const updateDraft = (patch) => {
-    setDraft((prev) => ({ ...prev, ...patch }));
-  };
+  const updateDraft = (patch) => setDraft((prev) => ({ ...prev, ...patch }));
+  const updateTemplateDraft = (patch) => setTemplateDraft((prev) => ({ ...prev, ...patch }));
 
   const changeRole = (role) => {
     setDraft((prev) => ({
@@ -139,10 +166,9 @@ export default function UserAccess() {
       const enabledMiniApps = normalizeEnabled(draft.enabledMiniApps, draft.role).filter((id) => managedAppIds.includes(id));
       if (drawerMode === 'create') {
         await postJson(
-          'adminCreateUser',
+          'adminInviteUser',
           {
             email: draft.email,
-            password: draft.password,
             firstName: draft.firstName,
             lastName: draft.lastName,
             role: draft.role,
@@ -150,7 +176,7 @@ export default function UserAccess() {
           },
           { authed: true }
         );
-        setStatus('User created.');
+        setStatus(`Invite sent to ${draft.email}.`);
       } else {
         await postJson(
           'adminUpdateUserAccess',
@@ -168,7 +194,54 @@ export default function UserAccess() {
       await loadUsers();
       closeDrawer();
     } catch (err) {
-      setError(err?.message || (drawerMode === 'create' ? 'Failed to create user.' : 'Failed to update access.'));
+      setError(err?.message || (drawerMode === 'create' ? 'Failed to send invite.' : 'Failed to update access.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resendInvite = async (invite) => {
+    setError('');
+    setStatus('');
+    setSaving(true);
+    try {
+      await postJson('adminResendInvite', { inviteId: invite.inviteId }, { authed: true });
+      setStatus(`Invite resent to ${invite.email}.`);
+      await loadUsers();
+    } catch (err) {
+      setError(err?.message || 'Failed to resend invite.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTemplate = async () => {
+    if (!templateDraft) return;
+    setError('');
+    setStatus('');
+    setSaving(true);
+    try {
+      const data = await postJson('adminSaveEmailTemplate', templateDraft, { authed: true });
+      setStatus('Email template saved.');
+      setTemplates((prev) => prev.map((item) => (item.templateId === data.template?.templateId ? data.template : item)));
+      setTemplateDraft(data.template || templateDraft);
+    } catch (err) {
+      setError(err?.message || 'Failed to save email template.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    if (!templateDraft) return;
+    setError('');
+    setStatus('');
+    setSaving(true);
+    try {
+      await postJson('adminSendTestEmail', { templateId: templateDraft.templateId, to: testEmail }, { authed: true });
+      setStatus(`Test email sent to ${testEmail}.`);
+    } catch (err) {
+      setError(err?.message || 'Failed to send test email.');
     } finally {
       setSaving(false);
     }
@@ -179,11 +252,11 @@ export default function UserAccess() {
       <header className="admin-head">
         <div>
           <h1>User Access</h1>
-          <p>Create users and control which mini apps appear in their launcher.</p>
+          <p>Invite users and control which mini apps appear in their launcher.</p>
         </div>
         <button type="button" className="primary-btn" onClick={openCreate}>
           <FiPlus size={16} />
-          Add user
+          Send invite
         </button>
       </header>
 
@@ -226,10 +299,91 @@ export default function UserAccess() {
         </div>
       </section>
 
+      <section className="access-panel">
+        <div className="access-section-head">
+          <h2>Pending invites</h2>
+          <span className="meta">{invites.length} invites</span>
+        </div>
+        <div className="access-user-list">
+          {invites.map((invite) => (
+            <article key={invite.inviteId} className="access-user-row invite-row">
+              <div className="access-user-main">
+                <span className="access-avatar invite">
+                  <FiMail size={18} />
+                </span>
+                <span className="access-user-copy">
+                  <strong>{invite.email}</strong>
+                  <span>{formatInviteStatus(invite)}</span>
+                </span>
+              </div>
+              <span className={`access-role ${formatInviteStatus(invite)}`}>{formatInviteStatus(invite)}</span>
+              <button type="button" className="action-btn" disabled={saving || formatInviteStatus(invite) !== 'pending'} onClick={() => resendInvite(invite)}>
+                <FiRefreshCw size={15} />
+                Resend
+              </button>
+            </article>
+          ))}
+          {!invites.length ? <p className="meta">No pending invites.</p> : null}
+        </div>
+      </section>
+
+      <section className="access-panel email-template-panel">
+        <div className="access-section-head">
+          <div>
+            <h2>Email Templates</h2>
+            <p className="meta">Gmail SMTP sends these from the configured QuoteChem sender.</p>
+          </div>
+          <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+            {templates.map((template) => (
+              <option key={template.templateId} value={template.templateId}>
+                {template.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {templateDraft ? (
+          <div className="email-template-grid">
+            <label>
+              <span>Subject</span>
+              <input value={templateDraft.subject || ''} onChange={(event) => updateTemplateDraft({ subject: event.target.value })} />
+            </label>
+            <label>
+              <span>Button label</span>
+              <input value={templateDraft.actionLabel || ''} onChange={(event) => updateTemplateDraft({ actionLabel: event.target.value })} />
+            </label>
+            <label>
+              <span>Text body</span>
+              <textarea rows={7} value={templateDraft.text || ''} onChange={(event) => updateTemplateDraft({ text: event.target.value })} />
+            </label>
+            <label>
+              <span>HTML body</span>
+              <textarea rows={7} value={templateDraft.html || ''} onChange={(event) => updateTemplateDraft({ html: event.target.value })} />
+            </label>
+            <label className="span-2">
+              <span>Footer</span>
+              <input value={templateDraft.footer || ''} onChange={(event) => updateTemplateDraft({ footer: event.target.value })} />
+            </label>
+            <div className="email-template-actions span-2">
+              <button type="button" className="primary-btn" disabled={saving} onClick={saveTemplate}>
+                Save template
+              </button>
+              <input type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="test@example.com" />
+              <button type="button" className="action-btn" disabled={saving || !testEmail} onClick={sendTestEmail}>
+                <FiSend size={15} />
+                Send test
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="meta">Loading email templates...</p>
+        )}
+      </section>
+
       {drawerMode ? (
-        <aside className="access-drawer" aria-label={drawerMode === 'create' ? 'Add user' : 'Edit user access'}>
+        <aside className="access-drawer" aria-label={drawerMode === 'create' ? 'Send invite' : 'Edit user access'}>
           <div className="drawer-header">
-            <h2>{drawerMode === 'create' ? 'Add User' : 'Edit User'}</h2>
+            <h2>{drawerMode === 'create' ? 'Send Invite' : 'Edit User'}</h2>
             <button type="button" className="ghost-btn" onClick={closeDrawer} disabled={saving} aria-label="Close">
               <FiX size={16} />
             </button>
@@ -252,13 +406,6 @@ export default function UserAccess() {
               </label>
             </div>
 
-            {drawerMode === 'create' ? (
-              <label>
-                <span>Temporary password</span>
-                <input type="password" required minLength={6} value={draft.password} onChange={(event) => updateDraft({ password: event.target.value })} />
-              </label>
-            ) : null}
-
             <label>
               <span>Role</span>
               <select value={draft.role} onChange={(event) => changeRole(event.target.value)}>
@@ -274,7 +421,7 @@ export default function UserAccess() {
             </div>
 
             <button type="submit" className="primary-btn" disabled={saving}>
-              {saving ? 'Saving...' : drawerMode === 'create' ? 'Create user' : 'Save access'}
+              {saving ? 'Saving...' : drawerMode === 'create' ? 'Send invite' : 'Save access'}
             </button>
           </form>
         </aside>

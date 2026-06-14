@@ -1,14 +1,17 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import PDFDocument from 'pdfkit';
 import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
+import { EMAIL_SECRETS, DEFAULT_EMAIL_TEMPLATE_IDS, getDefaultEmailTemplate, sendTemplatedEmail } from './email.js';
 import { admin, db, storage } from './firebaseAdmin.js';
 
 const REGION = 'us-central1';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const SESSION_COLLECTION = 'publicIntakeSessions';
 const RFQ_COLLECTION = 'publicRfqs';
+const INVITATION_COLLECTION = 'invitations';
+const EMAIL_TEMPLATE_COLLECTION = 'emailTemplates';
 const DRILLING_PROGRAM_TEMPLATE_COLLECTION = 'drillingProgramTemplates';
 const DRILLING_PROGRAM_RUN_COLLECTION = 'drillingProgramRuns';
 const MUD_PROGRAM_DRAFT_COLLECTION = 'mudProgramDrafts';
@@ -17,7 +20,6 @@ const OPENAI_REFERENCE_TOTAL_MAX_BYTES = 18 * 1024 * 1024;
 const MUD_PROGRAM_SOURCE_MAX_BYTES = 25 * 1024 * 1024;
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
-const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
 
 const REQUIRED_FIELDS = ['chemicalName', 'industryUse', 'quantity', 'deliveryLocation', 'email'];
 const OPTIONAL_FIELDS = [
@@ -1400,42 +1402,6 @@ function buildMissingFieldsPrompt(missingRequired) {
   return `Before I finalize, I still need your ${first}.`;
 }
 
-async function sendEmail({ toEmail, subject, text, html }) {
-  const apiKey = readSecret(SENDGRID_API_KEY);
-  if (!apiKey) throw new Error('Missing SENDGRID_API_KEY');
-
-  const fromEmail = asString(process.env.QUOTECHEM_FROM_EMAIL) || 'noreply@quotechem.com';
-  const fromName = 'QuoteChem';
-
-  const payload = {
-    personalizations: [{ to: [{ email: toEmail }] }],
-    from: { email: fromEmail, name: fromName },
-    subject,
-    content: [
-      { type: 'text/plain', value: text },
-      { type: 'text/html', value: html },
-    ],
-  };
-
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const failure = await response.text();
-    throw new Error(`SendGrid request failed: ${response.status} ${failure}`);
-  }
-
-  return {
-    messageId: response.headers.get('x-message-id') || '',
-  };
-}
-
 function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
   const safeTitle = escapeHtml(title);
   const safePreheader = escapeHtml(preheader);
@@ -1486,10 +1452,9 @@ function buildEmailBrandShell({ title, preheader, contentHtml, contentText }) {
   return { html, text };
 }
 
-function buildCustomerEmail(extracted) {
+function buildRfqEmailData(extracted) {
   const chemical = asString(extracted.chemicalName) || 'Chemical Request';
   const location = asString(extracted.deliveryLocation) || 'your destination';
-  const subject = `QuoteChem Request Received — ${chemical} to ${location}`;
 
   const summaryRows = [
     ['Chemical', extracted.chemicalName],
@@ -1519,39 +1484,156 @@ function buildCustomerEmail(extracted) {
     )
     .join('');
 
-  const contentHtml = [
-    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;margin-bottom:14px;">',
-    '<tr>',
-    '<td style="padding:14px 16px;border:1px solid #cfe0ff;border-radius:12px;background:#f2f8ff;">',
-    '<p style="margin:0 0 5px;font-size:12px;line-height:1.4;color:#1d4e89;letter-spacing:.04em;text-transform:uppercase;font-weight:700;">Status</p>',
-    '<p style="margin:0;font-size:15px;line-height:1.5;color:#0f172a;">Your request is received and our sourcing team has started supplier outreach.</p>',
-    '</td>',
-    '</tr>',
-    '</table>',
+  const requestSummaryHtml = [
     '<h3 style="margin:0 0 10px;font-size:18px;line-height:1.35;color:#0f172a;">Request Summary</h3>',
     `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #dbe7ff;border-radius:12px;overflow:hidden;">${htmlRows}</table>`,
-    '<p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Final pricing depends on grade, packaging, freight lane, and lead time availability.</p>',
   ].join('');
 
-  const contentText = [
-    'Thanks for your request. We received your RFQ and started supplier outreach.',
-    '',
+  const requestSummaryText = [
     'Request Summary:',
     ...summaryRows.map(([label, value]) => `- ${label}: ${value}`),
   ].join('\n');
 
-  const shell = buildEmailBrandShell({
-    title: 'QuoteChem Request Received',
-    preheader: `We received your ${chemical} RFQ and started supplier outreach.`,
-    contentHtml,
-    contentText,
-  });
-
   return {
-    subject,
-    text: shell.text,
-    html: shell.html,
+    chemicalName: chemical,
+    location,
+    requestSummaryHtml,
+    requestSummaryText,
   };
+}
+
+function mapEmailTemplateDoc(doc) {
+  const data = doc.data() || {};
+  const defaults = getDefaultEmailTemplate(doc.id) || {};
+  return {
+    templateId: doc.id,
+    label: asString(data.label) || defaults.label || doc.id,
+    description: asString(data.description) || defaults.description || '',
+    subject: asString(data.subject) || defaults.subject || '',
+    text: typeof data.text === 'string' ? data.text : defaults.text || '',
+    html: typeof data.html === 'string' ? data.html : defaults.html || '',
+    actionLabel: typeof data.actionLabel === 'string' ? data.actionLabel : defaults.actionLabel || '',
+    actionUrlKey: typeof data.actionUrlKey === 'string' ? data.actionUrlKey : defaults.actionUrlKey || '',
+    footer: typeof data.footer === 'string' ? data.footer : defaults.footer || '',
+    customized: doc.exists,
+    updatedAt: toIso(data.updatedAt),
+    updatedBy: asString(data.updatedBy),
+  };
+}
+
+async function getEmailTemplateOverride(templateId) {
+  const id = asString(templateId);
+  if (!id || !DEFAULT_EMAIL_TEMPLATE_IDS.includes(id)) return null;
+  const snap = await db.collection(EMAIL_TEMPLATE_COLLECTION).doc(id).get();
+  return snap.exists ? mapEmailTemplateDoc(snap) : null;
+}
+
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function tokenHash(token) {
+  return createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function makeInviteToken() {
+  return randomBytes(32).toString('hex');
+}
+
+function baseUrlFromRequest(req) {
+  const configured = asString(process.env.APP_BASE_URL || process.env.QUOTECHEM_APP_BASE_URL).replace(/\/$/, '');
+  if (configured) return configured;
+  const origin = asString(req.headers?.origin || req.headers?.Origin).replace(/\/$/, '');
+  return origin || 'https://quotechem.com';
+}
+
+async function adminDisplayName(uid, fallbackEmail = '') {
+  const snap = await db.collection('users').doc(uid).get();
+  const data = snap.data() || {};
+  return `${asString(data.firstName)} ${asString(data.lastName)}`.trim() || asString(data.email) || fallbackEmail || 'A QuoteChem admin';
+}
+
+async function findUserByEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+
+  try {
+    const authUser = await admin.auth().getUserByEmail(normalized);
+    const userSnap = await db.collection('users').doc(authUser.uid).get();
+    return {
+      uid: authUser.uid,
+      email: normalized,
+      authUser,
+      user: userSnap.exists ? userSnap.data() || {} : {},
+    };
+  } catch (error) {
+    if (error?.code !== 'auth/user-not-found') throw error;
+  }
+
+  const snap = await db.collection('users').where('email', '==', normalized).limit(1).get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { uid: doc.id, email: normalized, authUser: null, user: doc.data() || {} };
+}
+
+async function applyUserAccess({ uid, email, firstName = '', lastName = '', role = 'user', enabledMiniApps = [], adminUid = '' }) {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const normalizedRole = normalizeRole(role);
+  const ref = db.collection('users').doc(uid);
+  const snap = await ref.get();
+  const existing = snap.data() || {};
+  await ref.set(
+    {
+      uid,
+      email: normalizeEmail(email),
+      role: normalizedRole,
+      enabledMiniApps: normalizeMiniAppIds(enabledMiniApps) || defaultEnabledMiniAppsForRole(normalizedRole),
+      firstName: asString(firstName).slice(0, 80) || asString(existing.firstName),
+      lastName: asString(lastName).slice(0, 80) || asString(existing.lastName),
+      primaryAuthUid: uid,
+      ...(snap.exists ? {} : { createdAt: now, createdBy: adminUid }),
+      updatedAt: now,
+      updatedBy: adminUid,
+    },
+    { merge: true }
+  );
+}
+
+function publicInvite(invite = {}) {
+  return {
+    email: asString(invite.email),
+    status: asString(invite.status) || 'pending',
+    expiresAt: invite.expiresAt?.toMillis?.() || null,
+    firstName: asString(invite.firstName),
+    lastName: asString(invite.lastName),
+  };
+}
+
+async function loadInviteByToken(token) {
+  const hash = tokenHash(token);
+  if (!hash) {
+    const err = new Error('Invite token is required');
+    err.status = 400;
+    throw err;
+  }
+  const snap = await db.collection(INVITATION_COLLECTION).where('tokenHash', '==', hash).limit(1).get();
+  if (snap.empty) {
+    const err = new Error('Invite not found');
+    err.status = 404;
+    throw err;
+  }
+  const doc = snap.docs[0];
+  const invite = doc.data() || {};
+  if (invite.status === 'accepted') {
+    const err = new Error('Invite already accepted');
+    err.status = 409;
+    throw err;
+  }
+  if (invite.status === 'expired' || (invite.expiresAt?.toMillis?.() && invite.expiresAt.toMillis() < Date.now())) {
+    await doc.ref.set({ status: 'expired', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    const err = new Error('Invite expired');
+    err.status = 410;
+    throw err;
+  }
+  return { doc, invite };
 }
 
 async function finalizeFromExtracted({ sessionRef, sessionId, sessionDoc, extracted, transcript }) {
@@ -1635,12 +1717,11 @@ async function finalizeFromExtracted({ sessionRef, sessionId, sessionDoc, extrac
   logger.info('public_email_attempted', { sessionId, rfqId });
 
   try {
-    const customerEmail = buildCustomerEmail(normalized);
-    const emailResult = await sendEmail({
-      toEmail: normalized.email,
-      subject: customerEmail.subject,
-      text: customerEmail.text,
-      html: customerEmail.html,
+    const emailResult = await sendTemplatedEmail({
+      templateId: 'rfqConfirmation',
+      to: normalized.email,
+      data: buildRfqEmailData(normalized),
+      override: await getEmailTemplateOverride('rfqConfirmation'),
     });
 
     await sessionRef.set(
@@ -1773,7 +1854,7 @@ export const chatPublicAssistant = onRequest(
   {
     region: REGION,
     timeoutSeconds: 60,
-    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY],
+    secrets: [OPENAI_API_KEY, ...EMAIL_SECRETS],
   },
   async (req, res) => {
     if (preflight(req, res)) return;
@@ -1961,7 +2042,7 @@ export const finalizePublicSession = onRequest(
   {
     region: REGION,
     timeoutSeconds: 60,
-    secrets: [OPENAI_API_KEY, SENDGRID_API_KEY],
+    secrets: [OPENAI_API_KEY, ...EMAIL_SECRETS],
   },
   async (req, res) => {
     if (preflight(req, res)) return;
@@ -2159,54 +2240,7 @@ export const adminDashboardSummary = onRequest({ region: REGION }, async (req, r
 export const adminCreateUser = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
-
-  let createdAuthUser = null;
-  try {
-    const adminUser = await requireAdmin(req);
-    const email = normalizeEmail(req.body?.email);
-    const password = asString(req.body?.password);
-    const role = normalizeRole(req.body?.role);
-    const firstName = asString(req.body?.firstName).slice(0, 80);
-    const lastName = asString(req.body?.lastName).slice(0, 80);
-    const enabledMiniApps = normalizeMiniAppIds(req.body?.enabledMiniApps) || defaultEnabledMiniAppsForRole(role);
-
-    if (!isEmail(email)) return jsonError(res, 400, 'Valid email is required');
-    if (!isValidTemporaryPassword(password)) return jsonError(res, 400, 'Password must be at least 6 characters');
-
-    createdAuthUser = await admin.auth().createUser({
-      email,
-      password,
-      emailVerified: false,
-      disabled: false,
-    });
-
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    const userDoc = {
-      uid: createdAuthUser.uid,
-      email,
-      role,
-      enabledMiniApps,
-      firstName,
-      lastName,
-      primaryAuthUid: createdAuthUser.uid,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: adminUser.uid,
-    };
-
-    await db.collection('users').doc(createdAuthUser.uid).set(userDoc, { merge: true });
-    const snap = await db.collection('users').doc(createdAuthUser.uid).get();
-
-    setCors(res);
-    res.status(200).json({ ok: true, user: mapUserDoc(snap) });
-  } catch (error) {
-    if (createdAuthUser?.uid) {
-      await admin.auth().deleteUser(createdAuthUser.uid).catch(() => {});
-    }
-    const status = Number(error?.status) || (error?.code === 'auth/email-already-exists' ? 409 : 500);
-    logger.error('[adminCreateUser] failed', { error: error?.message || String(error) });
-    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to create user');
-  }
+  return jsonError(res, 410, 'Direct user creation was replaced by adminInviteUser');
 });
 
 export const adminListUsers = onRequest({ region: REGION }, async (req, res) => {
@@ -2215,11 +2249,15 @@ export const adminListUsers = onRequest({ region: REGION }, async (req, res) => 
 
   try {
     await requireAdmin(req);
-    const snap = await db.collection('users').orderBy('email', 'asc').limit(250).get();
+    const [snap, inviteSnap] = await Promise.all([
+      db.collection('users').orderBy('email', 'asc').limit(250).get(),
+      db.collection(INVITATION_COLLECTION).orderBy('updatedAt', 'desc').limit(100).get(),
+    ]);
     const items = snap.docs.map(mapUserDoc);
+    const invites = inviteSnap.docs.map((doc) => ({ inviteId: doc.id, ...publicInvite(doc.data() || {}) }));
 
     setCors(res);
-    res.status(200).json({ ok: true, items, miniApps: MINI_APP_IDS });
+    res.status(200).json({ ok: true, items, invites, miniApps: MINI_APP_IDS });
   } catch (error) {
     const status = Number(error?.status) || 500;
     logger.error('[adminListUsers] failed', { error: error?.message || String(error) });
@@ -2263,6 +2301,313 @@ export const adminUpdateUserAccess = onRequest({ region: REGION }, async (req, r
     const status = Number(error?.status) || 500;
     logger.error('[adminUpdateUserAccess] failed', { error: error?.message || String(error) });
     return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to update user access');
+  }
+});
+
+export const adminInviteUser = onRequest({ region: REGION, secrets: EMAIL_SECRETS }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const adminUser = await requireAdmin(req);
+    const email = normalizeEmail(req.body?.email);
+    const role = normalizeRole(req.body?.role);
+    const firstName = asString(req.body?.firstName).slice(0, 80);
+    const lastName = asString(req.body?.lastName).slice(0, 80);
+    const enabledMiniApps = normalizeMiniAppIds(req.body?.enabledMiniApps) || defaultEnabledMiniAppsForRole(role);
+    if (!isEmail(email)) return jsonError(res, 400, 'Valid email is required');
+
+    const inviterName = await adminDisplayName(adminUser.uid, adminUser.email);
+    const existing = await findUserByEmail(email);
+    const baseUrl = baseUrlFromRequest(req);
+
+    if (existing?.uid) {
+      await applyUserAccess({
+        uid: existing.uid,
+        email,
+        firstName: firstName || existing.user?.firstName || '',
+        lastName: lastName || existing.user?.lastName || '',
+        role,
+        enabledMiniApps,
+        adminUid: adminUser.uid,
+      });
+      const emailResult = await sendTemplatedEmail({
+        templateId: 'existingUserAccess',
+        to: email,
+        data: {
+          inviterName,
+          signInUrl: `${baseUrl}/signin`,
+        },
+        override: await getEmailTemplateOverride('existingUserAccess'),
+      });
+      const snap = await db.collection('users').doc(existing.uid).get();
+      setCors(res);
+      res.status(200).json({ ok: true, mode: 'existing', user: mapUserDoc(snap), emailMessageId: emailResult.messageId });
+      return;
+    }
+
+    const pendingSnap = await db.collection(INVITATION_COLLECTION).where('email', '==', email).where('status', '==', 'pending').limit(1).get();
+    const inviteId = pendingSnap.empty ? randomUUID() : pendingSnap.docs[0].id;
+    const token = makeInviteToken();
+    const inviteUrl = `${baseUrl}/invite/${token}`;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+    const invitePayload = {
+      inviteId,
+      email,
+      firstName,
+      lastName,
+      role,
+      enabledMiniApps,
+      status: 'pending',
+      tokenHash: tokenHash(token),
+      inviteUrl,
+      createdBy: pendingSnap.empty ? adminUser.uid : pendingSnap.docs[0].data()?.createdBy || adminUser.uid,
+      updatedBy: adminUser.uid,
+      updatedAt: now,
+      expiresAt,
+      ...(pendingSnap.empty ? { createdAt: now } : { resentAt: now, resentBy: adminUser.uid }),
+    };
+    await db.collection(INVITATION_COLLECTION).doc(inviteId).set(invitePayload, { merge: true });
+    const emailResult = await sendTemplatedEmail({
+      templateId: 'userInvite',
+      to: email,
+      data: {
+        inviterName,
+        inviteUrl,
+      },
+      override: await getEmailTemplateOverride('userInvite'),
+    });
+
+    setCors(res);
+    res.status(200).json({ ok: true, mode: 'invited', invite: publicInvite(invitePayload), emailMessageId: emailResult.messageId });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminInviteUser] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to send invite');
+  }
+});
+
+export const adminResendInvite = onRequest({ region: REGION, secrets: EMAIL_SECRETS }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const adminUser = await requireAdmin(req);
+    const inviteId = normalizeDocId(req.body?.inviteId);
+    if (!inviteId) return jsonError(res, 400, 'inviteId is required');
+    const ref = db.collection(INVITATION_COLLECTION).doc(inviteId);
+    const snap = await ref.get();
+    if (!snap.exists) return jsonError(res, 404, 'Invite not found');
+    const invite = snap.data() || {};
+    if (invite.status !== 'pending') return jsonError(res, 400, 'Only pending invites can be resent');
+
+    const token = makeInviteToken();
+    const inviteUrl = `${baseUrlFromRequest(req)}/invite/${token}`;
+    const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+    await ref.set(
+      {
+        tokenHash: tokenHash(token),
+        inviteUrl,
+        expiresAt,
+        resentAt: admin.firestore.FieldValue.serverTimestamp(),
+        resentBy: adminUser.uid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    const emailResult = await sendTemplatedEmail({
+      templateId: 'userInvite',
+      to: invite.email,
+      data: {
+        inviterName: await adminDisplayName(adminUser.uid, adminUser.email),
+        inviteUrl,
+      },
+      override: await getEmailTemplateOverride('userInvite'),
+    });
+
+    setCors(res);
+    res.status(200).json({ ok: true, emailMessageId: emailResult.messageId });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminResendInvite] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to resend invite');
+  }
+});
+
+export const previewInvite = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const { invite } = await loadInviteByToken(req.body?.token);
+    setCors(res);
+    res.status(200).json({ ok: true, invite: publicInvite(invite) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[previewInvite] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, asString(error?.message || String(error)) || 'Unable to load invite');
+  }
+});
+
+export const acceptInvite = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  let createdAuthUser = null;
+  try {
+    const { doc: inviteDoc, invite } = await loadInviteByToken(req.body?.token);
+    const firstName = asString(req.body?.firstName || invite.firstName).slice(0, 80);
+    const lastName = asString(req.body?.lastName || invite.lastName).slice(0, 80);
+    const password = asString(req.body?.password);
+    if (!firstName) return jsonError(res, 400, 'First name is required');
+    if (!lastName) return jsonError(res, 400, 'Last name is required');
+    if (!isValidTemporaryPassword(password)) return jsonError(res, 400, 'Password must be at least 6 characters');
+
+    const email = normalizeEmail(invite.email);
+    const existing = await findUserByEmail(email);
+    if (existing?.uid) return jsonError(res, 409, 'This email is already registered. Sign in instead.');
+
+    createdAuthUser = await admin.auth().createUser({
+      email,
+      password,
+      emailVerified: false,
+      displayName: `${firstName} ${lastName}`.trim(),
+      disabled: false,
+    });
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await db.collection('users').doc(createdAuthUser.uid).set(
+      {
+        uid: createdAuthUser.uid,
+        email,
+        role: normalizeRole(invite.role),
+        enabledMiniApps: normalizeMiniAppIds(invite.enabledMiniApps) || defaultEnabledMiniAppsForRole(invite.role),
+        firstName,
+        lastName,
+        primaryAuthUid: createdAuthUser.uid,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: asString(invite.createdBy),
+      },
+      { merge: true }
+    );
+    await inviteDoc.ref.set(
+      {
+        status: 'accepted',
+        acceptedAt: now,
+        acceptedBy: createdAuthUser.uid,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    let customToken = '';
+    try {
+      customToken = await admin.auth().createCustomToken(createdAuthUser.uid);
+    } catch (error) {
+      logger.error('[acceptInvite] custom token failed', { error: error?.message || String(error) });
+    }
+
+    setCors(res);
+    res.status(200).json({ ok: true, uid: createdAuthUser.uid, email, customToken, requiresSignIn: !customToken });
+  } catch (error) {
+    if (createdAuthUser?.uid) {
+      await admin.auth().deleteUser(createdAuthUser.uid).catch(() => {});
+    }
+    const status = Number(error?.status) || (error?.code === 'auth/email-already-exists' ? 409 : 500);
+    logger.error('[acceptInvite] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, asString(error?.message || String(error)) || 'Failed to accept invite');
+  }
+});
+
+export const adminListEmailTemplates = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await requireAdmin(req);
+    const items = [];
+    for (const templateId of DEFAULT_EMAIL_TEMPLATE_IDS) {
+      const snap = await db.collection(EMAIL_TEMPLATE_COLLECTION).doc(templateId).get();
+      items.push(snap.exists ? mapEmailTemplateDoc(snap) : { ...getDefaultEmailTemplate(templateId), customized: false });
+    }
+    setCors(res);
+    res.status(200).json({ ok: true, items });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminListEmailTemplates] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list email templates');
+  }
+});
+
+export const adminSaveEmailTemplate = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const adminUser = await requireAdmin(req);
+    const templateId = asString(req.body?.templateId);
+    if (!DEFAULT_EMAIL_TEMPLATE_IDS.includes(templateId)) return jsonError(res, 400, 'Unknown email template');
+    const defaults = getDefaultEmailTemplate(templateId);
+    const payload = {
+      templateId,
+      label: defaults.label,
+      description: defaults.description,
+      subject: asString(req.body?.subject).slice(0, 200) || defaults.subject,
+      text: typeof req.body?.text === 'string' ? req.body.text.slice(0, 12000) : defaults.text,
+      html: typeof req.body?.html === 'string' ? req.body.html.slice(0, 20000) : defaults.html,
+      actionLabel: typeof req.body?.actionLabel === 'string' ? req.body.actionLabel.slice(0, 80) : defaults.actionLabel,
+      actionUrlKey: typeof req.body?.actionUrlKey === 'string' ? req.body.actionUrlKey.slice(0, 80) : defaults.actionUrlKey,
+      footer: typeof req.body?.footer === 'string' ? req.body.footer.slice(0, 1000) : defaults.footer,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: adminUser.uid,
+    };
+    await db.collection(EMAIL_TEMPLATE_COLLECTION).doc(templateId).set(payload, { merge: true });
+    const snap = await db.collection(EMAIL_TEMPLATE_COLLECTION).doc(templateId).get();
+    setCors(res);
+    res.status(200).json({ ok: true, template: mapEmailTemplateDoc(snap) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminSaveEmailTemplate] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to save email template');
+  }
+});
+
+export const adminSendTestEmail = onRequest({ region: REGION, secrets: EMAIL_SECRETS }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await requireAdmin(req);
+    const to = normalizeEmail(req.body?.to);
+    const templateId = asString(req.body?.templateId);
+    if (!isEmail(to)) return jsonError(res, 400, 'Valid test recipient is required');
+    if (!DEFAULT_EMAIL_TEMPLATE_IDS.includes(templateId)) return jsonError(res, 400, 'Unknown email template');
+    const emailResult = await sendTemplatedEmail({
+      templateId,
+      to,
+      data: {
+        inviterName: 'QuoteChem Admin',
+        inviteUrl: `${baseUrlFromRequest(req)}/invite/example-token`,
+        signInUrl: `${baseUrlFromRequest(req)}/signin`,
+        chemicalName: 'Methanol',
+        location: 'Calgary, AB',
+        requestSummaryText: 'Request Summary:\n- Chemical: Methanol\n- Quantity: 1 tote',
+        requestSummaryHtml: '<p style="margin:0;">Sample QuoteChem request summary.</p>',
+        title: 'QuoteChem test email',
+        message: 'This is a test email from QuoteChem.',
+        actionLabel: 'Open QuoteChem',
+        actionUrl: baseUrlFromRequest(req),
+      },
+      override: await getEmailTemplateOverride(templateId),
+    });
+    setCors(res);
+    res.status(200).json({ ok: true, messageId: emailResult.messageId });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adminSendTestEmail] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to send test email');
   }
 });
 

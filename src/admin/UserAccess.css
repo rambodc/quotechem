@@ -73,6 +73,10 @@
   object-fit: cover;
 }
 
+.access-avatar.invite {
+  background: linear-gradient(145deg, #0f172a, #0b5fc0);
+}
+
 .access-user-copy {
   min-width: 0;
   display: grid;
@@ -107,6 +111,21 @@
 .access-role.admin {
   background: #eaf3ff;
   color: #0b5fc0;
+}
+
+.access-role.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.access-role.accepted {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.access-role.expired {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .action-btn {
@@ -148,7 +167,10 @@
 }
 
 .access-drawer-form input,
-.access-drawer-form select {
+.access-drawer-form select,
+.email-template-panel input,
+.email-template-panel select,
+.email-template-panel textarea {
   min-width: 0;
   border: 1px solid #ccdae8;
   border-radius: 10px;
@@ -156,6 +178,11 @@
   padding: 10px 11px;
   color: #0f172a;
   font-size: 0.92rem;
+  font: inherit;
+}
+
+.email-template-panel textarea {
+  resize: vertical;
 }
 
 .access-drawer-form input:disabled {
@@ -224,6 +251,31 @@
   color: #047857;
 }
 
+.email-template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.email-template-grid label {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+.email-template-actions {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 @media (max-width: 620px) {
   .access-panel {
     padding: 12px;
@@ -248,5 +300,14 @@
 
   .access-name-grid {
     grid-template-columns: 1fr;
+  }
+
+  .email-template-grid,
+  .email-template-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2 {
+    grid-column: auto;
   }
 }

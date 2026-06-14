@@ -8,6 +8,7 @@ import CatalogHome from './home/CatalogHome';
 import ProductPage from './home/ProductPage';
 import Login from './auth/Login';
 import ForgotPassword from './auth/ForgotPassword';
+import InviteRegister from './auth/InviteRegister';
 import Account from './account/Account';
 import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
@@ -179,6 +180,7 @@ function App() {
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chemicals/:slug" element={<ProductPage />} />
           <Route path="/offline/drilling-fluids-report" element={<OfflineDrillingFluidsReport />} />
+          <Route path="/invite/:token" element={firebaseUser ? <Navigate to="/portal" replace /> : <InviteRegister />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route
             path="/signin"
