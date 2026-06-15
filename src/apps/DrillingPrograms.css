@@ -617,330 +617,231 @@
 }
 
 .section-print-header {
+  position: relative;
   display: grid;
-  gap: 4px;
+  gap: 5px;
   text-align: center;
+  padding: 0 0 12px;
+  border-bottom: 3px solid var(--section-accent);
+}
+
+.section-print-header > span {
+  justify-self: center;
+  border: 1px solid #d9e2ec;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--section-accent);
+  padding: 4px 12px;
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .section-print-header h1 {
   margin: 0;
   color: #020617;
-  font-size: 1.42rem;
+  font-size: 1.52rem;
   line-height: 1.12;
 }
 
 .section-print-header p {
   margin: 0;
   color: #020617;
-  font-size: 1.08rem;
+  font-size: 1.02rem;
+  line-height: 1.16;
   font-weight: 850;
 }
 
-.section-print-table {
-  min-height: 8.55in;
-  display: grid;
-  grid-template-columns: 1.34in 1.28in minmax(0, 1fr);
-  grid-template-rows: 0.34in minmax(0, 1fr);
-  border: 1px solid #9ca3af;
-  background: #ffffff;
-}
-
-.section-table-title {
-  display: grid;
-  place-items: center;
-  border-bottom: 1px solid #9ca3af;
-  background: var(--section-accent);
-  color: #ffffff;
-  font-size: 0.84rem;
-  font-weight: 950;
-}
-
-.section-table-title.properties,
-.section-table-title.hole {
-  border-right: 1px solid #9ca3af;
-}
-
-.section-properties-column,
-.hole-section-card,
-.section-procedure-column {
-  min-height: 0;
-}
-
-.section-properties-column,
-.hole-section-card {
-  border-right: 1px solid #9ca3af;
-}
-
-.section-property-stack {
+.section-property-strip {
   margin: 0;
-  padding: 11px 9px;
   display: grid;
-  gap: 10px;
-  text-align: center;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.section-property-stack div {
+.section-property-strip div {
+  min-height: 0.62in;
+  border: 1px solid #d9e2ec;
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.92)),
+    #ffffff;
+  padding: 8px 9px;
   display: grid;
-  gap: 2px;
+  align-content: center;
+  gap: 3px;
+  box-shadow: inset 4px 0 0 var(--section-accent);
 }
 
-.section-property-stack dt {
-  color: #020617;
-  font-size: 0.72rem;
-  font-weight: 950;
-}
-
-.section-property-stack dd {
-  margin: 0;
-  color: #111827;
-  font-size: 0.78rem;
-  line-height: 1.15;
-  font-weight: 760;
-  overflow-wrap: anywhere;
-}
-
-.hole-section-card {
-  margin: 0;
-  padding: 8px 7px 10px;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  align-items: center;
-  background: #ffffff;
-}
-
-.hole-css-diagram {
-  --hole-width: 26px;
-  position: relative;
-  width: 100%;
-  min-height: 6.04in;
-  overflow: hidden;
-}
-
-.depth-rail {
-  position: absolute;
-  top: 7%;
-  bottom: 9%;
-  left: 18%;
-  border-left: 1px dashed #9ca3af;
-}
-
-.depth-word,
-.depth-value {
-  position: absolute;
-  color: #4b5563;
+.section-property-strip dt {
+  color: #526174;
+  font-size: 0.64rem;
   font-weight: 950;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.depth-word {
-  left: 4%;
-  font-size: 0.54rem;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
+.section-property-strip dd {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  font-weight: 850;
+  overflow-wrap: anywhere;
 }
 
-.depth-word.top {
-  top: 8%;
+.section-program-layout {
+  min-height: 7.1in;
+  display: grid;
+  gap: 16px;
 }
 
-.depth-word.bottom {
-  bottom: 8%;
+.section-program-layout.vertical,
+.section-program-layout.both {
+  grid-template-columns: 2.45in minmax(0, 1fr);
+  align-items: stretch;
 }
 
-.depth-value {
-  max-width: 0.92in;
-  color: #111827;
-  font-size: 0.62rem;
-  line-height: 1.05;
-  letter-spacing: 0;
-  text-align: center;
-  text-transform: none;
+.section-program-layout.horizontal {
+  grid-template-rows: minmax(0, auto) 2.35in;
 }
 
-.depth-value.top {
-  top: 6%;
-  left: 43%;
-  transform: translateX(-50%);
+.wellbore-card {
+  margin: 0;
+  border: 1px solid #d6dde7;
+  border-radius: 18px;
+  background: #ffffff;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
 }
 
-.depth-value.bottom {
-  bottom: 5%;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.hole-marker {
-  position: absolute;
-  left: 38%;
-  width: 42%;
-  height: 1px;
-  background: #64748b;
-}
-
-.hole-marker.top {
-  top: 14%;
-}
-
-.hole-marker.bottom {
-  bottom: 15%;
-}
-
-.hole-casing,
-.hole-open {
-  position: absolute;
+.wellbore-svg {
+  width: 100%;
   display: block;
-  border: 1px solid #1f2937;
-  box-sizing: border-box;
+  min-height: 5.6in;
 }
 
-.hole-casing {
-  left: 50%;
-  top: 14%;
-  width: var(--hole-width);
-  height: 31%;
-  transform: translateX(-50%);
-  background:
-    linear-gradient(90deg, #8c99a8 0%, #f8fafc 16%, #dbe3eb 47%, #ffffff 74%, #7b8794 100%);
+.wellbore-card.horizontal .wellbore-svg {
+  min-height: 1.8in;
 }
 
-.hole-open {
-  background:
-    linear-gradient(90deg, rgba(17, 24, 39, 0.28), transparent 16% 72%, rgba(17, 24, 39, 0.26)),
-    linear-gradient(90deg, var(--section-accent), var(--section-accent));
-  box-shadow: inset 7px 0 0 rgba(255, 255, 255, 0.38), inset -5px 0 0 rgba(17, 24, 39, 0.18);
+.wellbore-frame {
+  fill: #fbfdff;
+  stroke: #e4ebf3;
 }
 
-.vertical-run {
-  left: 50%;
-  top: 45%;
-  width: var(--hole-width);
-  height: 40%;
-  transform: translateX(-50%);
+.depth-axis {
+  fill: none;
+  stroke: #a8b3c2;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 7;
 }
 
-.horizontal-run,
-.curve-run {
-  display: none;
+.depth-label line {
+  stroke: #738195;
+  stroke-width: 1.4;
 }
 
-.hole-section-card.horizontal .hole-casing {
-  top: 14%;
-  height: 25%;
+.depth-label text {
+  fill: #334155;
+  font-size: 13px;
+  font-weight: 900;
+  text-anchor: middle;
 }
 
-.hole-section-card.horizontal .vertical-run {
-  display: none;
+.depth-label text + text {
+  fill: #64748b;
+  font-size: 10px;
+  letter-spacing: 0.12em;
 }
 
-.hole-section-card.horizontal .horizontal-run {
-  display: block;
-  top: 55%;
-  left: 31%;
-  width: 55%;
-  height: var(--hole-width);
-  box-shadow: inset 0 7px 0 rgba(255, 255, 255, 0.38), inset 0 -5px 0 rgba(17, 24, 39, 0.18);
+.casing,
+.open-hole {
+  fill: none;
+  stroke-linecap: butt;
+  stroke-linejoin: round;
 }
 
-.hole-section-card.horizontal .depth-value.top {
-  top: 50%;
-  left: 29%;
+.casing.outer {
+  stroke: #64748b;
+  stroke-width: 32;
 }
 
-.hole-section-card.horizontal .depth-value.bottom {
-  top: 50%;
-  left: 86%;
-  bottom: auto;
+.casing.inner {
+  stroke: #e8eef5;
+  stroke-width: 26;
 }
 
-.hole-section-card.horizontal .hole-marker.top {
-  top: 58%;
-  left: 28%;
-  width: 10%;
+.casing.shine {
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-width: 7;
+  transform: translateX(-5px);
 }
 
-.hole-section-card.horizontal .hole-marker.bottom {
-  top: 58%;
-  bottom: auto;
-  left: 82%;
-  width: 10%;
+.open-hole.outer {
+  stroke: #1f2937;
+  stroke-width: 34;
 }
 
-.hole-section-card.both .hole-casing {
-  top: 14%;
-  height: 32%;
+.open-hole.inner {
+  stroke: var(--section-accent);
+  stroke-width: 27;
 }
 
-.hole-section-card.both .vertical-run {
-  top: 46%;
-  height: 21%;
+.open-hole.shine {
+  stroke: rgba(255, 255, 255, 0.45);
+  stroke-width: 7;
+  transform: translateX(-5px);
 }
 
-.hole-section-card.both .curve-run {
-  display: block;
-  left: 50%;
-  top: 61%;
-  width: 44%;
-  height: 18%;
-  border-top: 0;
-  border-right: 0;
-  border-width: var(--hole-width);
-  border-style: solid;
-  border-color: transparent transparent var(--section-accent) var(--section-accent);
-  border-radius: 0 0 0 70px;
-  background: transparent;
-  box-shadow: inset 6px -6px 0 rgba(255, 255, 255, 0.28);
+.shoe-marker {
+  fill: #ffffff;
+  stroke: #475569;
+  stroke-width: 3;
 }
 
-.hole-section-card.both .horizontal-run {
-  display: block;
-  top: calc(79% - var(--hole-width));
-  left: 72%;
-  width: 17%;
-  height: var(--hole-width);
-  box-shadow: inset 0 7px 0 rgba(255, 255, 255, 0.38), inset 0 -5px 0 rgba(17, 24, 39, 0.18);
+.end-marker {
+  fill: var(--section-accent);
+  stroke: #1f2937;
+  stroke-width: 2;
 }
 
-.hole-section-card.both .depth-value.bottom {
-  bottom: 17%;
-  left: 86%;
-}
-
-.hole-section-card.both .hole-marker.bottom {
-  bottom: 21%;
-  left: 78%;
-  width: 16%;
-}
-
-.hole-section-card figcaption {
+.wellbore-card figcaption {
   border-top: 1px solid #d1d5db;
-  padding-top: 6px;
+  padding: 8px 10px 10px;
   text-align: center;
 }
 
-.hole-section-card figcaption strong,
-.hole-section-card figcaption span,
-.hole-section-card figcaption small {
+.wellbore-card figcaption strong,
+.wellbore-card figcaption span,
+.wellbore-card figcaption small {
   display: block;
 }
 
-.hole-section-card figcaption strong {
+.wellbore-card figcaption strong {
   color: #020617;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
 }
 
-.hole-section-card figcaption span,
-.hole-section-card figcaption small {
+.wellbore-card figcaption span,
+.wellbore-card figcaption small {
   color: #4b5563;
   font-size: 0.68rem;
   font-weight: 800;
 }
 
 .section-procedure-column {
-  padding: 10px 12px 12px;
+  border: 1px solid #d9e2ec;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 16px 18px;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 12px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
 }
 
 .procedure-group {
@@ -948,17 +849,17 @@
 }
 
 .procedure-group h2 {
-  margin: 0 0 2px;
+  margin: 0 0 5px;
   color: #020617;
-  font-size: 0.86rem;
+  font-size: 0.96rem;
   line-height: 1.1;
 }
 
 .procedure-group p {
-  margin: 0;
+  margin: 0 0 3px;
   color: #111827;
-  font-size: 0.76rem;
-  line-height: 1.22;
+  font-size: 0.82rem;
+  line-height: 1.35;
   font-weight: 650;
 }
 

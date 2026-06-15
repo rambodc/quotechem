@@ -821,35 +821,30 @@ function MudProgramPage({ page, overview }) {
   const sectionTitle = data.name || page.title || 'Well Section';
   const subtitleParts = [data.mudSystem, data.holeSize ? `${data.holeSize} OH` : '', data.casingSize ? `${data.casingSize} Casing` : ''].filter(Boolean);
   return (
-    <article className="mud-page mud-section-page" style={{ '--section-accent': accent }}>
+    <article className={`mud-page mud-section-page profile-${wellProfile}`} style={{ '--section-accent': accent }}>
       <header className="section-print-header">
+        <span>Section {data.sectionNumber || 1}</span>
         <h1>{overview?.programTitle || `Drilling Fluid Program - ${overview?.wellName || 'Well'}`}</h1>
         <p>{sectionTitle}{subtitleParts.length ? ` - ${subtitleParts.join(' & ')}` : ''}</p>
       </header>
 
-      <section className="section-print-table" aria-label={`${sectionTitle} program`}>
-        <div className="section-table-title properties">Properties</div>
-        <div className="section-table-title hole">Hole Section</div>
-        <div className="section-table-title procedures">Procedures</div>
+      <PropertyStack
+        items={[
+          ['Profile', displayWellProfile(wellProfile)],
+          ['Top', data.topDepth || '-'],
+          ['Bottom', data.bottomDepth || '-'],
+          ['Hole Size', data.holeSize || 'TBC'],
+          ['Casing', data.casingSize || 'TBC'],
+          ['Density', data.densityRange || 'TBC'],
+          ['Viscosity', data.viscosityRange || 'TBC'],
+          ['Mud System', data.mudSystem || 'TBC'],
+        ]}
+      />
 
-        <aside className="section-properties-column">
-          <PropertyStack
-            items={[
-              ['Profile', displayWellProfile(wellProfile)],
-              ['Top', data.topDepth || '-'],
-              ['Bottom', data.bottomDepth || '-'],
-              ['Hole Size', data.holeSize || 'TBC'],
-              ['Casing', data.casingSize || 'TBC'],
-              ['Density', data.densityRange || 'TBC'],
-              ['Viscosity', data.viscosityRange || 'TBC'],
-              ['Mud System', data.mudSystem || 'TBC'],
-            ]}
-          />
-        </aside>
-
-        <HoleSectionDiagram section={data} profile={wellProfile} overview={overview} />
-
+      <section className={`section-program-layout ${wellProfile}`} aria-label={`${sectionTitle} program`}>
+        {wellProfile !== 'horizontal' ? <WellboreDiagram section={data} profile={wellProfile} overview={overview} /> : null}
         <ProcedureColumn section={data} />
+        {wellProfile === 'horizontal' ? <WellboreDiagram section={data} profile={wellProfile} overview={overview} /> : null}
       </section>
     </article>
   );
@@ -857,7 +852,7 @@ function MudProgramPage({ page, overview }) {
 
 function PropertyStack({ items }) {
   return (
-    <dl className="section-property-stack">
+    <dl className="section-property-strip">
       {items.map(([label, value]) => (
         <div key={label}>
           <dt>{label}</dt>
@@ -902,26 +897,49 @@ function ProcedureColumn({ section }) {
   );
 }
 
-function HoleSectionDiagram({ section, overview, profile }) {
+function WellboreDiagram({ section, overview, profile }) {
   const isHorizontal = profile === 'horizontal';
   const isBoth = profile === 'both';
   const title = isBoth ? 'Vertical and horizontal drilled hole section' : isHorizontal ? 'Horizontal drilled hole section' : 'Vertical drilled hole section';
+  const casingPath = isHorizontal ? 'M74 206 L190 206' : 'M210 50 L210 160';
+  const openPath = isHorizontal
+    ? 'M190 206 L456 206'
+    : isBoth
+      ? 'M210 160 L210 248 Q210 320 282 320 L456 320'
+      : 'M210 160 L210 360';
+  const top = section.topDepth || 'Top';
+  const bottom = section.bottomDepth || 'Bottom';
 
   return (
-    <figure className={`hole-section-card ${profile}`} aria-label={title}>
-      <div className="hole-css-diagram" role="img" aria-label={title}>
-        <span className="depth-rail" aria-hidden />
-        <span className="depth-word top">TOP</span>
-        <span className="depth-word bottom">BOTTOM</span>
-        <span className="depth-value top">{section.topDepth || 'Top'}</span>
-        <span className="depth-value bottom">{section.bottomDepth || 'Bottom'}</span>
-        <span className="hole-marker top" aria-hidden />
-        <span className="hole-marker bottom" aria-hidden />
-        <span className="hole-casing" aria-hidden />
-        <span className="hole-open vertical-run" aria-hidden />
-        <span className="hole-open horizontal-run" aria-hidden />
-        <span className="hole-open curve-run" aria-hidden />
-      </div>
+    <figure className={`wellbore-card ${profile}`} aria-label={title}>
+      <svg className="wellbore-svg" viewBox="0 0 520 420" role="img" aria-labelledby={`wellbore-${profile}-title`}>
+        <title id={`wellbore-${profile}-title`}>{title}</title>
+        <rect className="wellbore-frame" x="18" y="18" width="484" height="384" rx="22" />
+        <path className="depth-axis" d={isHorizontal ? 'M74 252 L456 252' : 'M150 50 L150 360'} />
+
+        <g className="depth-label top">
+          <line x1={isHorizontal ? 74 : 150} y1={isHorizontal ? 226 : 50} x2={isHorizontal ? 74 : 196} y2={isHorizontal ? 252 : 50} />
+          <text x={isHorizontal ? 74 : 108} y={isHorizontal ? 218 : 54}>{top}</text>
+          <text x={isHorizontal ? 74 : 108} y={isHorizontal ? 236 : 72}>TOP</text>
+        </g>
+
+        <g className="depth-label bottom">
+          <line x1={isHorizontal || isBoth ? 456 : 150} y1={isHorizontal ? 226 : isBoth ? 320 : 360} x2={isHorizontal || isBoth ? 456 : 196} y2={isHorizontal ? 252 : isBoth ? 320 : 360} />
+          <text x={isHorizontal || isBoth ? 456 : 108} y={isHorizontal ? 218 : isBoth ? 306 : 354}>{bottom}</text>
+          <text x={isHorizontal || isBoth ? 456 : 108} y={isHorizontal ? 236 : isBoth ? 324 : 372}>BOTTOM</text>
+        </g>
+
+        <path className="casing outer" d={casingPath} />
+        <path className="casing inner" d={casingPath} />
+        <path className="casing shine" d={casingPath} />
+
+        <path className="open-hole outer" d={openPath} />
+        <path className="open-hole inner" d={openPath} />
+        <path className="open-hole shine" d={openPath} />
+
+        <circle className="shoe-marker" cx={isHorizontal ? 190 : 210} cy={isHorizontal ? 206 : 160} r="6" />
+        <circle className="end-marker" cx={isHorizontal || isBoth ? 456 : 210} cy={isHorizontal ? 206 : isBoth ? 320 : 360} r="7" />
+      </svg>
       <figcaption>
         <strong>{section.topDepth || 'Top'} to {section.bottomDepth || 'Bottom'}</strong>
         <span>{displayWellProfile(profile)} drilled hole</span>
