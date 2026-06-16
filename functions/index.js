@@ -26,6 +26,12 @@ import {
   improveMudProgramPage,
   listMudProgramDrafts,
   generateUniquem3DScene,
+  listUniquem3DModels,
+  getUniquem3DModel,
+  createUniquem3DModel,
+  reviseUniquem3DModel,
+  restoreUniquem3DModelVersion,
+  archiveUniquem3DModel,
 } from './publicQuoteChat.js';
 
 export {
@@ -56,4 +62,10 @@ export {
   improveMudProgramPage,
   listMudProgramDrafts,
   generateUniquem3DScene,
+  listUniquem3DModels,
+  getUniquem3DModel,
+  createUniquem3DModel,
+  reviseUniquem3DModel,
+  restoreUniquem3DModelVersion,
+  archiveUniquem3DModel,
 };

@@ -82,6 +82,64 @@ const mockMudProgramDraft = {
   updatedAt: '2026-06-13T12:00:00.000Z',
 };
 
+const mockUniquemScene = {
+  title: 'Saved Stage Product',
+  summary: 'Saved model from the shared Uniquem library.',
+  cameraHint: { distance: 22, target: [0, 2, 0] },
+  objects: [
+    {
+      id: 'saved-stage-base',
+      type: 'platform',
+      label: 'Saved Stage',
+      position: [0, 0.1, 0],
+      scale: [6, 0.2, 3],
+      rotationY: 0,
+      color: '#334155',
+      materialKind: 'matte',
+      textureKind: 'plain',
+    },
+  ],
+};
+
+const mockUniquemModel = {
+  modelId: 'model-1',
+  title: 'Saved Stage Product',
+  summary: 'Saved model from the shared Uniquem library.',
+  scene: mockUniquemScene,
+  status: 'active',
+  createdBy: 'user-1',
+  createdByEmail: 'user@example.com',
+  createdAt: '2026-06-15T12:00:00.000Z',
+  updatedBy: 'user-1',
+  updatedByEmail: 'user@example.com',
+  updatedAt: '2026-06-15T12:30:00.000Z',
+  latestPrompt: 'Create a saved stage product.',
+  versionCount: 2,
+};
+
+const mockUniquemVersions = [
+  {
+    versionId: 'version-2',
+    scene: mockUniquemScene,
+    prompt: 'Add LED pillars.',
+    model: 'test-model',
+    source: 'ai-edit',
+    createdBy: 'user-1',
+    createdByEmail: 'user@example.com',
+    createdAt: '2026-06-15T12:30:00.000Z',
+  },
+  {
+    versionId: 'version-1',
+    scene: mockUniquemScene,
+    prompt: 'Create a saved stage product.',
+    model: 'test-model',
+    source: 'ai-generate',
+    createdBy: 'user-1',
+    createdByEmail: 'user@example.com',
+    createdAt: '2026-06-15T12:00:00.000Z',
+  },
+];
+
 jest.mock('./firebase', () => ({
   auth: {},
   db: {},
@@ -368,6 +426,55 @@ beforeEach(() => {
         },
       });
     }
+    if (path === 'listUniquem3DModels') {
+      return Promise.resolve({ items: [mockUniquemModel] });
+    }
+    if (path === 'getUniquem3DModel') {
+      return Promise.resolve({ model: mockUniquemModel, versions: mockUniquemVersions });
+    }
+    if (path === 'createUniquem3DModel') {
+      return Promise.resolve({
+        model: {
+          ...mockUniquemModel,
+          modelId: 'model-new',
+          title: 'Generated Stage Entrance',
+          summary: 'A new saved stage entrance.',
+          scene: {
+            ...mockUniquemScene,
+            title: 'Generated Stage Entrance',
+            summary: 'A new saved stage entrance.',
+          },
+          versionCount: 1,
+        },
+        versions: [{ ...mockUniquemVersions[1], versionId: 'version-new', prompt: body?.prompt || '' }],
+      });
+    }
+    if (path === 'reviseUniquem3DModel') {
+      return Promise.resolve({
+        model: {
+          ...mockUniquemModel,
+          title: 'Edited Stage Product',
+          summary: 'Edited saved model from AI.',
+          scene: {
+            ...mockUniquemScene,
+            title: 'Edited Stage Product',
+            summary: 'Edited saved model from AI.',
+          },
+          latestPrompt: body?.prompt || '',
+          versionCount: 3,
+        },
+        versions: [{ ...mockUniquemVersions[0], versionId: 'version-3', prompt: body?.prompt || '' }, ...mockUniquemVersions],
+      });
+    }
+    if (path === 'restoreUniquem3DModelVersion') {
+      return Promise.resolve({
+        model: mockUniquemModel,
+        versions: [{ ...mockUniquemVersions[0], versionId: 'version-restore', source: 'restore', prompt: 'Restored version version-1' }, ...mockUniquemVersions],
+      });
+    }
+    if (path === 'archiveUniquem3DModel') {
+      return Promise.resolve({ ok: true, modelId: body?.modelId });
+    }
     if (path === 'generateUniquem3DScene') {
       return Promise.resolve({
         ok: true,
@@ -502,29 +609,60 @@ describe('mini-app portal routing', () => {
     expect(window.location.pathname).toBe('/apps/uniquem/3d');
   });
 
-  test('Uniquem 3D Creator sends prompt and optional image to the AI scene endpoint', async () => {
+  test('Uniquem 3D Creator creates a saved model with prompt and optional image', async () => {
     const { postJson } = require('./lib/api');
     renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
 
     expect(await screen.findByRole('heading', { name: '3D Creator' })).toBeTruthy();
+    expect(await screen.findByText('Saved Stage Product')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'New' }));
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Create a festival stage gate with LED pillars.' } });
     const file = new File(['image'], 'stage-reference.webp', { type: 'image/webp' });
     fireEvent.change(screen.getByLabelText(/Image reference/i), { target: { files: [file] } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create Saved Model/i }));
 
     await waitFor(() =>
       expect(postJson).toHaveBeenCalledWith(
-        'generateUniquem3DScene',
+        'createUniquem3DModel',
         expect.objectContaining({
           prompt: 'Create a festival stage gate with LED pillars.',
           image: expect.objectContaining({ name: 'stage-reference.webp', contentType: 'image/webp' }),
-          previousScene: expect.any(Object),
         }),
         { authed: true }
       )
     );
     await waitFor(() => expect(screen.getAllByText('Generated Stage Entrance').length).toBeGreaterThanOrEqual(1));
-    expect(screen.getByText(/A stage entrance generated from the prompt/i)).toBeTruthy();
+    expect(screen.getByText(/A new saved stage entrance/i)).toBeTruthy();
+  });
+
+  test('Uniquem 3D Creator can select, edit, restore, and archive saved models', async () => {
+    const { postJson } = require('./lib/api');
+    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+
+    expect(await screen.findByText('Saved Stage Product')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Saved Stage Product/i }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('getUniquem3DModel', { modelId: 'model-1' }, { authed: true }));
+    expect(await screen.findByText(/Editing saved model/i)).toBeTruthy();
+    expect(screen.getByText(/Add LED pillars/i)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Make the LED wall wider and add side speakers.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Edit And Save/i }));
+    await waitFor(() =>
+      expect(postJson).toHaveBeenCalledWith(
+        'reviseUniquem3DModel',
+        expect.objectContaining({ modelId: 'model-1', prompt: 'Make the LED wall wider and add side speakers.' }),
+        { authed: true }
+      )
+    );
+    expect(await screen.findByText('Edited Stage Product')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Restore/i })[0]);
+    await waitFor(() =>
+      expect(postJson).toHaveBeenCalledWith('restoreUniquem3DModelVersion', expect.objectContaining({ modelId: 'model-1' }), { authed: true })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Archive Model/i }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('archiveUniquem3DModel', { modelId: 'model-1' }, { authed: true }));
   });
 
   test('basic users with Drilling Programs enabled can upload and review a mud program draft', async () => {

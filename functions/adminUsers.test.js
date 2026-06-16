@@ -116,6 +116,79 @@ test('Uniquem creator image validation accepts supported images only', () => {
   );
 });
 
+test('Uniquem saved model mapping normalizes active and archived records', () => {
+  const doc = {
+    id: 'model-1',
+    data: () => ({
+      modelId: 'model-1',
+      title: 'Saved Stage',
+      summary: 'Shared saved model',
+      status: 'archived',
+      scene: {
+        title: 'Saved Stage',
+        summary: 'Shared saved model',
+        cameraHint: { distance: 999, target: [0, 2, 0] },
+        objects: [
+          {
+            id: 'screen',
+            type: 'ledPanel',
+            label: 'Screen',
+            position: [0, 2, 0],
+            scale: [3, 2, 1],
+            rotationY: 0,
+            color: '#ec4899',
+            materialKind: 'screen',
+            textureKind: 'cosmic',
+          },
+        ],
+      },
+      versionCount: 2,
+    }),
+  };
+
+  const model = __testables.mapUniquem3DModelDoc(doc);
+  assert.equal(model.modelId, 'model-1');
+  assert.equal(model.status, 'archived');
+  assert.equal(model.versionCount, 2);
+  assert.equal(model.scene.cameraHint.distance, 70);
+  assert.equal(__testables.normalizeUniquemModelStatus('unexpected'), 'active');
+});
+
+test('Uniquem version mapping preserves source and normalized scene', () => {
+  const doc = {
+    id: 'version-1',
+    data: () => ({
+      versionId: 'version-1',
+      prompt: 'Add side speakers.',
+      model: 'test-model',
+      source: 'ai-edit',
+      scene: {
+        title: 'Version Scene',
+        summary: 'Version summary',
+        cameraHint: { distance: 22, target: [0, 2, 0] },
+        objects: [
+          {
+            id: 'speaker',
+            type: 'speakerStack',
+            label: 'Speaker',
+            position: [2, 0, 0],
+            scale: [1, 3, 1],
+            rotationY: 0,
+            color: '#111827',
+            materialKind: 'matte',
+            textureKind: 'plain',
+          },
+        ],
+      },
+    }),
+  };
+
+  const version = __testables.mapUniquem3DVersionDoc(doc);
+  assert.equal(version.versionId, 'version-1');
+  assert.equal(version.source, 'ai-edit');
+  assert.equal(version.scene.objects[0].type, 'speakerStack');
+});
+
 test('QuoteChem email templates render invite links', () => {
   const rendered = __emailTestables.buildTemplatedEmail({
     templateId: 'userInvite',

@@ -15,6 +15,7 @@ const EMAIL_TEMPLATE_COLLECTION = 'emailTemplates';
 const DRILLING_PROGRAM_TEMPLATE_COLLECTION = 'drillingProgramTemplates';
 const DRILLING_PROGRAM_RUN_COLLECTION = 'drillingProgramRuns';
 const MUD_PROGRAM_DRAFT_COLLECTION = 'mudProgramDrafts';
+const UNIQUEM_3D_MODEL_COLLECTION = 'uniquem3DModels';
 const OPENAI_REFERENCE_FILE_MAX_BYTES = 12 * 1024 * 1024;
 const OPENAI_REFERENCE_TOTAL_MAX_BYTES = 18 * 1024 * 1024;
 const MUD_PROGRAM_SOURCE_MAX_BYTES = 25 * 1024 * 1024;
@@ -609,6 +610,80 @@ function normalizeUniquemCreatorImage(image) {
     dataUrl,
     bytes,
   };
+}
+
+function normalizeUniquemModelStatus(value) {
+  return asString(value) === 'archived' ? 'archived' : 'active';
+}
+
+function mapUniquem3DModelDoc(doc) {
+  const data = doc.data() || {};
+  const scene = normalizeUniquemScene(data.scene || {});
+  return {
+    modelId: asString(data.modelId) || doc.id,
+    title: asString(data.title) || scene.title,
+    summary: asString(data.summary) || scene.summary,
+    scene,
+    status: normalizeUniquemModelStatus(data.status),
+    createdBy: asString(data.createdBy),
+    createdByEmail: asString(data.createdByEmail),
+    createdAt: toIso(data.createdAt),
+    updatedBy: asString(data.updatedBy),
+    updatedByEmail: asString(data.updatedByEmail),
+    updatedAt: toIso(data.updatedAt),
+    latestPrompt: asString(data.latestPrompt),
+    versionCount: Math.max(0, Number(data.versionCount || 0)),
+  };
+}
+
+function mapUniquem3DVersionDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    versionId: asString(data.versionId) || doc.id,
+    scene: normalizeUniquemScene(data.scene || {}),
+    prompt: asString(data.prompt),
+    model: asString(data.model),
+    source: ['ai-generate', 'ai-edit', 'restore'].includes(asString(data.source)) ? asString(data.source) : 'ai-edit',
+    createdBy: asString(data.createdBy),
+    createdByEmail: asString(data.createdByEmail),
+    createdAt: toIso(data.createdAt),
+  };
+}
+
+function buildUniquemVersionDoc({ versionId, scene, prompt, model, source, user }) {
+  return {
+    versionId,
+    scene: normalizeUniquemScene(scene),
+    prompt: asString(prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS),
+    model: asString(model).slice(0, 80),
+    source: ['ai-generate', 'ai-edit', 'restore'].includes(asString(source)) ? asString(source) : 'ai-edit',
+    createdBy: user.uid,
+    createdByEmail: user.email,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function loadActiveUniquem3DModel(modelId) {
+  const id = normalizeDocId(modelId);
+  if (!id) {
+    const err = new Error('modelId is required');
+    err.status = 400;
+    throw err;
+  }
+  const ref = db.collection(UNIQUEM_3D_MODEL_COLLECTION).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    const err = new Error('Model not found');
+    err.status = 404;
+    throw err;
+  }
+  const model = mapUniquem3DModelDoc(snap);
+  if (model.status === 'archived') {
+    const err = new Error('Model not found');
+    err.status = 404;
+    throw err;
+  }
+  return { ref, snap, model };
 }
 
 async function loadOwnedMudDraft(draftId, user) {
@@ -3089,6 +3164,218 @@ export const generateUniquem3DScene = onRequest(
   }
 );
 
+export const listUniquem3DModels = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await ensureUniquemAccess(req);
+    const snap = await db.collection(UNIQUEM_3D_MODEL_COLLECTION).where('status', '==', 'active').orderBy('updatedAt', 'desc').limit(100).get();
+    const items = snap.docs.map(mapUniquem3DModelDoc);
+    setCors(res);
+    res.status(200).json({ ok: true, items });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[listUniquem3DModels] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list 3D models');
+  }
+});
+
+export const getUniquem3DModel = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await ensureUniquemAccess(req);
+    const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
+    const versionSnap = await loaded.ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get();
+    const versions = versionSnap.docs.map(mapUniquem3DVersionDoc);
+    setCors(res);
+    res.status(200).json({ ok: true, model: loaded.model, versions });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[getUniquem3DModel] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to load 3D model');
+  }
+});
+
+export const createUniquem3DModel = onRequest(
+  { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    if (preflight(req, res)) return;
+    if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+    try {
+      const user = await ensureUniquemAccess(req);
+      const prompt = asString(req.body?.prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS);
+      if (!prompt) return jsonError(res, 400, 'Prompt is required.');
+      const image = normalizeUniquemCreatorImage(req.body?.image || null);
+      const generated = await callOpenAIUniquemScene({ prompt, image, previousScene: null });
+      const scene = normalizeUniquemScene(generated.scene);
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      const modelId = randomUUID();
+      const versionId = randomUUID();
+      const ref = db.collection(UNIQUEM_3D_MODEL_COLLECTION).doc(modelId);
+      await ref.set({
+        modelId,
+        title: scene.title,
+        summary: scene.summary,
+        scene,
+        status: 'active',
+        createdBy: user.uid,
+        createdByEmail: user.email,
+        createdAt: now,
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+        updatedAt: now,
+        latestPrompt: prompt,
+        versionCount: 1,
+      });
+      await ref.collection('versions').doc(versionId).set(
+        buildUniquemVersionDoc({
+          versionId,
+          scene,
+          prompt,
+          model: generated.model,
+          source: 'ai-generate',
+          user,
+        })
+      );
+
+      const [saved, versionSnap] = await Promise.all([ref.get(), ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get()]);
+      setCors(res);
+      res.status(200).json({ ok: true, model: mapUniquem3DModelDoc(saved), versions: versionSnap.docs.map(mapUniquem3DVersionDoc) });
+    } catch (error) {
+      const status = Number(error?.status) || 500;
+      logger.error('[createUniquem3DModel] failed', { error: error?.message || String(error) });
+      return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to create 3D model');
+    }
+  }
+);
+
+export const reviseUniquem3DModel = onRequest(
+  { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    if (preflight(req, res)) return;
+    if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+    try {
+      const user = await ensureUniquemAccess(req);
+      const prompt = asString(req.body?.prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS);
+      if (!prompt) return jsonError(res, 400, 'Prompt is required.');
+      const image = normalizeUniquemCreatorImage(req.body?.image || null);
+      const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
+      const generated = await callOpenAIUniquemScene({ prompt, image, previousScene: loaded.model.scene });
+      const scene = normalizeUniquemScene(generated.scene);
+      const versionId = randomUUID();
+      await loaded.ref.set(
+        {
+          title: scene.title,
+          summary: scene.summary,
+          scene,
+          updatedBy: user.uid,
+          updatedByEmail: user.email,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          latestPrompt: prompt,
+          versionCount: admin.firestore.FieldValue.increment(1),
+        },
+        { merge: true }
+      );
+      await loaded.ref.collection('versions').doc(versionId).set(
+        buildUniquemVersionDoc({
+          versionId,
+          scene,
+          prompt,
+          model: generated.model,
+          source: 'ai-edit',
+          user,
+        })
+      );
+
+      const [saved, versionSnap] = await Promise.all([loaded.ref.get(), loaded.ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get()]);
+      setCors(res);
+      res.status(200).json({ ok: true, model: mapUniquem3DModelDoc(saved), versions: versionSnap.docs.map(mapUniquem3DVersionDoc) });
+    } catch (error) {
+      const status = Number(error?.status) || 500;
+      logger.error('[reviseUniquem3DModel] failed', { error: error?.message || String(error) });
+      return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to revise 3D model');
+    }
+  }
+);
+
+export const restoreUniquem3DModelVersion = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
+    const sourceVersionId = normalizeDocId(req.body?.versionId);
+    if (!sourceVersionId) return jsonError(res, 400, 'versionId is required');
+    const sourceSnap = await loaded.ref.collection('versions').doc(sourceVersionId).get();
+    if (!sourceSnap.exists) return jsonError(res, 404, 'Version not found');
+    const sourceVersion = mapUniquem3DVersionDoc(sourceSnap);
+    const scene = normalizeUniquemScene(sourceVersion.scene);
+    const versionId = randomUUID();
+    await loaded.ref.set(
+      {
+        title: scene.title,
+        summary: scene.summary,
+        scene,
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        latestPrompt: `Restored version ${sourceVersionId}`,
+        versionCount: admin.firestore.FieldValue.increment(1),
+      },
+      { merge: true }
+    );
+    await loaded.ref.collection('versions').doc(versionId).set(
+      buildUniquemVersionDoc({
+        versionId,
+        scene,
+        prompt: `Restored version ${sourceVersionId}`,
+        model: sourceVersion.model,
+        source: 'restore',
+        user,
+      })
+    );
+
+    const [saved, versionSnap] = await Promise.all([loaded.ref.get(), loaded.ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get()]);
+    setCors(res);
+    res.status(200).json({ ok: true, model: mapUniquem3DModelDoc(saved), versions: versionSnap.docs.map(mapUniquem3DVersionDoc) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[restoreUniquem3DModelVersion] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to restore 3D model version');
+  }
+});
+
+export const archiveUniquem3DModel = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
+    await loaded.ref.set(
+      {
+        status: 'archived',
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    setCors(res);
+    res.status(200).json({ ok: true, modelId: loaded.model.modelId });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[archiveUniquem3DModel] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to archive 3D model');
+  }
+});
+
 export const listMudProgramDrafts = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
@@ -3386,4 +3673,8 @@ export const __testables = {
   normalizeUniquemSceneObject,
   isUniquemCreatorImageContentType,
   normalizeUniquemCreatorImage,
+  normalizeUniquemModelStatus,
+  mapUniquem3DModelDoc,
+  mapUniquem3DVersionDoc,
+  buildUniquemVersionDoc,
 };

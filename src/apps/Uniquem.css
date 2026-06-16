@@ -145,6 +145,109 @@
   align-items: stretch;
 }
 
+.creator-library-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 310px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.creator-library {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+.creator-library-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.creator-library-head span,
+.creator-model-meta span {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.creator-library-head button,
+.creator-library > button,
+.creator-history article button,
+.creator-archive-btn {
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.creator-library-head button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.creator-library > p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.creator-library > button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+}
+
+.creator-library > button.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+}
+
+.creator-library > button strong {
+  overflow-wrap: anywhere;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.creator-library > button span,
+.creator-library > button small {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.creator-model-meta {
+  display: grid;
+  gap: 3px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 10px;
+}
+
+.creator-model-meta strong {
+  overflow-wrap: anywhere;
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+
+.creator-model-meta small {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
 .creator-panel {
   display: grid;
   align-content: start;
@@ -243,6 +346,16 @@
   opacity: 0.56;
 }
 
+.creator-archive-btn {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
 .creator-error {
   border: 1px solid #fecaca;
   border-radius: 8px;
@@ -267,8 +380,20 @@
 }
 
 .creator-history article {
+  display: grid;
+  gap: 4px;
   border-top: 1px solid #e2e8f0;
   padding-top: 9px;
+}
+
+.creator-history article button {
+  justify-self: start;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  font-size: 0.78rem;
 }
 
 .creator-history strong,
@@ -403,6 +528,14 @@
 
   .creator-layout {
     grid-template-columns: 1fr;
+  }
+
+  .creator-library-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .creator-library {
+    max-height: none;
   }
 
   .creator-actions {
