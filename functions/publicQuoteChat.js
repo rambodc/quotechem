@@ -149,8 +149,8 @@ async function requireAdmin(req) {
   return user;
 }
 
-const MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'drilling-programs', 'user-access', 'account'];
-const ACCESS_MANAGED_MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'drilling-programs'];
+const MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'drilling-programs', 'uniquem', 'user-access', 'account'];
+const ACCESS_MANAGED_MINI_APP_IDS = ['quotes', 'drilling-fluids-report', 'drilling-programs', 'uniquem'];
 
 function normalizeMiniAppIds(value) {
   if (!Array.isArray(value)) return null;

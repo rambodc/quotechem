@@ -1,4 +1,4 @@
-import { FiClipboard, FiDroplet, FiFileText, FiShield, FiUser } from 'react-icons/fi';
+import { FiClipboard, FiDroplet, FiFileText, FiPackage, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
   {
@@ -37,6 +37,22 @@ export const MINI_APPS = [
     defaultVisibleForRoles: ['admin'],
     defaultPath: '/apps/drilling-programs',
     navItems: [],
+  },
+  {
+    id: 'uniquem',
+    label: 'Uniquem',
+    description: 'Manage warehouse inventory, pricing, shipping, orders, and 3D operations views.',
+    icon: FiPackage,
+    adminOnly: false,
+    defaultVisibleForRoles: ['admin'],
+    defaultPath: '/apps/uniquem/3d',
+    navItems: [
+      { path: '/apps/uniquem/inventory', label: 'Inventory' },
+      { path: '/apps/uniquem/price-list', label: 'Price List' },
+      { path: '/apps/uniquem/shipping', label: 'Shipping' },
+      { path: '/apps/uniquem/orders', label: 'Orders' },
+      { path: '/apps/uniquem/3d', label: '3D' },
+    ],
   },
   {
     id: 'user-access',

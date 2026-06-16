@@ -22,6 +22,7 @@ import DrillingFluidsReport from './apps/DrillingFluidsReport';
 import DrillingPrograms from './apps/DrillingPrograms';
 import OfflineDrillingFluidsReport from './apps/OfflineDrillingFluidsReport';
 import QuotesMiniApp from './apps/QuotesMiniApp';
+import Uniquem from './apps/Uniquem';
 import UserAccess from './admin/UserAccess';
 
 export const UserContext = createContext(null);
@@ -255,6 +256,55 @@ function App() {
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="drilling-programs" appPath="overview">
                 <DrillingPrograms />
+              </MiniAppRoute>
+            }
+          />
+
+          <Route
+            path="/apps/uniquem"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="overview">
+                <Navigate to="/apps/uniquem/3d" replace />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/inventory"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="inventory">
+                <Uniquem page="inventory" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/price-list"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="price-list">
+                <Uniquem page="price-list" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/shipping"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="shipping">
+                <Uniquem page="shipping" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/orders"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="orders">
+                <Uniquem page="orders" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/3d"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="3d">
+                <Uniquem page="3d" />
               </MiniAppRoute>
             }
           />

@@ -114,6 +114,21 @@ jest.mock('./lib/api', () => ({
   postJson: jest.fn(),
 }));
 
+jest.mock('three/examples/jsm/controls/OrbitControls', () => ({
+  OrbitControls: jest.fn().mockImplementation(() => ({
+    target: { set: jest.fn(), copy: jest.fn(), clone: jest.fn(() => ({ set: jest.fn(), copy: jest.fn() })) },
+    update: jest.fn(),
+    dispose: jest.fn(),
+    enableDamping: false,
+    dampingFactor: 0,
+    autoRotate: false,
+    autoRotateSpeed: 0,
+    minDistance: 0,
+    maxDistance: 0,
+    maxPolarAngle: 0,
+  })),
+}));
+
 jest.mock('./apps/drillingFluidsStore', () => ({
   listDrillingFluidReports: jest.fn(() => Promise.resolve(mockLocalReports)),
   saveDrillingFluidReport: jest.fn((report) => {
@@ -385,6 +400,7 @@ describe('mini-app portal routing', () => {
     expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
     expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.getByRole('link', { name: /Drilling Programs/i }).getAttribute('href')).toBe('/apps/drilling-programs');
+    expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/3d');
     expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -396,6 +412,7 @@ describe('mini-app portal routing', () => {
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /User Access/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -407,6 +424,7 @@ describe('mini-app portal routing', () => {
     expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
     expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
@@ -417,7 +435,42 @@ describe('mini-app portal routing', () => {
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
+  });
+
+  test('basic users with Uniquem enabled see it and can open the 3D page', async () => {
+    renderAt('/portal', 'user', ['uniquem']);
+
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/3d');
+    expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
+
+    cleanup();
+    renderAt('/apps/uniquem/3d', 'user', ['uniquem']);
+    expect(await screen.findByRole('heading', { name: '3D Warehouse' })).toBeTruthy();
+    expect(screen.getByTestId('uniquem-warehouse-canvas')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Auto/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Reset/i })).toBeTruthy();
+  });
+
+  test('Uniquem subpages render blank shells and base route opens 3D', async () => {
+    const cases = [
+      ['/apps/uniquem/inventory', 'Inventory'],
+      ['/apps/uniquem/price-list', 'Price List'],
+      ['/apps/uniquem/shipping', 'Shipping'],
+      ['/apps/uniquem/orders', 'Orders'],
+    ];
+
+    for (const [path, title] of cases) {
+      renderAt(path, 'admin');
+      expect(await screen.findByRole('heading', { name: title })).toBeTruthy();
+      cleanup();
+    }
+
+    renderAt('/apps/uniquem', 'admin');
+    expect(await screen.findByRole('heading', { name: '3D Warehouse' })).toBeTruthy();
+    expect(window.location.pathname).toBe('/apps/uniquem/3d');
   });
 
   test('basic users with Drilling Programs enabled can upload and review a mud program draft', async () => {
@@ -510,10 +563,10 @@ describe('mini-app portal routing', () => {
   });
 
   test('basic users are redirected away from disabled mini apps', async () => {
-    renderAt('/apps/drilling-fluids-report', 'user', []);
+    renderAt('/apps/uniquem/3d', 'user', []);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Testing Offline' })).not.toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '3D Warehouse' })).not.toBeTruthy();
     expect(window.location.pathname).toBe('/portal');
   });
 
@@ -648,6 +701,7 @@ describe('mini-app portal routing', () => {
     expect(screen.getByRole('button', { name: /Quotes/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Testing Offline/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Drilling Programs/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Uniquem/i })).toBeTruthy();
     const sendButtons = screen.getAllByRole('button', { name: /^Send invite$/i });
     fireEvent.click(sendButtons[sendButtons.length - 1]);
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminInviteUser', expect.objectContaining({ email: 'new@example.com' }), { authed: true }));

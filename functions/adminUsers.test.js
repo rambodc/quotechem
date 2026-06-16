@@ -12,10 +12,11 @@ test('temporary password validation rejects shorter values', () => {
 });
 
 test('managed mini app normalization includes access-managed apps only', () => {
-  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-fluids-report', 'drilling-programs', 'account']), [
+  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-fluids-report', 'drilling-programs', 'uniquem', 'account']), [
     'quotes',
     'drilling-fluids-report',
     'drilling-programs',
+    'uniquem',
   ]);
 });
 
