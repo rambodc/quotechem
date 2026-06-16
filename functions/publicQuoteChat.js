@@ -18,6 +18,12 @@ const MUD_PROGRAM_DRAFT_COLLECTION = 'mudProgramDrafts';
 const OPENAI_REFERENCE_FILE_MAX_BYTES = 12 * 1024 * 1024;
 const OPENAI_REFERENCE_TOTAL_MAX_BYTES = 18 * 1024 * 1024;
 const MUD_PROGRAM_SOURCE_MAX_BYTES = 25 * 1024 * 1024;
+const UNIQUEM_CREATOR_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+const UNIQUEM_CREATOR_PROMPT_MAX_CHARS = 2200;
+const UNIQUEM_SCENE_OBJECT_MAX = 80;
+const UNIQUEM_OBJECT_TYPES = ['box', 'cylinder', 'plane', 'platform', 'stairs', 'trussTower', 'speakerStack', 'ledPanel', 'lightBeam', 'label'];
+const UNIQUEM_MATERIAL_KINDS = ['matte', 'metal', 'glow', 'screen'];
+const UNIQUEM_TEXTURE_KINDS = ['plain', 'grid', 'cosmic', 'sunset'];
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 
@@ -473,6 +479,138 @@ async function ensureMudProgramAccess(req) {
   return user;
 }
 
+async function ensureUniquemAccess(req) {
+  const user = await authenticateRequest(req);
+  const userSnap = await db.collection('users').doc(user.uid).get();
+  const appUser = userSnap.data() || {};
+  const allowed = user.role === 'admin' || normalizeMiniAppIds(appUser.enabledMiniApps)?.includes('uniquem');
+  if (!allowed) {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
+  }
+  return user;
+}
+
+function clampNumber(value, min, max, fallback = 0) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(max, Math.max(min, num));
+}
+
+function normalizeVector3(value, fallback = [0, 0, 0], min = -35, max = 35) {
+  const source = Array.isArray(value) ? value : [];
+  return [0, 1, 2].map((index) => clampNumber(source[index], min, max, fallback[index]));
+}
+
+function normalizeHexColor(value, fallback = '#64748b') {
+  const text = asString(value);
+  return /^#[0-9a-fA-F]{6}$/.test(text) ? text.toLowerCase() : fallback;
+}
+
+function normalizeUniquemSceneObject(item = {}, index = 0) {
+  const type = asString(item.type);
+  if (!UNIQUEM_OBJECT_TYPES.includes(type)) return null;
+  const materialKind = UNIQUEM_MATERIAL_KINDS.includes(asString(item.materialKind)) ? asString(item.materialKind) : 'matte';
+  const textureKind = UNIQUEM_TEXTURE_KINDS.includes(asString(item.textureKind)) ? asString(item.textureKind) : 'plain';
+  return {
+    id: asString(item.id).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || `object-${index + 1}`,
+    type,
+    label: asString(item.label).slice(0, 48),
+    position: normalizeVector3(item.position, [0, 0.5, 0], -35, 35),
+    scale: normalizeVector3(item.scale, [1, 1, 1], 0.05, 14),
+    rotationY: clampNumber(item.rotationY, -Math.PI * 2, Math.PI * 2, 0),
+    color: normalizeHexColor(item.color),
+    materialKind,
+    textureKind,
+  };
+}
+
+function fallbackUniquemScene() {
+  return {
+    title: 'Generated Object Group',
+    summary: 'The request produced a safe starter object group. Regenerate with more detail for a richer preview.',
+    cameraHint: { distance: 24, target: [0, 2, 0] },
+    objects: [
+      {
+        id: 'concept-platform',
+        type: 'platform',
+        label: 'Base',
+        position: [0, 0.1, 0],
+        scale: [7, 0.2, 4],
+        rotationY: 0,
+        color: '#334155',
+        materialKind: 'matte',
+        textureKind: 'plain',
+      },
+      {
+        id: 'concept-panel',
+        type: 'ledPanel',
+        label: 'Concept',
+        position: [0, 2.4, -1.9],
+        scale: [4, 2.4, 1],
+        rotationY: 0,
+        color: '#db2777',
+        materialKind: 'screen',
+        textureKind: 'cosmic',
+      },
+    ],
+  };
+}
+
+function normalizeUniquemScene(value = {}) {
+  const rawObjects = Array.isArray(value.objects) ? value.objects : [];
+  const objects = rawObjects
+    .slice(0, UNIQUEM_SCENE_OBJECT_MAX)
+    .map((item, index) => normalizeUniquemSceneObject(item, index))
+    .filter(Boolean);
+  if (!objects.length) return fallbackUniquemScene();
+
+  return {
+    title: asString(value.title).slice(0, 80) || 'Generated 3D Concept',
+    summary: asString(value.summary).slice(0, 220) || 'A procedural 3D object group generated from the prompt.',
+    cameraHint: {
+      distance: clampNumber(value.cameraHint?.distance, 8, 70, 28),
+      target: normalizeVector3(value.cameraHint?.target, [0, 2, 0], -30, 30),
+    },
+    objects,
+  };
+}
+
+function isUniquemCreatorImageContentType(value) {
+  return ['image/png', 'image/jpeg', 'image/webp'].includes(asString(value).toLowerCase());
+}
+
+function normalizeUniquemCreatorImage(image) {
+  if (!image) return null;
+  const contentType = asString(image.contentType).toLowerCase();
+  if (!isUniquemCreatorImageContentType(contentType)) {
+    const err = new Error('Use a PNG, JPG, or WebP image.');
+    err.status = 400;
+    throw err;
+  }
+  const dataUrl = asString(image.dataUrl);
+  const prefix = `data:${contentType};base64,`;
+  if (!dataUrl.startsWith(prefix)) {
+    const err = new Error('Image data is invalid.');
+    err.status = 400;
+    throw err;
+  }
+  const base64 = dataUrl.slice(prefix.length);
+  const bytes = Buffer.byteLength(base64, 'base64');
+  if (!bytes || bytes > UNIQUEM_CREATOR_IMAGE_MAX_BYTES) {
+    const err = new Error('Image must be 8 MB or smaller.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    name: asString(image.name).slice(0, 120) || 'reference-image',
+    contentType,
+    dataUrl,
+    bytes,
+  };
+}
+
 async function loadOwnedMudDraft(draftId, user) {
   const id = normalizeDocId(draftId);
   if (!id) {
@@ -621,6 +759,124 @@ async function callOpenAIMudPageImprove({ draft, page, instruction }) {
 
   const parsed = parseOpenAIJson(extractResponsesText(await response.json()));
   return normalizeMudPages([parsed], draft.overview, draft.sections)[0];
+}
+
+function uniquemSceneJsonSchema() {
+  const vectorSchema = {
+    type: 'array',
+    minItems: 3,
+    maxItems: 3,
+    items: { type: 'number' },
+  };
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      title: { type: 'string' },
+      summary: { type: 'string' },
+      cameraHint: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          distance: { type: 'number' },
+          target: vectorSchema,
+        },
+        required: ['distance', 'target'],
+      },
+      objects: {
+        type: 'array',
+        maxItems: UNIQUEM_SCENE_OBJECT_MAX,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: { type: 'string' },
+            type: { type: 'string', enum: UNIQUEM_OBJECT_TYPES },
+            label: { type: 'string' },
+            position: vectorSchema,
+            scale: vectorSchema,
+            rotationY: { type: 'number' },
+            color: { type: 'string' },
+            materialKind: { type: 'string', enum: UNIQUEM_MATERIAL_KINDS },
+            textureKind: { type: 'string', enum: UNIQUEM_TEXTURE_KINDS },
+          },
+          required: ['id', 'type', 'label', 'position', 'scale', 'rotationY', 'color', 'materialKind', 'textureKind'],
+        },
+      },
+    },
+    required: ['title', 'summary', 'cameraHint', 'objects'],
+  };
+}
+
+async function callOpenAIUniquemScene({ prompt, image, previousScene }) {
+  const apiKey = readSecret(OPENAI_API_KEY);
+  const model = asString(process.env.OPENAI_DOCUMENT_MODEL) || 'gpt-5.5';
+  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+
+  const content = [
+    {
+      type: 'input_text',
+      text: [
+        'Create one procedural Three.js object group as JSON for QuoteChem Uniquem 3D Creator.',
+        'Describe the requested object with safe primitive objects only. Do not return code, URLs, external assets, GLB files, SVG, CSS, or markdown.',
+        'Use these object types only: box, cylinder, plane, platform, stairs, trussTower, speakerStack, ledPanel, lightBeam, label.',
+        'Use scale and positions in meters. Keep the full object group near the origin and camera-friendly.',
+        'For screens, signage, neon, or artwork, use ledPanel with textureKind cosmic, sunset, or grid.',
+        'Use labels sparingly for useful signage or major parts.',
+        `User prompt: ${prompt}`,
+        previousScene ? `Previous scene to refine or replace: ${JSON.stringify(normalizeUniquemScene(previousScene)).slice(0, 9000)}` : 'No previous scene.',
+      ].join('\n'),
+    },
+  ];
+  if (image) {
+    content.unshift({
+      type: 'input_image',
+      image_url: image.dataUrl,
+    });
+  }
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      reasoning: { effort: 'medium' },
+      input: [
+        {
+          role: 'system',
+          content:
+            'You convert text and image references into compact procedural 3D scene JSON. Output must obey the provided schema. Prefer recognizable arrangements over excessive object counts.',
+        },
+        {
+          role: 'user',
+          content,
+        },
+      ],
+      text: {
+        verbosity: 'medium',
+        format: {
+          type: 'json_schema',
+          name: 'uniquem_3d_scene',
+          strict: true,
+          schema: uniquemSceneJsonSchema(),
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const failureText = await response.text();
+    throw new Error(`OpenAI Uniquem 3D scene generation failed: ${response.status} ${failureText}`);
+  }
+
+  const parsed = parseOpenAIJson(extractResponsesText(await response.json()));
+  return {
+    scene: normalizeUniquemScene(parsed),
+    model,
+  };
 }
 
 function selectedProgramOptions(template, selections = {}) {
@@ -2809,6 +3065,30 @@ export const improveMudProgramPage = onRequest(
   }
 );
 
+export const generateUniquem3DScene = onRequest(
+  { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    if (preflight(req, res)) return;
+    if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+    try {
+      await ensureUniquemAccess(req);
+      const prompt = asString(req.body?.prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS);
+      if (!prompt) return jsonError(res, 400, 'Prompt is required.');
+      const image = normalizeUniquemCreatorImage(req.body?.image || null);
+      const previousScene = req.body?.previousScene && typeof req.body.previousScene === 'object' ? req.body.previousScene : null;
+
+      const generated = await callOpenAIUniquemScene({ prompt, image, previousScene });
+      setCors(res);
+      res.status(200).json({ ok: true, scene: generated.scene, model: generated.model });
+    } catch (error) {
+      const status = Number(error?.status) || 500;
+      logger.error('[generateUniquem3DScene] failed', { error: error?.message || String(error) });
+      return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to generate 3D scene');
+    }
+  }
+);
+
 export const listMudProgramDrafts = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
@@ -3102,4 +3382,8 @@ export const __testables = {
   buildMudProgramPagesFromExtraction,
   firestoreSafeGeneratedProgramContent,
   isOpenAIReferenceAsset,
+  normalizeUniquemScene,
+  normalizeUniquemSceneObject,
+  isUniquemCreatorImageContentType,
+  normalizeUniquemCreatorImage,
 };

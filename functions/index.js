@@ -25,6 +25,7 @@ import {
   updateMudProgramDraft,
   improveMudProgramPage,
   listMudProgramDrafts,
+  generateUniquem3DScene,
 } from './publicQuoteChat.js';
 
 export {
@@ -54,4 +55,5 @@ export {
   updateMudProgramDraft,
   improveMudProgramPage,
   listMudProgramDrafts,
+  generateUniquem3DScene,
 };

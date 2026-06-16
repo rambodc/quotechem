@@ -1,5 +1,6 @@
 import React from 'react';
 import Warehouse3D from './Warehouse3D';
+import Uniquem3DCreator from './Uniquem3DCreator';
 import './Uniquem.css';
 
 const PAGE_TITLES = {
@@ -24,5 +25,6 @@ function UniquemBlankPage({ page }) {
 
 export default function Uniquem({ page }) {
   if (page === '3d') return <Warehouse3D />;
+  if (page === '3d-creator') return <Uniquem3DCreator />;
   return <UniquemBlankPage page={page} />;
 }

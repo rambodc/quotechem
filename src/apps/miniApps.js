@@ -52,6 +52,7 @@ export const MINI_APPS = [
       { path: '/apps/uniquem/shipping', label: 'Shipping' },
       { path: '/apps/uniquem/orders', label: 'Orders' },
       { path: '/apps/uniquem/3d', label: '3D' },
+      { path: '/apps/uniquem/3d-creator', label: '3D Creator' },
     ],
   },
   {

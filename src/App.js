@@ -308,6 +308,14 @@ function App() {
               </MiniAppRoute>
             }
           />
+          <Route
+            path="/apps/uniquem/3d-creator"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="3d-creator">
+                <Uniquem page="3d-creator" />
+              </MiniAppRoute>
+            }
+          />
 
           <Route
             path="/apps/user-access"

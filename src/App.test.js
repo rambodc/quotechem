@@ -368,6 +368,30 @@ beforeEach(() => {
         },
       });
     }
+    if (path === 'generateUniquem3DScene') {
+      return Promise.resolve({
+        ok: true,
+        model: 'test-model',
+        scene: {
+          title: 'Generated Stage Entrance',
+          summary: 'A stage entrance generated from the prompt.',
+          cameraHint: { distance: 22, target: [0, 2, 0] },
+          objects: [
+            {
+              id: 'stage-base',
+              type: 'platform',
+              label: 'Stage',
+              position: [0, 0.1, 0],
+              scale: [6, 0.2, 3],
+              rotationY: 0,
+              color: '#334155',
+              materialKind: 'matte',
+              textureKind: 'plain',
+            },
+          ],
+        },
+      });
+    }
     return Promise.resolve({});
   });
 });
@@ -452,6 +476,11 @@ describe('mini-app portal routing', () => {
     expect(screen.getByTestId('uniquem-warehouse-canvas')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Auto/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Reset/i })).toBeTruthy();
+
+    cleanup();
+    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+    expect(await screen.findByRole('heading', { name: '3D Creator' })).toBeTruthy();
+    expect(screen.getByTestId('uniquem-creator-canvas')).toBeTruthy();
   });
 
   test('Uniquem subpages render blank shells and base route opens 3D', async () => {
@@ -471,6 +500,31 @@ describe('mini-app portal routing', () => {
     renderAt('/apps/uniquem', 'admin');
     expect(await screen.findByRole('heading', { name: '3D Warehouse' })).toBeTruthy();
     expect(window.location.pathname).toBe('/apps/uniquem/3d');
+  });
+
+  test('Uniquem 3D Creator sends prompt and optional image to the AI scene endpoint', async () => {
+    const { postJson } = require('./lib/api');
+    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+
+    expect(await screen.findByRole('heading', { name: '3D Creator' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Create a festival stage gate with LED pillars.' } });
+    const file = new File(['image'], 'stage-reference.webp', { type: 'image/webp' });
+    fireEvent.change(screen.getByLabelText(/Image reference/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate/i }));
+
+    await waitFor(() =>
+      expect(postJson).toHaveBeenCalledWith(
+        'generateUniquem3DScene',
+        expect.objectContaining({
+          prompt: 'Create a festival stage gate with LED pillars.',
+          image: expect.objectContaining({ name: 'stage-reference.webp', contentType: 'image/webp' }),
+          previousScene: expect.any(Object),
+        }),
+        { authed: true }
+      )
+    );
+    await waitFor(() => expect(screen.getAllByText('Generated Stage Entrance').length).toBeGreaterThanOrEqual(1));
+    expect(screen.getByText(/A stage entrance generated from the prompt/i)).toBeTruthy();
   });
 
   test('basic users with Drilling Programs enabled can upload and review a mud program draft', async () => {
