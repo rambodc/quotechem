@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FiEdit2, FiMail, FiPlus, FiRefreshCw, FiSend, FiX } from 'react-icons/fi';
+import { FiEdit2, FiMail, FiMoreVertical, FiPlus, FiRefreshCw, FiSlash, FiX } from 'react-icons/fi';
 import { postJson } from '../lib/api';
 import { ACCESS_MANAGED_MINI_APPS, defaultMiniAppIdsForRole } from '../apps/registry/miniApps';
 import './UserAccess.css';
@@ -15,6 +15,8 @@ function normalizeEnabled(value, role) {
 function buildEmptyDraft() {
   return {
     uid: '',
+    inviteId: '',
+    rowType: 'user',
     firstName: '',
     lastName: '',
     email: '',
@@ -45,6 +47,18 @@ function formatInviteStatus(invite) {
   return invite.status || 'pending';
 }
 
+function statusLabel(row) {
+  if (row.rowType === 'user') return 'Active';
+  const status = formatInviteStatus(row);
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function displayNameForRow(row) {
+  if (row.rowType === 'user') return displayNameForUser(row);
+  const name = `${row?.firstName || ''} ${row?.lastName || ''}`.trim();
+  return name || 'Invited user';
+}
+
 function MiniAppToggle({ app, checked, onChange }) {
   const Icon = app.icon;
   return (
@@ -60,17 +74,23 @@ function MiniAppToggle({ app, checked, onChange }) {
 export default function UserAccess() {
   const [users, setUsers] = useState([]);
   const [invites, setInvites] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [templateDraft, setTemplateDraft] = useState(null);
-  const [testEmail, setTestEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [drawerMode, setDrawerMode] = useState('');
   const [draft, setDraft] = useState(buildEmptyDraft);
+  const [openMenuKey, setOpenMenuKey] = useState('');
   const managedAppIds = useMemo(() => ACCESS_MANAGED_MINI_APPS.map((app) => app.id), []);
+  const roster = useMemo(() => {
+    const userEmails = new Set(users.map((user) => String(user.email || '').toLowerCase()).filter(Boolean));
+    const userRows = users.map((user) => ({ ...user, rowType: 'user', rosterKey: `user:${user.uid}` }));
+    const inviteRows = invites
+      .map((invite) => ({ ...invite, rowType: 'invite', rosterKey: `invite:${invite.inviteId}`, status: formatInviteStatus(invite) }))
+      .filter((invite) => invite.status !== 'cancelled')
+      .filter((invite) => !(invite.status === 'accepted' && userEmails.has(String(invite.email || '').toLowerCase())));
+    return [...userRows, ...inviteRows];
+  }, [invites, users]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -86,27 +106,9 @@ export default function UserAccess() {
     }
   }, []);
 
-  const loadTemplates = useCallback(async () => {
-    try {
-      const data = await postJson('adminListEmailTemplates', {}, { authed: true });
-      const items = Array.isArray(data.items) ? data.items : [];
-      setTemplates(items);
-      setSelectedTemplateId((current) => current || items[0]?.templateId || '');
-      setTemplateDraft((current) => current || items[0] || null);
-    } catch (err) {
-      setError(err?.message || 'Failed to load email templates.');
-    }
-  }, []);
-
   useEffect(() => {
     loadUsers();
-    loadTemplates();
-  }, [loadUsers, loadTemplates]);
-
-  useEffect(() => {
-    const selected = templates.find((template) => template.templateId === selectedTemplateId);
-    if (selected) setTemplateDraft({ ...selected });
-  }, [selectedTemplateId, templates]);
+  }, [loadUsers]);
 
   const openCreate = () => {
     setError('');
@@ -120,6 +122,8 @@ export default function UserAccess() {
     setStatus('');
     setDraft({
       uid: user.uid,
+      inviteId: '',
+      rowType: 'user',
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       email: user.email || '',
@@ -129,6 +133,22 @@ export default function UserAccess() {
     setDrawerMode('edit');
   };
 
+  const openEditInvite = (invite) => {
+    setError('');
+    setStatus('');
+    setDraft({
+      uid: '',
+      inviteId: invite.inviteId,
+      rowType: 'invite',
+      firstName: invite.firstName || '',
+      lastName: invite.lastName || '',
+      email: invite.email || '',
+      role: invite.role || 'user',
+      enabledMiniApps: normalizeEnabled(invite.enabledMiniApps, invite.role || 'user'),
+    });
+    setDrawerMode('edit-invite');
+  };
+
   const closeDrawer = () => {
     if (saving) return;
     setDrawerMode('');
@@ -136,7 +156,6 @@ export default function UserAccess() {
   };
 
   const updateDraft = (patch) => setDraft((prev) => ({ ...prev, ...patch }));
-  const updateTemplateDraft = (patch) => setTemplateDraft((prev) => ({ ...prev, ...patch }));
 
   const changeRole = (role) => {
     setDraft((prev) => ({
@@ -177,6 +196,20 @@ export default function UserAccess() {
           { authed: true }
         );
         setStatus(`Invite sent to ${draft.email}.`);
+      } else if (drawerMode === 'edit-invite') {
+        await postJson(
+          'adminUpdateInvite',
+          {
+            inviteId: draft.inviteId,
+            email: draft.email,
+            firstName: draft.firstName,
+            lastName: draft.lastName,
+            role: draft.role,
+            enabledMiniApps,
+          },
+          { authed: true }
+        );
+        setStatus(`Updated invite for ${draft.email}.`);
       } else {
         await postJson(
           'adminUpdateUserAccess',
@@ -216,36 +249,27 @@ export default function UserAccess() {
     }
   };
 
-  const saveTemplate = async () => {
-    if (!templateDraft) return;
+  const cancelInvite = async (invite) => {
     setError('');
     setStatus('');
     setSaving(true);
     try {
-      const data = await postJson('adminSaveEmailTemplate', templateDraft, { authed: true });
-      setStatus('Email template saved.');
-      setTemplates((prev) => prev.map((item) => (item.templateId === data.template?.templateId ? data.template : item)));
-      setTemplateDraft(data.template || templateDraft);
+      await postJson('adminCancelInvite', { inviteId: invite.inviteId }, { authed: true });
+      setStatus(`Invite cancelled for ${invite.email}.`);
+      await loadUsers();
     } catch (err) {
-      setError(err?.message || 'Failed to save email template.');
+      setError(err?.message || 'Failed to cancel invite.');
     } finally {
       setSaving(false);
     }
   };
 
-  const sendTestEmail = async () => {
-    if (!templateDraft) return;
-    setError('');
-    setStatus('');
-    setSaving(true);
-    try {
-      await postJson('adminSendTestEmail', { templateId: templateDraft.templateId, to: testEmail }, { authed: true });
-      setStatus(`Test email sent to ${testEmail}.`);
-    } catch (err) {
-      setError(err?.message || 'Failed to send test email.');
-    } finally {
-      setSaving(false);
-    }
+  const runMenuAction = (row, action) => {
+    setOpenMenuKey('');
+    if (action === 'edit-user') openEdit(row);
+    if (action === 'edit-invite') openEditInvite(row);
+    if (action === 'resend-invite') resendInvite(row);
+    if (action === 'cancel-invite') cancelInvite(row);
   };
 
   return (
@@ -273,118 +297,71 @@ export default function UserAccess() {
         </div>
 
         <div className="access-user-list">
-          {users.map((user) => (
-            <article key={user.uid} className="access-user-row">
+          {roster.map((row) => (
+            <article key={row.rosterKey} className={`access-user-row ${row.rowType === 'invite' ? 'invite-row' : ''}`}>
               <div className="access-user-main">
-                <span className="access-avatar">
-                  {user.profilePhotoThumbUrl || user.profilePhotoUrl ? (
-                    <img src={user.profilePhotoThumbUrl || user.profilePhotoUrl} alt="" />
+                <span className={`access-avatar ${row.rowType === 'invite' ? 'invite' : ''}`}>
+                  {row.rowType === 'user' && (row.profilePhotoThumbUrl || row.profilePhotoUrl) ? (
+                    <img src={row.profilePhotoThumbUrl || row.profilePhotoUrl} alt="" />
+                  ) : row.rowType === 'invite' ? (
+                    <FiMail size={18} />
                   ) : (
-                    initialsForUser(user)
+                    initialsForUser(row)
                   )}
                 </span>
                 <span className="access-user-copy">
-                  <strong>{displayNameForUser(user)}</strong>
-                  <span>{user.email || user.uid}</span>
+                  <strong>{displayNameForRow(row)}</strong>
+                  <span>{row.email || row.uid}</span>
                 </span>
               </div>
-              <span className={`access-role ${user.role === 'admin' ? 'admin' : ''}`}>{user.role || 'user'}</span>
-              <button type="button" className="action-btn" onClick={() => openEdit(user)}>
-                <FiEdit2 size={15} />
-                Edit
-              </button>
+              <span className={`access-role ${row.rowType === 'user' ? 'active' : row.status}`}>{statusLabel(row)}</span>
+              <div className="access-menu-wrap">
+                <button
+                  type="button"
+                  className="access-menu-button"
+                  aria-label={`Actions for ${row.email || displayNameForRow(row)}`}
+                  aria-expanded={openMenuKey === row.rosterKey}
+                  onClick={() => setOpenMenuKey((current) => (current === row.rosterKey ? '' : row.rosterKey))}
+                >
+                  <FiMoreVertical size={17} />
+                </button>
+                {openMenuKey === row.rosterKey ? (
+                  <div className="access-menu" role="menu">
+                    {row.rowType === 'user' ? (
+                      <button type="button" role="menuitem" onClick={() => runMenuAction(row, 'edit-user')}>
+                        <FiEdit2 size={15} />
+                        Edit
+                      </button>
+                    ) : (
+                      <>
+                        <button type="button" role="menuitem" onClick={() => runMenuAction(row, 'edit-invite')}>
+                          <FiEdit2 size={15} />
+                          Edit invite
+                        </button>
+                        <button type="button" role="menuitem" disabled={saving || !['pending', 'expired'].includes(row.status)} onClick={() => runMenuAction(row, 'resend-invite')}>
+                          <FiRefreshCw size={15} />
+                          Resend invite
+                        </button>
+                        <button type="button" role="menuitem" disabled={saving || row.status === 'accepted'} onClick={() => runMenuAction(row, 'cancel-invite')}>
+                          <FiSlash size={15} />
+                          Cancel invite
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </article>
           ))}
-          {!loading && users.length === 0 ? <p className="meta">No users found.</p> : null}
+          {!loading && roster.length === 0 ? <p className="meta">No users found.</p> : null}
           {loading ? <p className="meta">Loading users...</p> : null}
         </div>
       </section>
 
-      <section className="access-panel">
-        <div className="access-section-head">
-          <h2>Pending invites</h2>
-          <span className="meta">{invites.length} invites</span>
-        </div>
-        <div className="access-user-list">
-          {invites.map((invite) => (
-            <article key={invite.inviteId} className="access-user-row invite-row">
-              <div className="access-user-main">
-                <span className="access-avatar invite">
-                  <FiMail size={18} />
-                </span>
-                <span className="access-user-copy">
-                  <strong>{invite.email}</strong>
-                  <span>{formatInviteStatus(invite)}</span>
-                </span>
-              </div>
-              <span className={`access-role ${formatInviteStatus(invite)}`}>{formatInviteStatus(invite)}</span>
-              <button type="button" className="action-btn" disabled={saving || formatInviteStatus(invite) !== 'pending'} onClick={() => resendInvite(invite)}>
-                <FiRefreshCw size={15} />
-                Resend
-              </button>
-            </article>
-          ))}
-          {!invites.length ? <p className="meta">No pending invites.</p> : null}
-        </div>
-      </section>
-
-      <section className="access-panel email-template-panel">
-        <div className="access-section-head">
-          <div>
-            <h2>Email Templates</h2>
-            <p className="meta">Gmail SMTP sends these from the configured QuoteChem sender.</p>
-          </div>
-          <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
-            {templates.map((template) => (
-              <option key={template.templateId} value={template.templateId}>
-                {template.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {templateDraft ? (
-          <div className="email-template-grid">
-            <label>
-              <span>Subject</span>
-              <input value={templateDraft.subject || ''} onChange={(event) => updateTemplateDraft({ subject: event.target.value })} />
-            </label>
-            <label>
-              <span>Button label</span>
-              <input value={templateDraft.actionLabel || ''} onChange={(event) => updateTemplateDraft({ actionLabel: event.target.value })} />
-            </label>
-            <label>
-              <span>Text body</span>
-              <textarea rows={7} value={templateDraft.text || ''} onChange={(event) => updateTemplateDraft({ text: event.target.value })} />
-            </label>
-            <label>
-              <span>HTML body</span>
-              <textarea rows={7} value={templateDraft.html || ''} onChange={(event) => updateTemplateDraft({ html: event.target.value })} />
-            </label>
-            <label className="span-2">
-              <span>Footer</span>
-              <input value={templateDraft.footer || ''} onChange={(event) => updateTemplateDraft({ footer: event.target.value })} />
-            </label>
-            <div className="email-template-actions span-2">
-              <button type="button" className="primary-btn" disabled={saving} onClick={saveTemplate}>
-                Save template
-              </button>
-              <input type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="test@example.com" />
-              <button type="button" className="action-btn" disabled={saving || !testEmail} onClick={sendTestEmail}>
-                <FiSend size={15} />
-                Send test
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p className="meta">Loading email templates...</p>
-        )}
-      </section>
-
       {drawerMode ? (
-        <aside className="access-drawer" aria-label={drawerMode === 'create' ? 'Send invite' : 'Edit user access'}>
+        <aside className="access-drawer" aria-label={drawerMode === 'create' ? 'Send invite' : drawerMode === 'edit-invite' ? 'Edit invite' : 'Edit user access'}>
           <div className="drawer-header">
-            <h2>{drawerMode === 'create' ? 'Send Invite' : 'Edit User'}</h2>
+            <h2>{drawerMode === 'create' ? 'Send Invite' : drawerMode === 'edit-invite' ? 'Edit Invite' : 'Edit User'}</h2>
             <button type="button" className="ghost-btn" onClick={closeDrawer} disabled={saving} aria-label="Close">
               <FiX size={16} />
             </button>
@@ -422,7 +399,7 @@ export default function UserAccess() {
             </div>
 
             <button type="submit" className="primary-btn" disabled={saving}>
-              {saving ? 'Saving...' : drawerMode === 'create' ? 'Send invite' : 'Save access'}
+              {saving ? 'Saving...' : drawerMode === 'create' ? 'Send invite' : drawerMode === 'edit-invite' ? 'Save invite' : 'Save access'}
             </button>
           </form>
         </aside>

@@ -31,8 +31,27 @@ test('admin user email conflict detection ignores the same user only', () => {
   assert.equal(__testables.emailBelongsToAnotherUser(null, 'user-1'), false);
 });
 
+test('invite action status helpers allow pending and expired only', () => {
+  assert.equal(__testables.canEditInviteStatus('pending'), true);
+  assert.equal(__testables.canEditInviteStatus('expired'), true);
+  assert.equal(__testables.canEditInviteStatus('accepted'), false);
+  assert.equal(__testables.canEditInviteStatus('cancelled'), false);
+  assert.equal(__testables.canResendInviteStatus('pending'), true);
+  assert.equal(__testables.canResendInviteStatus('expired'), true);
+  assert.equal(__testables.canResendInviteStatus('accepted'), false);
+  assert.equal(__testables.canResendInviteStatus('cancelled'), false);
+});
+
 test('legacy direct user creation function is not exported', () => {
   assert.equal(Object.hasOwn(functionExports, 'adminCreateUser'), false);
+});
+
+test('invite management functions are exported and template admin endpoints are removed', () => {
+  assert.equal(Object.hasOwn(functionExports, 'adminUpdateInvite'), true);
+  assert.equal(Object.hasOwn(functionExports, 'adminCancelInvite'), true);
+  assert.equal(Object.hasOwn(functionExports, 'adminListEmailTemplates'), false);
+  assert.equal(Object.hasOwn(functionExports, 'adminSaveEmailTemplate'), false);
+  assert.equal(Object.hasOwn(functionExports, 'adminSendTestEmail'), false);
 });
 
 test('removed quote and RFQ functions are not exported', () => {

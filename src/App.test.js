@@ -346,6 +346,20 @@ beforeEach(() => {
             inviteId: 'invite-1',
             email: 'pending@example.com',
             status: 'pending',
+            firstName: 'Pending',
+            lastName: 'Person',
+            role: 'user',
+            enabledMiniApps: ['uniquem'],
+            expiresAt: Date.now() + 86400000,
+          },
+          {
+            inviteId: 'invite-accepted-duplicate',
+            email: 'user@example.com',
+            status: 'accepted',
+            firstName: 'Riley',
+            lastName: 'Chen',
+            role: 'user',
+            enabledMiniApps: ['drilling-fluids-report'],
             expiresAt: Date.now() + 86400000,
           },
         ],
@@ -353,24 +367,9 @@ beforeEach(() => {
     }
     if (path === 'adminInviteUser') return Promise.resolve({ mode: 'invited', invite: { email: 'new@example.com', status: 'pending' } });
     if (path === 'adminResendInvite') return Promise.resolve({ ok: true });
+    if (path === 'adminUpdateInvite') return Promise.resolve({ invite: { ...(body || {}) } });
+    if (path === 'adminCancelInvite') return Promise.resolve({ ok: true });
     if (path === 'adminUpdateUserAccess') return Promise.resolve({ user: { ...(body || {}) } });
-    if (path === 'adminListEmailTemplates') {
-      return Promise.resolve({
-        items: [
-          {
-            templateId: 'userInvite',
-            label: 'User invitation',
-            subject: 'Finish your QuoteChem registration',
-            text: 'Finish registration: {{inviteUrl}}',
-            html: '<p>{{inviterName}} invited you.</p>',
-            actionLabel: 'Finish registration',
-            footer: 'Footer',
-          },
-        ],
-      });
-    }
-    if (path === 'adminSaveEmailTemplate') return Promise.resolve({ template: { ...(body || {}), templateId: 'userInvite', label: 'User invitation' } });
-    if (path === 'adminSendTestEmail') return Promise.resolve({ messageId: 'message-1' });
     if (path === 'previewInvite') {
       return Promise.resolve({
         invite: {
@@ -889,18 +888,44 @@ describe('mini-app portal routing', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
-  test('User Access sends invites, resends pending invites, and edits users', async () => {
+  test('User Access uses one roster with dropdown actions for users and invites', async () => {
     const { postJson } = require('./lib/api');
     renderAt('/apps/user-access', 'admin');
 
     expect(await screen.findByRole('heading', { name: 'User Access' })).toBeTruthy();
     expect(await screen.findByText('Riley Chen')).toBeTruthy();
     expect(await screen.findByText('user@example.com')).toBeTruthy();
+    expect(screen.getAllByText('user@example.com')).toHaveLength(1);
     expect(await screen.findByText('pending@example.com')).toBeTruthy();
+    expect(screen.getByText('Active')).toBeTruthy();
+    expect(screen.getByText('Pending')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /Pending invites/i })).not.toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /Email Templates/i })).not.toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Resend/i }));
+    fireEvent.click(screen.getByLabelText('Actions for pending@example.com'));
+    expect(await screen.findByRole('menuitem', { name: /Edit invite/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Resend invite/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Cancel invite/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Resend invite/i }));
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminResendInvite', { inviteId: 'invite-1' }, { authed: true }));
+
+    fireEvent.click(screen.getByLabelText('Actions for pending@example.com'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Cancel invite/i }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminCancelInvite', { inviteId: 'invite-1' }, { authed: true }));
+
+    fireEvent.click(screen.getByLabelText('Actions for pending@example.com'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Edit invite/i }));
+    expect(await screen.findByRole('heading', { name: 'Edit Invite' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^Email$/i), { target: { value: 'edited-pending@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save invite/i }));
+    await waitFor(() =>
+      expect(postJson).toHaveBeenCalledWith(
+        'adminUpdateInvite',
+        expect.objectContaining({ inviteId: 'invite-1', email: 'edited-pending@example.com' }),
+        { authed: true }
+      )
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /Send invite/i }));
     expect(await screen.findByRole('heading', { name: 'Send Invite' })).toBeTruthy();
@@ -916,7 +941,8 @@ describe('mini-app portal routing', () => {
     fireEvent.click(sendButtons[sendButtons.length - 1]);
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminInviteUser', expect.objectContaining({ email: 'new@example.com' }), { authed: true }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
+    fireEvent.click(screen.getByLabelText('Actions for user@example.com'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^Edit$/i }));
     expect(await screen.findByRole('heading', { name: 'Edit User' })).toBeTruthy();
     expect(screen.getByDisplayValue('Riley')).toBeTruthy();
     expect(screen.getByDisplayValue('Chen')).toBeTruthy();
@@ -931,21 +957,6 @@ describe('mini-app portal routing', () => {
         { authed: true }
       )
     );
-  });
-
-  test('User Access manages email templates and sends test email', async () => {
-    const { postJson } = require('./lib/api');
-    renderAt('/apps/user-access', 'admin');
-
-    expect(await screen.findByRole('heading', { name: 'Email Templates' })).toBeTruthy();
-    expect(await screen.findByDisplayValue('Finish your QuoteChem registration')).toBeTruthy();
-    fireEvent.change(screen.getByDisplayValue('Finish your QuoteChem registration'), { target: { value: 'Updated invite subject' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save template/i }));
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminSaveEmailTemplate', expect.objectContaining({ subject: 'Updated invite subject' }), { authed: true }));
-
-    fireEvent.change(screen.getByPlaceholderText('test@example.com'), { target: { value: 'admin@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: /Send test/i }));
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminSendTestEmail', { templateId: 'userInvite', to: 'admin@example.com' }, { authed: true }));
   });
 
   test('invite registration previews invite and accepts with custom token sign in', async () => {
