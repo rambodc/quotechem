@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { visibleMiniAppsForUser } from './miniApps';
+import { visibleMiniAppsForUser } from '../registry/miniApps';
 import './AppLauncher.css';
 
 export default function AppLauncher({ user }) {

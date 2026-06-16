@@ -187,7 +187,7 @@ jest.mock('three/examples/jsm/controls/OrbitControls', () => ({
   })),
 }));
 
-jest.mock('./apps/drillingFluidsStore', () => ({
+jest.mock('./apps/drilling-fluids-report/drillingFluidsStore', () => ({
   listDrillingFluidReports: jest.fn(() => Promise.resolve(mockLocalReports)),
   saveDrillingFluidReport: jest.fn((report) => {
     mockLocalReports = [report, ...mockLocalReports.filter((item) => item.localId !== report.localId)];
@@ -206,7 +206,7 @@ beforeEach(() => {
   const { getDoc, onSnapshot, serverTimestamp, setDoc } = require('firebase/firestore');
   const { postJson } = require('./lib/api');
   const { auth } = require('./firebase');
-  const drillingStore = require('./apps/drillingFluidsStore');
+  const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
 
   mockLocalReports = [];
   window.localStorage.clear();
@@ -328,19 +328,6 @@ beforeEach(() => {
   });
 
   postJson.mockImplementation((path, body) => {
-    if (path === 'adminDashboardSummary') {
-      return Promise.resolve({
-        summary: {
-          newLeads: 0,
-          inProgressLeads: 0,
-          completedLeads: 0,
-          uniqueCustomers: 0,
-          recentActivity: [],
-        },
-      });
-    }
-    if (path === 'adminListLeads') return Promise.resolve({ items: [] });
-    if (path === 'adminListCustomers') return Promise.resolve({ items: [] });
     if (path === 'adminListUsers') {
       return Promise.resolve({
         items: [
@@ -366,6 +353,7 @@ beforeEach(() => {
     }
     if (path === 'adminInviteUser') return Promise.resolve({ mode: 'invited', invite: { email: 'new@example.com', status: 'pending' } });
     if (path === 'adminResendInvite') return Promise.resolve({ ok: true });
+    if (path === 'adminUpdateUserAccess') return Promise.resolve({ user: { ...(body || {}) } });
     if (path === 'adminListEmailTemplates') {
       return Promise.resolve({
         items: [
@@ -376,15 +364,6 @@ beforeEach(() => {
             text: 'Finish registration: {{inviteUrl}}',
             html: '<p>{{inviterName}} invited you.</p>',
             actionLabel: 'Finish registration',
-            footer: 'Footer',
-          },
-          {
-            templateId: 'rfqConfirmation',
-            label: 'RFQ confirmation',
-            subject: 'QuoteChem Request Received',
-            text: 'Thanks',
-            html: '<p>Thanks</p>',
-            actionLabel: '',
             footer: 'Footer',
           },
         ],
@@ -524,11 +503,11 @@ function renderSignedOutAt(path) {
 }
 
 describe('mini-app portal routing', () => {
-  test('admin users see Quotes and Account on the launcher', async () => {
+  test('admin users do not see removed Quotes app on the launcher', async () => {
     renderAt('/portal', 'admin');
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
+    expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.getByRole('link', { name: /Drilling Programs/i }).getAttribute('href')).toBe('/apps/drilling-programs');
     expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/3d');
@@ -548,11 +527,11 @@ describe('mini-app portal routing', () => {
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
-  test('basic users with Quotes enabled see Quotes and Account only', async () => {
+  test('basic users with removed Quotes access only see Account', async () => {
     renderAt('/portal', 'user', ['quotes']);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Quotes/i }).getAttribute('href')).toBe('/apps/quotes');
+    expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
@@ -769,32 +748,12 @@ describe('mini-app portal routing', () => {
     expect(screen.queryByRole('button', { name: /Upload and extract/i })).not.toBeTruthy();
   });
 
-  test('admin users can open Quotes mini-app pages', async () => {
+  test('removed Quotes routes redirect through the app fallback', async () => {
     renderAt('/apps/quotes/dashboard', 'admin');
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy();
 
-    cleanup();
-    renderAt('/apps/quotes/leads', 'admin');
-    expect(await screen.findByRole('heading', { name: 'Leads' })).toBeTruthy();
-
-    cleanup();
-    renderAt('/apps/quotes/customers', 'admin');
-    expect(await screen.findByRole('heading', { name: 'Customers' })).toBeTruthy();
-  });
-
-  test('basic users with Quotes enabled see the user-facing Quotes placeholder', async () => {
-    renderAt('/apps/quotes', 'user', ['quotes']);
-
-    expect(await screen.findByRole('heading', { name: 'Quotes' })).toBeTruthy();
-    expect(screen.getByText(/User-facing tools will be added here next/i)).toBeTruthy();
-  });
-
-  test('basic users with Quotes enabled are redirected away from quote admin tools', async () => {
-    renderAt('/apps/quotes/dashboard', 'user', ['quotes']);
-
-    expect(await screen.findByRole('heading', { name: 'Quotes' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Dashboard' })).not.toBeTruthy();
-    expect(window.location.pathname).toBe('/apps/quotes');
+    expect(window.location.pathname).toBe('/portal');
   });
 
   test('basic users are redirected away from disabled mini apps', async () => {
@@ -825,7 +784,7 @@ describe('mini-app portal routing', () => {
   });
 
   test('offline Testing Offline renders outside the portal and saves locally', async () => {
-    const drillingStore = require('./apps/drillingFluidsStore');
+    const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
     renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
     expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
@@ -842,7 +801,7 @@ describe('mini-app portal routing', () => {
 
   test('offline Testing Offline uploads pending reports when prepared and signed in', async () => {
     const { setDoc } = require('firebase/firestore');
-    const drillingStore = require('./apps/drillingFluidsStore');
+    const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
     window.localStorage.setItem(
       'quotechem:offline-drilling-user',
       JSON.stringify({ uid: 'user-1', email: 'user@example.com', preparedAt: '2026-06-09T00:00:00.000Z' })
@@ -874,7 +833,7 @@ describe('mini-app portal routing', () => {
 
   test('offline Testing Offline disables upload offline but keeps local save available', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
-    const drillingStore = require('./apps/drillingFluidsStore');
+    const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
     renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
 
     expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
@@ -907,11 +866,27 @@ describe('mini-app portal routing', () => {
     renderAt('/apps/account', 'admin');
     expect(await screen.findByRole('heading', { name: 'Account' })).toBeTruthy();
     expect(screen.getByText(/Upload photo/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Change email/i })).not.toBeTruthy();
     expect(screen.getByRole('button', { name: /Logout/i })).toBeTruthy();
 
     cleanup();
     renderAt('/apps/account', 'user');
     expect(await screen.findByRole('heading', { name: 'Account' })).toBeTruthy();
+  });
+
+  test('account email route is not available to staff users', async () => {
+    renderAt('/apps/account/email', 'user');
+
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
+    await waitFor(() => expect(window.location.pathname).toBe('/portal'));
+    expect(screen.queryByRole('heading', { name: /Change Email/i })).not.toBeTruthy();
+  });
+
+  test('public chat route is not available', async () => {
+    renderSignedOutAt('/chat');
+
+    expect(await screen.findByRole('heading', { name: /Explore industrial chemical sourcing workflows/i })).toBeTruthy();
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
   test('User Access sends invites, resends pending invites, and edits users', async () => {
@@ -933,7 +908,7 @@ describe('mini-app portal routing', () => {
     expect(screen.getByLabelText(/First name/i)).toBeTruthy();
     expect(screen.getByLabelText(/Last name/i)).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
-    expect(screen.getByRole('button', { name: /Quotes/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.getByRole('button', { name: /Testing Offline/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Drilling Programs/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Uniquem/i })).toBeTruthy();
@@ -946,7 +921,16 @@ describe('mini-app portal routing', () => {
     expect(screen.getByDisplayValue('Riley')).toBeTruthy();
     expect(screen.getByDisplayValue('Chen')).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
-    expect(screen.getByDisplayValue('user@example.com').disabled).toBe(true);
+    expect(screen.getByDisplayValue('user@example.com').disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText(/^Email$/i), { target: { value: 'riley@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save access/i }));
+    await waitFor(() =>
+      expect(postJson).toHaveBeenCalledWith(
+        'adminUpdateUserAccess',
+        expect.objectContaining({ uid: 'user-1', email: 'riley@example.com' }),
+        { authed: true }
+      )
+    );
   });
 
   test('User Access manages email templates and sends test email', async () => {

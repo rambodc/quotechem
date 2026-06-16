@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { FiCheckCircle, FiCloud, FiDroplet, FiSave, FiUploadCloud, FiWifiOff } from 'react-icons/fi';
-import { auth, db } from '../firebase';
+import { auth, db } from '../../firebase';
 import { listDrillingFluidReports, saveDrillingFluidReport, updateDrillingFluidReport } from './drillingFluidsStore';
 import { activateDrillingManifest, readPreparedDrillingUser, registerDrillingOfflineWorker, warmDrillingOfflineCache } from './drillingOffline';
 import './DrillingFluidsReport.css';

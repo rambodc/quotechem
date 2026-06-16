@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { __testables } from './publicQuoteChat.js';
+import * as functionExports from './index.js';
+import { __testables } from './api.js';
 import { __emailTestables } from './email.js';
 
 test('temporary password validation accepts six characters', () => {
@@ -13,11 +14,42 @@ test('temporary password validation rejects shorter values', () => {
 
 test('managed mini app normalization includes access-managed apps only', () => {
   assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-fluids-report', 'drilling-programs', 'uniquem', 'account']), [
-    'quotes',
     'drilling-fluids-report',
     'drilling-programs',
     'uniquem',
   ]);
+});
+
+test('admin user email input is normalized and validated', () => {
+  assert.equal(__testables.normalizeAdminUserEmailInput(' Riley@Example.COM '), 'riley@example.com');
+  assert.throws(() => __testables.normalizeAdminUserEmailInput('not-an-email'), /Valid email is required/);
+});
+
+test('admin user email conflict detection ignores the same user only', () => {
+  assert.equal(__testables.emailBelongsToAnotherUser({ uid: 'user-1' }, 'user-1'), false);
+  assert.equal(__testables.emailBelongsToAnotherUser({ uid: 'user-2' }, 'user-1'), true);
+  assert.equal(__testables.emailBelongsToAnotherUser(null, 'user-1'), false);
+});
+
+test('legacy direct user creation function is not exported', () => {
+  assert.equal(Object.hasOwn(functionExports, 'adminCreateUser'), false);
+});
+
+test('removed quote and RFQ functions are not exported', () => {
+  for (const name of [
+    'createPublicSession',
+    'chatPublicAssistant',
+    'finalizePublicSession',
+    'adminDashboardSummary',
+    'adminListLeads',
+    'adminGetLeadDetail',
+    'adminUpdateLead',
+    'adminAddLeadNote',
+    'adminListCustomers',
+    'adminGetCustomerTimeline',
+  ]) {
+    assert.equal(Object.hasOwn(functionExports, name), false);
+  }
 });
 
 test('mud program extraction page builder creates overview and section pages', () => {

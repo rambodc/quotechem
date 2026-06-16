@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FiArchive, FiImage, FiRefreshCw, FiRotateCcw, FiSend, FiTrash2 } from 'react-icons/fi';
-import { postJson } from '../lib/api';
+import { postJson } from '../../lib/api';
 import UniquemScenePreview from './UniquemScenePreview';
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;

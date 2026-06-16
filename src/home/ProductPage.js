@@ -15,9 +15,7 @@ export default function ProductPage() {
         <Link to="/" className="catalog-brand" aria-label="QuoteChem home">
           <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo 500.png`} alt="QuoteChem" />
         </Link>
-        <Link to="/chat" className="catalog-chat-link">
-          Start a quote
-        </Link>
+        <Link to="/portal" className="catalog-chat-link">Portal</Link>
       </nav>
 
       <section className="product-hero">
@@ -29,9 +27,6 @@ export default function ProductPage() {
           <h1>{product.name}</h1>
           <p>{product.description}</p>
           <div className="catalog-actions">
-            <Link to="/chat" className="primary-catalog-action">
-              Start a quote for this product
-            </Link>
             <a href="#product-video" className="secondary-catalog-action">
               Watch overview
             </a>

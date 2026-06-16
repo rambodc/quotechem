@@ -1,21 +1,6 @@
-import { FiClipboard, FiDroplet, FiFileText, FiPackage, FiShield, FiUser } from 'react-icons/fi';
+import { FiDroplet, FiFileText, FiPackage, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
-  {
-    id: 'quotes',
-    label: 'Quotes',
-    description: 'Manage quote leads, customers, and activity.',
-    icon: FiClipboard,
-    iconImage: '/assets/portal-icons/quotes.png',
-    adminOnly: false,
-    defaultVisibleForRoles: ['admin'],
-    defaultPath: '/apps/quotes',
-    navItems: [
-      { path: '/apps/quotes/dashboard', label: 'Dashboard' },
-      { path: '/apps/quotes/leads', label: 'Leads' },
-      { path: '/apps/quotes/customers', label: 'Customers' },
-    ],
-  },
   {
     id: 'drilling-fluids-report',
     label: 'Testing Offline',
@@ -78,7 +63,6 @@ export const MINI_APPS = [
     defaultPath: '/apps/account',
     navItems: [
       { path: '/apps/account', label: 'Overview' },
-      { path: '/apps/account/email', label: 'Email' },
       { path: '/apps/account/password', label: 'Password' },
     ],
   },

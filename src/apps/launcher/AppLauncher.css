@@ -41,13 +41,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.mini-app-tile.app-quotes {
-  --tile-accent: #0284c7;
-  --tile-glow-soft: rgba(14, 165, 233, 0.28);
-  --tile-glow-strong: rgba(14, 165, 233, 0.36);
-  --tile-focus: #7dd3fc;
-}
-
 .mini-app-tile.app-drilling-fluids-report {
   --tile-accent: #059669;
   --tile-glow-soft: rgba(16, 185, 129, 0.28);

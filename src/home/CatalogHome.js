@@ -18,14 +18,11 @@ export default function CatalogHome() {
 
         <div className="catalog-hero-copy">
           <p className="catalog-kicker">AI-powered bulk chemical sourcing</p>
-          <h1>Source industrial chemicals with cleaner RFQs and faster supplier conversations.</h1>
+          <h1>Explore industrial chemical sourcing workflows.</h1>
           <p>
-            QuoteChem helps buyers organize product needs, quantities, packaging, delivery details, and documentation into supplier-ready requests.
+            QuoteChem organizes product needs, quantities, packaging, delivery details, and documentation into clear operational references.
           </p>
           <div className="catalog-actions">
-            <Link to="/chat" className="primary-catalog-action">
-              Start a quote
-            </Link>
             <a href="#catalog-products" className="secondary-catalog-action">
               View examples
             </a>
@@ -36,7 +33,7 @@ export default function CatalogHome() {
       <section id="catalog-products" className="catalog-products" aria-labelledby="catalog-products-title">
         <div className="section-heading">
           <p className="catalog-kicker">Example catalog</p>
-          <h2 id="catalog-products-title">Explore common chemical sourcing workflows</h2>
+          <h2 id="catalog-products-title">Common chemical sourcing workflows</h2>
         </div>
 
         <div className="product-grid">

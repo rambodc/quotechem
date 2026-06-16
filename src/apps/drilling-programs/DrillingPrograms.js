@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { FiCheckCircle, FiCpu, FiFileText, FiPrinter, FiRefreshCw, FiUploadCloud } from 'react-icons/fi';
-import { UserContext } from '../App';
-import { postJson } from '../lib/api';
+import { UserContext } from '../../App';
+import { postJson } from '../../lib/api';
 import './DrillingPrograms.css';
 
 const desktopQuery = '(min-width: 980px)';

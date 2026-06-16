@@ -3,26 +3,19 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import ChatPage from './home/Home';
 import CatalogHome from './home/CatalogHome';
 import ProductPage from './home/ProductPage';
 import Login from './auth/Login';
 import ForgotPassword from './auth/ForgotPassword';
 import InviteRegister from './auth/InviteRegister';
 import Account from './account/Account';
-import ChangeEmail from './account/ChangeEmail';
 import ChangePassword from './account/ChangePassword';
 import PortalLayout from './layout/PortalLayout';
-import AppLauncher from './apps/AppLauncher';
-import { canAccessMiniApp, getMiniApp } from './apps/miniApps';
-import Dashboard from './admin/Dashboard';
-import Leads from './admin/Leads';
-import Customers from './admin/Customers';
-import DrillingFluidsReport from './apps/DrillingFluidsReport';
-import DrillingPrograms from './apps/DrillingPrograms';
-import OfflineDrillingFluidsReport from './apps/OfflineDrillingFluidsReport';
-import QuotesMiniApp from './apps/QuotesMiniApp';
-import Uniquem from './apps/Uniquem';
+import AppLauncher from './apps/launcher';
+import { canAccessMiniApp, getMiniApp } from './apps/registry/miniApps';
+import { DrillingFluidsReport, OfflineDrillingFluidsReport } from './apps/drilling-fluids-report';
+import DrillingPrograms from './apps/drilling-programs';
+import Uniquem from './apps/uniquem';
 import UserAccess from './admin/UserAccess';
 
 export const UserContext = createContext(null);
@@ -78,9 +71,6 @@ function MiniAppRoute({ user, checking, appId, appPath, children }) {
 
   const app = getMiniApp(appId);
   if (!canAccessMiniApp(app, user.role, user.enabledMiniApps)) return <Navigate to="/portal" replace />;
-  if (appId === 'quotes' && appPath !== 'overview' && user.role !== 'admin') {
-    return <Navigate to="/apps/quotes" replace />;
-  }
 
   if (!appPath && !children) return <Navigate to={app.defaultPath} replace />;
 
@@ -178,7 +168,6 @@ function App() {
       <UserContext.Provider value={contextValue}>
         <Routes>
           <Route path="/" element={<CatalogHome />} />
-          <Route path="/chat" element={<ChatPage />} />
           <Route path="/chemicals/:slug" element={<ProductPage />} />
           <Route path="/offline/drilling-fluids-report" element={<OfflineDrillingFluidsReport />} />
           <Route path="/invite/:token" element={firebaseUser ? <Navigate to="/portal" replace /> : <InviteRegister />} />
@@ -208,39 +197,6 @@ function App() {
           />
           <Route path="/account" element={<Navigate to="/portal" replace />} />
           <Route path="/account/*" element={<Navigate to="/portal" replace />} />
-
-          <Route
-            path="/apps/quotes"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="overview">
-                <QuotesMiniApp />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/quotes/dashboard"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="dashboard">
-                <Dashboard />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/quotes/leads"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="leads">
-                <Leads />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/quotes/customers"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotes" appPath="customers">
-                <Customers />
-              </MiniAppRoute>
-            }
-          />
 
           <Route
             path="/apps/drilling-fluids-report"
@@ -331,14 +287,6 @@ function App() {
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="account" appPath="overview">
                 <Account />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/account/email"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="account" appPath="email">
-                <ChangeEmail />
               </MiniAppRoute>
             }
           />

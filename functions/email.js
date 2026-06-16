@@ -6,7 +6,7 @@ export const EMAIL_SMTP_USER = defineSecret('EMAIL_SMTP_USER');
 export const EMAIL_FROM_ADDRESS = defineSecret('EMAIL_FROM_ADDRESS');
 export const EMAIL_SECRETS = [EMAIL_SMTP_PASSWORD, EMAIL_SMTP_USER, EMAIL_FROM_ADDRESS];
 
-export const DEFAULT_EMAIL_TEMPLATE_IDS = ['userInvite', 'existingUserAccess', 'rfqConfirmation', 'genericNotification'];
+export const DEFAULT_EMAIL_TEMPLATE_IDS = ['userInvite', 'existingUserAccess', 'genericNotification'];
 
 function cleanEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -32,7 +32,7 @@ function getSecretValue(secretRef) {
 function getSmtpConfig() {
   const user = cleanEmail(process.env.EMAIL_SMTP_USER || getSecretValue(EMAIL_SMTP_USER) || process.env.EMAIL_FROM_ADDRESS || getSecretValue(EMAIL_FROM_ADDRESS));
   const pass = String(process.env.EMAIL_SMTP_PASSWORD || getSecretValue(EMAIL_SMTP_PASSWORD) || '').trim();
-  const fromAddress = cleanEmail(process.env.EMAIL_FROM_ADDRESS || getSecretValue(EMAIL_FROM_ADDRESS) || user || 'quotes@quotechem.com');
+  const fromAddress = cleanEmail(process.env.EMAIL_FROM_ADDRESS || getSecretValue(EMAIL_FROM_ADDRESS) || user || 'no-reply@quotechem.com');
   const fromName = String(process.env.EMAIL_FROM_NAME || 'QuoteChem').trim();
 
   if (!user || !pass || !fromAddress) {
@@ -128,21 +128,6 @@ export function getDefaultEmailTemplate(templateId) {
       actionLabel: 'Open QuoteChem',
       actionUrlKey: 'signInUrl',
       footer: 'This access update was sent by QuoteChem.',
-    },
-    rfqConfirmation: {
-      templateId: 'rfqConfirmation',
-      label: 'RFQ confirmation',
-      description: 'Sent to public quote request customers after RFQ submission.',
-      subject: 'QuoteChem Request Received - {{chemicalName}}',
-      text: ['Thanks for your request. We received your RFQ and started supplier outreach.', '', '{{requestSummaryText}}'].join('\n'),
-      html: [
-        '<p style="margin:0 0 14px;">Your request is received and our sourcing team has started supplier outreach.</p>',
-        '{{requestSummaryHtml}}',
-        '<p style="margin:14px 0 0;font-size:13px;color:#64748b;">Final pricing depends on grade, packaging, freight lane, and lead time availability.</p>',
-      ].join(''),
-      actionLabel: '',
-      actionUrlKey: '',
-      footer: 'Information in this email is provided for quote preparation and should be confirmed before purchase.',
     },
     genericNotification: {
       templateId: 'genericNotification',

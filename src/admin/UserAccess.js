@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FiEdit2, FiMail, FiPlus, FiRefreshCw, FiSend, FiX } from 'react-icons/fi';
 import { postJson } from '../lib/api';
-import { ACCESS_MANAGED_MINI_APPS, defaultMiniAppIdsForRole } from '../apps/miniApps';
+import { ACCESS_MANAGED_MINI_APPS, defaultMiniAppIdsForRole } from '../apps/registry/miniApps';
 import './UserAccess.css';
 
 function managedDefaults(role) {
@@ -182,6 +182,7 @@ export default function UserAccess() {
           'adminUpdateUserAccess',
           {
             uid: draft.uid,
+            email: draft.email,
             firstName: draft.firstName,
             lastName: draft.lastName,
             role: draft.role,
@@ -392,7 +393,7 @@ export default function UserAccess() {
           <form className="access-drawer-form" onSubmit={submitDrawer}>
             <label>
               <span>Email</span>
-              <input type="email" required disabled={drawerMode === 'edit'} value={draft.email} onChange={(event) => updateDraft({ email: event.target.value })} />
+              <input type="email" required value={draft.email} onChange={(event) => updateDraft({ email: event.target.value })} />
             </label>
 
             <div className="access-name-grid">

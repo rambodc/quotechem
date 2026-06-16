@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
-import { FiChevronRight, FiKey, FiLogOut, FiMail, FiUpload } from 'react-icons/fi';
+import { FiChevronRight, FiKey, FiLogOut, FiUpload } from 'react-icons/fi';
 import { UserContext } from '../App';
 import { accountBaseForRole } from './routeUtils';
 import { auth, db, storage } from '../firebase';
@@ -154,7 +154,6 @@ export default function Account() {
       </article>
 
       <div className="account-list">
-        <AccountAction icon={FiMail} title="Change email" onClick={() => navigate(`${base}/email`)} />
         <AccountAction
           icon={FiKey}
           title="Change password"

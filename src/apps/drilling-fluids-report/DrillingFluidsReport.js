@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiCheckCircle, FiDownload, FiDroplet, FiExternalLink, FiRefreshCw, FiShare2, FiWifiOff } from 'react-icons/fi';
-import { UserContext } from '../App';
+import { UserContext } from '../../App';
 import {
   OFFLINE_DRILLING_ROUTE,
   activateDrillingManifest,

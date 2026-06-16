@@ -9,7 +9,6 @@ function renderPublicRoutes(initialEntries = ['/']) {
     <MemoryRouter initialEntries={initialEntries} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/" element={<CatalogHome />} />
-        <Route path="/chat" element={<div>Chat page target</div>} />
         <Route path="/chemicals/:slug" element={<ProductPage />} />
       </Routes>
     </MemoryRouter>
@@ -20,8 +19,9 @@ describe('public catalog pages', () => {
   test('home renders QuoteChem intro, portal link, and four product cards', () => {
     renderPublicRoutes();
 
-    expect(screen.getByRole('heading', { name: /Source industrial chemicals/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Explore industrial chemical sourcing workflows/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Portal/i }).getAttribute('href')).toBe('/portal');
+    expect(screen.queryByRole('link', { name: /Start a quote/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /Sodium Hydroxide/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Hydrochloric Acid/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Sulfuric Acid/i })).toBeTruthy();
@@ -34,21 +34,21 @@ describe('public catalog pages', () => {
     fireEvent.click(screen.getByRole('link', { name: /Sodium Hydroxide/i }));
 
     expect(screen.getByRole('heading', { name: 'Sodium Hydroxide' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Start a quote for this product/i }).getAttribute('href')).toBe('/chat');
+    expect(screen.queryByRole('link', { name: /Start a quote/i })).not.toBeTruthy();
   });
 
-  test('product page shows rich content and chat CTA', () => {
+  test('product page shows rich content without chat CTA', () => {
     renderPublicRoutes(['/chemicals/citric-acid']);
 
     expect(screen.getByRole('heading', { name: 'Citric Acid' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /Common applications/i })).toBeTruthy();
     expect(screen.getByLabelText(/Citric Acid overview video placeholder/i)).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Start a quote for this product/i }).getAttribute('href')).toBe('/chat');
+    expect(screen.queryByRole('link', { name: /Start a quote/i })).not.toBeTruthy();
   });
 
   test('unknown product slug falls back to catalog home', () => {
     renderPublicRoutes(['/chemicals/not-real']);
 
-    expect(screen.getByRole('heading', { name: /Source industrial chemicals/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Explore industrial chemical sourcing workflows/i })).toBeTruthy();
   });
 });

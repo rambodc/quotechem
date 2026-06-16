@@ -7,7 +7,7 @@ export const PRODUCTS = [
     image: '/assets/chemicals/sodium-hydroxide.jpg',
     accent: '#0ea5e9',
     description:
-      'Sodium hydroxide is a foundational industrial chemical used wherever dependable alkalinity, neutralization, and cleaning performance matter. QuoteChem helps buyers move from rough requirement to supplier-ready RFQ with cleaner product details, packaging expectations, and delivery constraints captured up front.',
+      'Sodium hydroxide is a foundational industrial chemical used wherever dependable alkalinity, neutralization, and cleaning performance matter. QuoteChem helps organize product details, packaging expectations, and delivery constraints for operational planning.',
     applications: ['Water treatment', 'Industrial cleaning', 'Pulp and paper', 'Process pH control'],
     specs: ['Liquid, flake, pearl, or custom grade examples', 'Drums, totes, bulk, and bagged options', 'Buyer-ready documentation and delivery notes'],
   },
@@ -27,7 +27,7 @@ export const PRODUCTS = [
     slug: 'sulfuric-acid',
     name: 'Sulfuric Acid',
     eyebrow: 'High-volume industrial acid',
-    subtitle: 'RFQ-ready detail capture for manufacturing, treatment, battery, mining, and process applications.',
+    subtitle: 'Detail capture for manufacturing, treatment, battery, mining, and process applications.',
     image: '/assets/chemicals/sulfuric-acid.jpg',
     accent: '#2563eb',
     description:
