@@ -14,6 +14,7 @@ build/
 .firebase/
 firebase-debug.log*
 functions/firebase-debug.log*
+exports/
 
 # Env files
 .env*
