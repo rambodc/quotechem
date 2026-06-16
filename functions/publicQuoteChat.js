@@ -650,6 +650,17 @@ function mapUniquem3DVersionDoc(doc) {
   };
 }
 
+function filterActiveUniquem3DModels(models = [], limit = 100) {
+  return (Array.isArray(models) ? models : [])
+    .filter((model) => normalizeUniquemModelStatus(model.status) === 'active')
+    .sort((a, b) => {
+      const aTime = asString(a.updatedAt);
+      const bTime = asString(b.updatedAt);
+      return bTime.localeCompare(aTime);
+    })
+    .slice(0, limit);
+}
+
 function buildUniquemVersionDoc({ versionId, scene, prompt, model, source, user }) {
   return {
     versionId,
@@ -3170,8 +3181,8 @@ export const listUniquem3DModels = onRequest({ region: REGION }, async (req, res
 
   try {
     await ensureUniquemAccess(req);
-    const snap = await db.collection(UNIQUEM_3D_MODEL_COLLECTION).where('status', '==', 'active').orderBy('updatedAt', 'desc').limit(100).get();
-    const items = snap.docs.map(mapUniquem3DModelDoc);
+    const snap = await db.collection(UNIQUEM_3D_MODEL_COLLECTION).orderBy('updatedAt', 'desc').limit(200).get();
+    const items = filterActiveUniquem3DModels(snap.docs.map(mapUniquem3DModelDoc), 100);
     setCors(res);
     res.status(200).json({ ok: true, items });
   } catch (error) {
@@ -3676,5 +3687,6 @@ export const __testables = {
   normalizeUniquemModelStatus,
   mapUniquem3DModelDoc,
   mapUniquem3DVersionDoc,
+  filterActiveUniquem3DModels,
   buildUniquemVersionDoc,
 };

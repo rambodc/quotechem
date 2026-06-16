@@ -189,6 +189,19 @@ test('Uniquem version mapping preserves source and normalized scene', () => {
   assert.equal(version.scene.objects[0].type, 'speakerStack');
 });
 
+test('Uniquem model list filtering hides archived models and sorts active models', () => {
+  const items = [
+    { modelId: 'old-active', status: 'active', updatedAt: '2026-06-15T10:00:00.000Z' },
+    { modelId: 'archived-newer', status: 'archived', updatedAt: '2026-06-16T12:00:00.000Z' },
+    { modelId: 'new-active', status: 'active', updatedAt: '2026-06-16T11:00:00.000Z' },
+  ];
+
+  assert.deepEqual(
+    __testables.filterActiveUniquem3DModels(items).map((item) => item.modelId),
+    ['new-active', 'old-active']
+  );
+});
+
 test('QuoteChem email templates render invite links', () => {
   const rendered = __emailTestables.buildTemplatedEmail({
     templateId: 'userInvite',

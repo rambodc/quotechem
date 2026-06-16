@@ -127,15 +127,20 @@ function createMaterial(object) {
     metalness: object.materialKind === 'metal' ? 0.62 : 0.04,
   };
   if (object.materialKind === 'glow' || object.materialKind === 'screen') {
-    return new THREE.MeshStandardMaterial({
+    const params = {
       ...common,
-      map: texture || undefined,
       emissive: new THREE.Color(sanitizeColor(object.color, '#ec4899')),
-      emissiveMap: texture || undefined,
       emissiveIntensity: object.materialKind === 'screen' ? 0.9 : 0.55,
-    });
+    };
+    if (texture) {
+      params.map = texture;
+      params.emissiveMap = texture;
+    }
+    return new THREE.MeshStandardMaterial(params);
   }
-  return new THREE.MeshStandardMaterial({ ...common, map: texture || undefined });
+  const params = { ...common };
+  if (texture) params.map = texture;
+  return new THREE.MeshStandardMaterial(params);
 }
 
 function addMesh(group, geometry, object, yOffset = 0) {

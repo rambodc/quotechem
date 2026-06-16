@@ -632,7 +632,50 @@ describe('mini-app portal routing', () => {
       )
     );
     await waitFor(() => expect(screen.getAllByText('Generated Stage Entrance').length).toBeGreaterThanOrEqual(1));
+    expect(screen.getByRole('button', { name: /Generated Stage Entrance/i })).toBeTruthy();
     expect(screen.getByText(/A new saved stage entrance/i)).toBeTruthy();
+  });
+
+  test('Uniquem 3D Creator keeps a created model visible when refresh fails after save', async () => {
+    const { postJson } = require('./lib/api');
+    let listCalls = 0;
+    postJson.mockImplementation((path, body) => {
+      if (path === 'listUniquem3DModels') {
+        listCalls += 1;
+        if (listCalls === 1) return Promise.resolve({ items: [] });
+        return Promise.reject(new Error('Could not load saved products.'));
+      }
+      if (path === 'createUniquem3DModel') {
+        return Promise.resolve({
+          model: {
+            ...mockUniquemModel,
+            modelId: 'model-new',
+            title: 'Generated Stage Entrance',
+            summary: 'A new saved stage entrance.',
+            scene: {
+              ...mockUniquemScene,
+              title: 'Generated Stage Entrance',
+              summary: 'A new saved stage entrance.',
+            },
+            latestPrompt: body?.prompt || '',
+            versionCount: 1,
+          },
+          versions: [{ ...mockUniquemVersions[1], versionId: 'version-new', prompt: body?.prompt || '' }],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+
+    expect(await screen.findByText(/No saved models yet/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Create a saved stage model.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create Saved Model/i }));
+
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('createUniquem3DModel', expect.objectContaining({ prompt: 'Create a saved stage model.' }), { authed: true }));
+    expect(await screen.findByRole('button', { name: /Generated Stage Entrance/i })).toBeTruthy();
+    expect(screen.getAllByText('Generated Stage Entrance').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/Failed to save 3D model/i)).not.toBeTruthy();
   });
 
   test('Uniquem 3D Creator can select, edit, restore, and archive saved models', async () => {

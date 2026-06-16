@@ -34,6 +34,11 @@ function modelUpdatedLabel(model) {
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+function upsertModel(models, model) {
+  if (!model?.modelId) return models;
+  return [model, ...models.filter((item) => item.modelId !== model.modelId)];
+}
+
 export default function Uniquem3DCreator() {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState(null);
@@ -51,14 +56,19 @@ export default function Uniquem3DCreator() {
   }, [image]);
 
   const refreshModels = async (selectModelId = selectedModel?.modelId) => {
-    const data = await postJson('listUniquem3DModels', {}, { authed: true });
-    const items = Array.isArray(data.items) ? data.items : [];
-    setModels(items);
-    if (selectModelId) {
-      const next = items.find((item) => item.modelId === selectModelId);
-      if (next) setSelectedModel(next);
+    try {
+      const data = await postJson('listUniquem3DModels', {}, { authed: true });
+      const items = Array.isArray(data.items) ? data.items : [];
+      setModels(items);
+      if (selectModelId) {
+        const next = items.find((item) => item.modelId === selectModelId);
+        if (next) setSelectedModel(next);
+      }
+      return items;
+    } catch (err) {
+      setError(err?.message || 'Could not load saved products.');
+      return null;
     }
-    return items;
   };
 
   useEffect(() => {
@@ -71,7 +81,7 @@ export default function Uniquem3DCreator() {
         setModels(items);
       })
       .catch((err) => {
-        if (active) setError(err?.message || 'Failed to load saved 3D models.');
+        if (active) setError(err?.message || 'Could not load saved products.');
       })
       .finally(() => {
         if (active) setLoadingModels(false);
@@ -141,13 +151,17 @@ export default function Uniquem3DCreator() {
         ? { modelId: selectedModel.modelId, prompt: trimmed, image: imagePayload }
         : { prompt: trimmed, image: imagePayload };
       const data = await postJson(endpoint, payload, { authed: true });
-      setSelectedModel(data.model || null);
+      const savedModel = data.model || null;
+      setSelectedModel(savedModel);
       setVersions(Array.isArray(data.versions) ? data.versions : []);
-      setScene(data.model?.scene || INITIAL_SCENE);
+      setScene(savedModel?.scene || INITIAL_SCENE);
+      if (savedModel) setModels((items) => upsertModel(items, savedModel));
       setPrompt('');
       setImage(null);
-      const items = await refreshModels(data.model?.modelId);
-      if (data.model && !items.some((item) => item.modelId === data.model.modelId)) setModels([data.model, ...items]);
+      const refreshed = await refreshModels(savedModel?.modelId);
+      if (savedModel && (!refreshed || !refreshed.some((item) => item.modelId === savedModel.modelId))) {
+        setModels((items) => upsertModel(items, savedModel));
+      }
     } catch (err) {
       setError(err?.message || 'Failed to save 3D model.');
     } finally {
@@ -161,10 +175,15 @@ export default function Uniquem3DCreator() {
     setError('');
     try {
       const data = await postJson('restoreUniquem3DModelVersion', { modelId: selectedModel.modelId, versionId }, { authed: true });
-      setSelectedModel(data.model || null);
+      const restoredModel = data.model || null;
+      setSelectedModel(restoredModel);
       setVersions(Array.isArray(data.versions) ? data.versions : []);
-      setScene(data.model?.scene || INITIAL_SCENE);
-      await refreshModels(data.model?.modelId);
+      setScene(restoredModel?.scene || INITIAL_SCENE);
+      if (restoredModel) setModels((items) => upsertModel(items, restoredModel));
+      const refreshed = await refreshModels(restoredModel?.modelId);
+      if (restoredModel && (!refreshed || !refreshed.some((item) => item.modelId === restoredModel.modelId))) {
+        setModels((items) => upsertModel(items, restoredModel));
+      }
     } catch (err) {
       setError(err?.message || 'Failed to restore version.');
     } finally {
@@ -178,11 +197,14 @@ export default function Uniquem3DCreator() {
     setError('');
     try {
       await postJson('archiveUniquem3DModel', { modelId: selectedModel.modelId }, { authed: true });
-      const items = await refreshModels('');
-      const next = items[0] || null;
+      const archivedId = selectedModel.modelId;
+      const remaining = models.filter((item) => item.modelId !== archivedId);
+      setModels(remaining);
       setSelectedModel(null);
       setVersions([]);
       setScene(INITIAL_SCENE);
+      const items = await refreshModels('');
+      const next = items?.[0] || remaining[0] || null;
       if (next) await selectModel(next.modelId);
     } catch (err) {
       setError(err?.message || 'Failed to archive model.');
@@ -287,8 +309,8 @@ export default function Uniquem3DCreator() {
 
             {error ? <div className="creator-error" role="alert">{error}</div> : null}
 
-            <div className="creator-history" aria-label="Version history">
-              <span>Version history</span>
+            <div className="creator-history" aria-label="Restore points">
+              <span>Restore points</span>
               {versions.length ? (
                 versions.map((version) => (
                   <article key={version.versionId}>
@@ -302,7 +324,7 @@ export default function Uniquem3DCreator() {
                   </article>
                 ))
               ) : (
-                <p>{selectedModel ? 'No versions returned yet.' : 'Create or select a saved model to see versions.'}</p>
+                <p>{selectedModel ? 'No restore points returned yet.' : 'Create or select a saved model to see restore points.'}</p>
               )}
             </div>
           </form>
