@@ -11,7 +11,9 @@ export default function PortalLayout({ user, app, children }) {
     <div className="portal-shell">
       <header className="portal-topbar">
         <button type="button" className="portal-brand" onClick={() => navigate('/portal')}>
-          <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo 200.png`} alt="" />
+          <span className="portal-brand-icon" aria-hidden="true">
+            <FiGrid size={19} />
+          </span>
           <div>
             <strong>QuoteChem</strong>
             <span>{app?.label || 'Platform'}</span>
@@ -19,10 +21,6 @@ export default function PortalLayout({ user, app, children }) {
         </button>
 
         <div className="portal-actions">
-          <button type="button" className="portal-icon-btn" onClick={() => navigate('/portal')} aria-label="Apps">
-            <FiGrid size={17} />
-            <span>Apps</span>
-          </button>
           <button type="button" className="portal-icon-btn" onClick={() => navigate('/apps/account')} aria-label="Account">
             <FiUser size={17} />
             <span>{user?.email || 'Account'}</span>

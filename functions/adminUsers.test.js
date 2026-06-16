@@ -42,6 +42,13 @@ test('invite action status helpers allow pending and expired only', () => {
   assert.equal(__testables.canResendInviteStatus('cancelled'), false);
 });
 
+test('invite acceptance identity comes from invite record only', () => {
+  assert.deepEqual(__testables.inviteIdentity({ firstName: ' Invited ', lastName: ' Person ' }), {
+    firstName: 'Invited',
+    lastName: 'Person',
+  });
+});
+
 test('legacy direct user creation function is not exported', () => {
   assert.equal(Object.hasOwn(functionExports, 'adminCreateUser'), false);
 });

@@ -110,6 +110,26 @@ export default function UserAccess() {
     loadUsers();
   }, [loadUsers]);
 
+  useEffect(() => {
+    if (!openMenuKey) return undefined;
+
+    const closeMenuFromOutsideClick = (event) => {
+      if (event.target?.closest?.('[data-access-menu-root]')) return;
+      setOpenMenuKey('');
+    };
+
+    const closeMenuFromEscape = (event) => {
+      if (event.key === 'Escape') setOpenMenuKey('');
+    };
+
+    document.addEventListener('pointerdown', closeMenuFromOutsideClick);
+    document.addEventListener('keydown', closeMenuFromEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenuFromOutsideClick);
+      document.removeEventListener('keydown', closeMenuFromEscape);
+    };
+  }, [openMenuKey]);
+
   const openCreate = () => {
     setError('');
     setStatus('');
@@ -315,7 +335,7 @@ export default function UserAccess() {
                 </span>
               </div>
               <span className={`access-role ${row.rowType === 'user' ? 'active' : row.status}`}>{statusLabel(row)}</span>
-              <div className="access-menu-wrap">
+              <div className="access-menu-wrap" data-access-menu-root>
                 <button
                   type="button"
                   className="access-menu-button"

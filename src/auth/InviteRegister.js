@@ -64,8 +64,6 @@ export default function InviteRegister() {
     try {
       const data = await postJson('acceptInvite', {
         token,
-        firstName: form.firstName,
-        lastName: form.lastName,
         password: form.password,
       });
       if (data.customToken) {
@@ -98,10 +96,10 @@ export default function InviteRegister() {
             <input id="invite-email" type="email" value={invite.email || ''} readOnly />
 
             <label htmlFor="invite-first-name">First name</label>
-            <input id="invite-first-name" required value={form.firstName} onChange={(event) => updateForm('firstName', event.target.value)} />
+            <input id="invite-first-name" required value={form.firstName} readOnly />
 
             <label htmlFor="invite-last-name">Last name</label>
-            <input id="invite-last-name" required value={form.lastName} onChange={(event) => updateForm('lastName', event.target.value)} />
+            <input id="invite-last-name" required value={form.lastName} readOnly />
 
             <label htmlFor="invite-password">Password</label>
             <input

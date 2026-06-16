@@ -1511,6 +1511,13 @@ function canResendInviteStatus(value) {
   return ['pending', 'expired'].includes(inviteStatus(value));
 }
 
+function inviteIdentity(invite = {}) {
+  return {
+    firstName: asString(invite.firstName).slice(0, 80),
+    lastName: asString(invite.lastName).slice(0, 80),
+  };
+}
+
 function publicInvite(invite = {}) {
   return {
     inviteId: asString(invite.inviteId),
@@ -1873,8 +1880,7 @@ export const acceptInvite = onRequest({ region: REGION }, async (req, res) => {
   let createdAuthUser = null;
   try {
     const { doc: inviteDoc, invite } = await loadInviteByToken(req.body?.token);
-    const firstName = asString(req.body?.firstName || invite.firstName).slice(0, 80);
-    const lastName = asString(req.body?.lastName || invite.lastName).slice(0, 80);
+    const { firstName, lastName } = inviteIdentity(invite);
     const password = asString(req.body?.password);
     if (!firstName) return jsonError(res, 400, 'First name is required');
     if (!lastName) return jsonError(res, 400, 'Last name is required');
@@ -2413,4 +2419,5 @@ export const __testables = {
   emailBelongsToAnotherUser,
   canEditInviteStatus,
   canResendInviteStatus,
+  inviteIdentity,
 };

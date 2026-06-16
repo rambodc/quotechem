@@ -907,6 +907,10 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('menuitem', { name: /Edit invite/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Resend invite/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Cancel invite/i })).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: /Edit invite/i })).not.toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('Actions for pending@example.com'));
     fireEvent.click(screen.getByRole('menuitem', { name: /Resend invite/i }));
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminResendInvite', { inviteId: 'invite-1' }, { authed: true }));
 
@@ -966,13 +970,14 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: /Finish registration/i })).toBeTruthy();
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('previewInvite', { token: 'test-token' }));
-    expect(screen.getByDisplayValue('invited@example.com')).toBeTruthy();
-    expect(screen.getByDisplayValue('Invited')).toBeTruthy();
+    expect(screen.getByDisplayValue('invited@example.com').readOnly).toBe(true);
+    expect(screen.getByDisplayValue('Invited').readOnly).toBe(true);
+    expect(screen.getByDisplayValue('User').readOnly).toBe(true);
     fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: '123456' } });
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
 
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('acceptInvite', expect.objectContaining({ token: 'test-token', password: '123456' })));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('acceptInvite', { token: 'test-token', password: '123456' }));
     await waitFor(() => expect(signInWithCustomToken).toHaveBeenCalledWith(expect.anything(), 'custom-token'));
   });
 
