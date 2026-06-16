@@ -78,28 +78,52 @@ test('removed quote and RFQ functions are not exported', () => {
   }
 });
 
-test('mud program extraction page builder creates overview and section pages', () => {
+test('mud program extraction page builder creates cover, well info, and section pages', () => {
   const pages = __testables.buildMudProgramPagesFromExtraction({
     overview: {
       programTitle: 'North Pad Mud Program',
       wellName: 'Well 12-34',
       sourceSummary: 'Extracted source summary.',
     },
+    formationTops: [{ formation: 'Surface Casing', md: '100' }],
+    casingStrings: [{ name: 'Surface', od: '244.5' }],
+    volumes: [{ holeSection: 'Surface', totalVolume: '36' }],
     sections: [
       {
         id: 'surface',
         name: 'Surface Hole',
         topDepth: '0 m',
         bottomDepth: '650 m',
+        properties: [{ label: 'Viscosity (s/L)', value: '40 - 90' }],
+        procedures: [{ heading: 'Spud', lines: ['Fill tanks with fresh water.'] }],
       },
     ],
   });
 
-  assert.equal(pages.length, 2);
-  assert.equal(pages[0].type, 'overview');
+  assert.equal(pages.length, 3);
+  assert.equal(pages[0].type, 'cover');
   assert.equal(pages[0].data.executiveSummary, 'Extracted source summary.');
-  assert.equal(pages[1].type, 'section');
-  assert.equal(pages[1].title, 'Surface Hole');
+  assert.equal(pages[1].type, 'wellInfo');
+  assert.equal(pages[1].data.formationTops[0].formation, 'Surface Casing');
+  assert.equal(pages[2].type, 'section');
+  assert.equal(pages[2].title, 'Surface Hole');
+  assert.equal(pages[2].data.properties[0].label, 'Viscosity (s/L)');
+});
+
+test('mud program table normalizers keep report rows safe', () => {
+  assert.deepEqual(__testables.normalizeFormationTops([{ formation: 'A'.repeat(130), md: 100, extra: 'drop' }])[0], {
+    formation: 'A'.repeat(120),
+    md: '100',
+    tvd: '',
+    lithology: '',
+    gradient: '',
+    emd: '',
+    pressure: '',
+    h2s: '',
+    comment: '',
+  });
+  assert.equal(__testables.normalizeCasingStrings([{ name: 'Surface', od: 244.5 }])[0].od, '244.5');
+  assert.equal(__testables.normalizeVolumeRows([{ holeSection: 'Main', totalVolume: 184.9 }])[0].totalVolume, '184.9');
 });
 
 test('mud program PDF validation only accepts application PDFs', () => {

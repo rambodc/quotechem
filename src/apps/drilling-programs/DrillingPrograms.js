@@ -10,13 +10,26 @@ const SECTION_COLORS = ['#108a24', '#0b63ce', '#b45309', '#7c3aed', '#c026d3', '
 const emptyOverview = {
   programTitle: '',
   operator: '',
+  consultant: '',
   mudCompany: 'QuoteChem',
   wellName: '',
   uwi: '',
+  license: '',
+  afe: '',
   rig: '',
   location: '',
+  fieldZone: '',
   programDate: '',
+  programVersion: '',
+  warehouse: '',
+  attention: '',
+  salesRep: '',
+  salesRepPhone: '',
+  groundElevation: '',
+  rfElevation: '',
+  rfGround: '',
   totalMd: '',
+  totalMetersDrilled: '',
   lateralLength: '',
   kickoffPoint: '',
   objective: '',
@@ -33,10 +46,50 @@ const emptySection = {
   mudSystem: '',
   densityRange: '',
   viscosityRange: '',
+  ph: '',
+  fluidLoss: '',
   keyProducts: '',
   riskNotes: '',
   programNotes: '',
   wellProfile: '',
+  properties: [],
+  procedures: [],
+};
+
+const emptyFormationTop = {
+  formation: '',
+  md: '',
+  tvd: '',
+  lithology: '',
+  gradient: '',
+  emd: '',
+  pressure: '',
+  h2s: '',
+  comment: '',
+};
+
+const emptyCasingString = {
+  name: '',
+  od: '',
+  linearMass: '',
+  grade: '',
+  capacity: '',
+  endPoint: '',
+};
+
+const emptyVolumeRow = {
+  holeSection: '',
+  bitSize: '',
+  start: '',
+  end: '',
+  length: '',
+  tanks: '',
+  casing: '',
+  sectionVolume: '',
+  totalOpenHole: '',
+  losses: '',
+  finalCirculating: '',
+  totalVolume: '',
 };
 
 function normalizeWellProfile(value) {
@@ -79,10 +132,56 @@ function sectionAccent(index = 0) {
   return SECTION_COLORS[Math.abs(Number(index) || 0) % SECTION_COLORS.length];
 }
 
-function displayWellProfile(value) {
-  const profile = normalizeWellProfile(value) || 'vertical';
-  if (profile === 'both') return 'vertical + horizontal';
-  return profile;
+function splitPlainLines(value) {
+  return String(value || '')
+    .split(/\n+|\s\*\s+|•\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function normalizeProperties(value = [], section = {}) {
+  const rows = Array.isArray(value)
+    ? value
+        .map((item) => ({
+          label: String(item?.label || item?.name || '').slice(0, 80),
+          value: String(item?.value || '').slice(0, 160),
+        }))
+        .filter((item) => item.label || item.value)
+    : [];
+  if (rows.length) return rows;
+  return [
+    ['Viscosity (s/L)', section.viscosityRange],
+    ['Density (kg/m3)', section.densityRange],
+    ['pH', section.ph],
+    ['Fluid Loss (cc/30min)', section.fluidLoss],
+  ]
+    .filter(([, value]) => String(value || '').trim())
+    .map(([label, value]) => ({ label, value }));
+}
+
+function normalizeProcedures(value = [], section = {}) {
+  const groups = Array.isArray(value)
+    ? value
+        .map((item) => ({
+          heading: String(item?.heading || item?.title || '').slice(0, 120),
+          lines: (Array.isArray(item?.lines) ? item.lines : splitPlainLines(item?.body || item?.text)).map((line) => String(line || '').slice(0, 500)).filter(Boolean),
+        }))
+        .filter((item) => item.heading || item.lines.length)
+    : [];
+  if (groups.length) return groups;
+  return [
+    ['Mud Up / Treatment', section.keyProducts],
+    ['Operational Procedure', section.programNotes],
+    ['Risks / Contingencies', section.riskNotes],
+  ]
+    .filter(([, body]) => String(body || '').trim())
+    .map(([heading, body]) => ({ heading, lines: splitPlainLines(body) }));
+}
+
+function normalizeRows(rows, emptyRow) {
+  return (Array.isArray(rows) ? rows : []).map((row) =>
+    Object.fromEntries(Object.keys(emptyRow).map((key) => [key, String(row?.[key] || '')]))
+  );
 }
 
 function formatDate(value) {
@@ -139,11 +238,33 @@ function normalizeDraft(draft = {}) {
         ...section,
         id: section.id || `section-${index + 1}`,
         name: section.name || `Section ${index + 1}`,
+        properties: normalizeProperties(section.properties, section),
+        procedures: normalizeProcedures(section.procedures, section),
       }))
     : [];
+  const formationTops = normalizeRows(draft.formationTops, emptyFormationTop);
+  const casingStrings = normalizeRows(draft.casingStrings, emptyCasingString);
+  const volumes = normalizeRows(draft.volumes, emptyVolumeRow);
   const pages = Array.isArray(draft.pages) && draft.pages.length
     ? draft.pages.map((page, index) => {
-        if (page?.type !== 'section') return page;
+        if (page?.type !== 'section') {
+          const type = page?.type === 'wellInfo' ? 'wellInfo' : 'cover';
+          return {
+            ...page,
+            id: type === 'cover' && page?.id === 'overview' ? 'cover' : page?.id || type,
+            type,
+            title: page?.title || (type === 'wellInfo' ? 'Well Information' : 'Drilling Fluid Program'),
+            data: type === 'wellInfo'
+              ? {
+                  overview,
+                  formationTops,
+                  casingStrings,
+                  volumes,
+                  ...(page?.data || {}),
+                }
+              : { ...overview, ...(page?.data || {}) },
+          };
+        }
         const sectionIndex = sections.findIndex((section) => section.id && section.id === page.sectionId);
         const colorIndex = sectionIndex >= 0 ? sectionIndex : Math.max(index - 1, 0);
         const pageData = { ...emptySection, ...(page.data || {}) };
@@ -157,12 +278,23 @@ function normalizeDraft(draft = {}) {
           },
         };
       })
-    : pagesFromExtraction(overview, sections);
+    : pagesFromExtraction(overview, sections, { formationTops, casingStrings, volumes });
+  if (!pages.some((page) => page.type === 'wellInfo')) {
+    pages.splice(1, 0, {
+      id: 'well-info',
+      type: 'wellInfo',
+      title: 'Well Information',
+      data: { overview, formationTops, casingStrings, volumes },
+    });
+  }
   return {
     draftId: draft.draftId || draft.id || '',
     status: draft.status || 'local',
     sourceFileName: draft.sourceFileName || draft.fileName || '',
     overview,
+    formationTops,
+    casingStrings,
+    volumes,
     sections,
     pages,
     extractionError: draft.extractionError || draft.error || '',
@@ -171,17 +303,28 @@ function normalizeDraft(draft = {}) {
   };
 }
 
-function pagesFromExtraction(overview, sections) {
+function pagesFromExtraction(overview, sections, wellInfo = {}) {
   const pageList = [
     {
-      id: 'overview',
-      type: 'overview',
-      title: overview.programTitle || `${overview.wellName || 'Well'} Mud Program Overview`,
+      id: 'cover',
+      type: 'cover',
+      title: overview.programTitle || 'Drilling Fluid Program',
       data: {
         ...overview,
         executiveSummary:
           overview.sourceSummary ||
           'Review the extracted drilling program details, confirm the planned intervals, and refine the mud program before export.',
+      },
+    },
+    {
+      id: 'well-info',
+      type: 'wellInfo',
+      title: 'Well Information',
+      data: {
+        overview,
+        formationTops: wellInfo.formationTops || [],
+        casingStrings: wellInfo.casingStrings || [],
+        volumes: wellInfo.volumes || [],
       },
     },
   ];
@@ -210,11 +353,17 @@ function safePages(draft) {
   if (!draft) return [];
   return Array.isArray(draft.pages) && draft.pages.length
     ? draft.pages
-    : pagesFromExtraction(draft.overview || emptyOverview, draft.sections || []);
+    : pagesFromExtraction(draft.overview || emptyOverview, draft.sections || [], {
+        formationTops: draft.formationTops || [],
+        casingStrings: draft.casingStrings || [],
+        volumes: draft.volumes || [],
+      });
 }
 
 function pageLabel(page, index) {
-  return page.type === 'overview' ? 'Overview' : `Section ${index}`;
+  if (page.type === 'cover') return 'Cover';
+  if (page.type === 'wellInfo') return 'Well Info';
+  return `Section ${Math.max(1, index - 1)}`;
 }
 
 export default function DrillingPrograms() {
@@ -223,7 +372,7 @@ export default function DrillingPrograms() {
   const [stage, setStage] = useState('upload');
   const [drafts, setDrafts] = useState([]);
   const [draft, setDraft] = useState(null);
-  const [selectedPageId, setSelectedPageId] = useState('overview');
+  const [selectedPageId, setSelectedPageId] = useState('cover');
   const [selectedFile, setSelectedFile] = useState(null);
   const [assistantPrompt, setAssistantPrompt] = useState('');
   const [loading, setLoading] = useState(true);
@@ -259,6 +408,9 @@ export default function DrillingPrograms() {
     if (!draft?.draftId || stage === 'upload') return undefined;
     const serializable = JSON.stringify({
       overview: draft.overview,
+      formationTops: draft.formationTops,
+      casingStrings: draft.casingStrings,
+      volumes: draft.volumes,
       sections: draft.sections,
       pages: draft.pages,
       status: draft.status,
@@ -278,6 +430,9 @@ export default function DrillingPrograms() {
           {
             draftId: draft.draftId,
             overview: draft.overview,
+            formationTops: draft.formationTops,
+            casingStrings: draft.casingStrings,
+            volumes: draft.volumes,
             sections: draft.sections,
             pages: draft.pages,
             status: draft.status,
@@ -298,10 +453,13 @@ export default function DrillingPrograms() {
   const openDraft = (nextDraft) => {
     const normalized = normalizeDraft(nextDraft);
     setDraft(normalized);
-    setSelectedPageId(normalized.pages[0]?.id || 'overview');
+    setSelectedPageId(normalized.pages[0]?.id || 'cover');
     setStage(normalized.pages.length ? 'editor' : 'review');
     lastSavedRef.current = JSON.stringify({
       overview: normalized.overview,
+      formationTops: normalized.formationTops,
+      casingStrings: normalized.casingStrings,
+      volumes: normalized.volumes,
       sections: normalized.sections,
       pages: normalized.pages,
       status: normalized.status,
@@ -339,7 +497,7 @@ export default function DrillingPrograms() {
       const normalized = normalizeDraft(extracted.draft || created.draft);
       setDraft(normalized);
       setStage('review');
-      setSelectedPageId('overview');
+      setSelectedPageId('cover');
       setMessage('Extraction complete. Review the well data before creating pages.');
       lastSavedRef.current = '';
       await loadDrafts();
@@ -361,6 +519,20 @@ export default function DrillingPrograms() {
     }));
   };
 
+  const updateTableRow = (tableKey, rowIndex, key, value) => {
+    setDraft((prev) => ({
+      ...prev,
+      [tableKey]: (prev[tableKey] || []).map((row, index) => (index === rowIndex ? { ...row, [key]: value } : row)),
+    }));
+  };
+
+  const addTableRow = (tableKey, emptyRow) => {
+    setDraft((prev) => ({
+      ...prev,
+      [tableKey]: [...(prev[tableKey] || []), { ...emptyRow }],
+    }));
+  };
+
   const addSection = () => {
     setDraft((prev) => {
       const id = `section-${Date.now()}`;
@@ -373,8 +545,12 @@ export default function DrillingPrograms() {
 
   const createPages = () => {
     setDraft((prev) => {
-      const pages = pagesFromExtraction(prev.overview, prev.sections);
-      setSelectedPageId(pages[0]?.id || 'overview');
+      const pages = pagesFromExtraction(prev.overview, prev.sections, {
+        formationTops: prev.formationTops,
+        casingStrings: prev.casingStrings,
+        volumes: prev.volumes,
+      });
+      setSelectedPageId(pages[0]?.id || 'cover');
       return { ...prev, status: 'editing', pages };
     });
     setStage('editor');
@@ -470,6 +646,8 @@ export default function DrillingPrograms() {
           draft={draft}
           updateOverview={updateOverview}
           updateSection={updateSection}
+          updateTableRow={updateTableRow}
+          addTableRow={addTableRow}
           addSection={addSection}
           onBack={() => setStage('upload')}
           onCreatePages={createPages}
@@ -545,7 +723,7 @@ function UploadStage({ selectedFile, setSelectedFile, uploading, onSubmit, loadi
   );
 }
 
-function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack, onCreatePages }) {
+function ReviewStage({ draft, updateOverview, updateSection, updateTableRow, addTableRow, addSection, onBack, onCreatePages }) {
   return (
     <div className="program-panel review-panel">
       <div className="program-panel-head">
@@ -562,13 +740,26 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
         {[
           ['programTitle', 'Program title'],
           ['operator', 'Operator'],
+          ['consultant', 'Consultant'],
           ['mudCompany', 'Mud company'],
           ['wellName', 'Well name'],
           ['uwi', 'UWI / API'],
+          ['license', 'License'],
+          ['afe', 'AFE'],
           ['rig', 'Rig'],
           ['location', 'Location'],
+          ['fieldZone', 'Field / zone'],
           ['programDate', 'Date'],
+          ['programVersion', 'Version'],
+          ['warehouse', 'Warehouse'],
+          ['attention', 'Attention'],
+          ['salesRep', 'Sales rep'],
+          ['salesRepPhone', 'Sales rep phone'],
+          ['groundElevation', 'Ground elevation'],
+          ['rfElevation', 'RF elevation'],
+          ['rfGround', 'RF-ground'],
           ['totalMd', 'Total MD'],
+          ['totalMetersDrilled', 'Total drilled'],
           ['lateralLength', 'Lateral length'],
           ['kickoffPoint', 'Kickoff point'],
         ].map(([key, label]) => (
@@ -587,6 +778,66 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
         </label>
       </div>
 
+      <ReviewTable
+        title="Formation Tops"
+        tableKey="formationTops"
+        rows={draft.formationTops}
+        columns={[
+          ['formation', 'Formation'],
+          ['md', 'MD'],
+          ['tvd', 'TVD'],
+          ['lithology', 'Lithology'],
+          ['gradient', 'Gradient'],
+          ['emd', 'EMD'],
+          ['pressure', 'Pressure'],
+          ['h2s', 'H2S'],
+          ['comment', 'Comment'],
+        ]}
+        emptyRow={emptyFormationTop}
+        updateTableRow={updateTableRow}
+        addTableRow={addTableRow}
+      />
+
+      <ReviewTable
+        title="Casing Strings"
+        tableKey="casingStrings"
+        rows={draft.casingStrings}
+        columns={[
+          ['name', 'Name'],
+          ['od', 'OD'],
+          ['linearMass', 'Linear mass'],
+          ['grade', 'Grade'],
+          ['capacity', 'Capacity'],
+          ['endPoint', 'End point'],
+        ]}
+        emptyRow={emptyCasingString}
+        updateTableRow={updateTableRow}
+        addTableRow={addTableRow}
+      />
+
+      <ReviewTable
+        title="Volumes"
+        tableKey="volumes"
+        rows={draft.volumes}
+        columns={[
+          ['holeSection', 'Hole section'],
+          ['bitSize', 'Bit size'],
+          ['start', 'Start'],
+          ['end', 'End'],
+          ['length', 'Length'],
+          ['tanks', 'Tanks'],
+          ['casing', 'Casing'],
+          ['sectionVolume', 'Section vol.'],
+          ['totalOpenHole', 'Open hole'],
+          ['losses', 'Losses'],
+          ['finalCirculating', 'Final circ.'],
+          ['totalVolume', 'Total vol.'],
+        ]}
+        emptyRow={emptyVolumeRow}
+        updateTableRow={updateTableRow}
+        addTableRow={addTableRow}
+      />
+
       <div className="section-review-head">
         <h3>Well sections</h3>
         <button className="secondary-action" type="button" onClick={addSection}>
@@ -600,6 +851,8 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
           <span>Top</span>
           <span>Bottom</span>
           <span>Hole</span>
+          <span>pH</span>
+          <span>Fluid loss</span>
           <span>Mud system</span>
           <span>Notes</span>
         </div>
@@ -618,6 +871,8 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
             <input aria-label={`${section.name || 'Section'} top depth`} value={section.topDepth} onChange={(event) => updateSection(section.id, 'topDepth', event.target.value)} />
             <input aria-label={`${section.name || 'Section'} bottom depth`} value={section.bottomDepth} onChange={(event) => updateSection(section.id, 'bottomDepth', event.target.value)} />
             <input aria-label={`${section.name || 'Section'} hole size`} value={section.holeSize} onChange={(event) => updateSection(section.id, 'holeSize', event.target.value)} />
+            <input aria-label={`${section.name || 'Section'} pH`} value={section.ph || ''} onChange={(event) => updateSection(section.id, 'ph', event.target.value)} />
+            <input aria-label={`${section.name || 'Section'} fluid loss`} value={section.fluidLoss || ''} onChange={(event) => updateSection(section.id, 'fluidLoss', event.target.value)} />
             <input aria-label={`${section.name || 'Section'} mud system`} value={section.mudSystem} onChange={(event) => updateSection(section.id, 'mudSystem', event.target.value)} />
             <input aria-label={`${section.name || 'Section'} notes`} value={section.programNotes || section.riskNotes || ''} onChange={(event) => updateSection(section.id, 'programNotes', event.target.value)} />
           </div>
@@ -628,6 +883,38 @@ function ReviewStage({ draft, updateOverview, updateSection, addSection, onBack,
         Create editable pages
       </button>
     </div>
+  );
+}
+
+function ReviewTable({ title, tableKey, rows, columns, emptyRow, updateTableRow, addTableRow }) {
+  return (
+    <section className="review-table-block">
+      <div className="section-review-head">
+        <h3>{title}</h3>
+        <button className="secondary-action" type="button" onClick={() => addTableRow(tableKey, emptyRow)}>
+          Add row
+        </button>
+      </div>
+      <div className="review-data-table" style={{ '--review-cols': columns.length }}>
+        <div className="review-data-row header">
+          {columns.map(([, label]) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+        {rows?.length ? rows.map((row, rowIndex) => (
+          <div className="review-data-row" key={`${tableKey}-${rowIndex}`}>
+            {columns.map(([key, label]) => (
+              <input
+                key={key}
+                aria-label={`${title} ${rowIndex + 1} ${label}`}
+                value={row[key] || ''}
+                onChange={(event) => updateTableRow(tableKey, rowIndex, key, event.target.value)}
+              />
+            ))}
+          </div>
+        )) : <p className="muted review-empty-row">No rows extracted yet.</p>}
+      </div>
+    </section>
   );
 }
 
@@ -666,8 +953,10 @@ function EditorStage({
 
         <div className="sidebar-section">
           <h2>Properties</h2>
-          {selectedPage?.type === 'overview' ? (
-            <OverviewEditor page={selectedPage} updatePageData={updatePageData} />
+          {selectedPage?.type === 'cover' ? (
+            <CoverEditor page={selectedPage} updatePageData={updatePageData} />
+          ) : selectedPage?.type === 'wellInfo' ? (
+            <WellInfoEditor />
           ) : (
             <SectionEditor page={selectedPage} updatePageData={updatePageData} />
           )}
@@ -706,19 +995,30 @@ function EditorStage({
           </button>
         </div>
         <div className="print-pages">
-          <MudProgramPage page={selectedPage} overview={draft.overview} />
+          {pages.map((page) => (
+            <MudProgramPage key={page.id} page={page} overview={draft.overview} />
+          ))}
         </div>
       </main>
     </div>
   );
 }
 
-function OverviewEditor({ page, updatePageData }) {
+function CoverEditor({ page, updatePageData }) {
   const fields = [
     ['programTitle', 'Program title'],
     ['operator', 'Operator'],
+    ['consultant', 'Consultant'],
     ['mudCompany', 'Mud company'],
     ['wellName', 'Well name'],
+    ['uwi', 'UWI / API'],
+    ['fieldZone', 'Field / zone'],
+    ['attention', 'Attention'],
+    ['salesRep', 'Sales rep'],
+    ['salesRepPhone', 'Sales rep phone'],
+    ['programDate', 'Program date'],
+    ['programVersion', 'Version'],
+    ['warehouse', 'Warehouse'],
     ['rig', 'Rig'],
     ['location', 'Location'],
     ['totalMd', 'Total MD'],
@@ -736,6 +1036,10 @@ function OverviewEditor({ page, updatePageData }) {
   ));
 }
 
+function WellInfoEditor() {
+  return <p className="muted">Edit well information tables from Review extraction.</p>;
+}
+
 function SectionEditor({ page, updatePageData }) {
   const fields = [
     ['name', 'Section name'],
@@ -747,6 +1051,8 @@ function SectionEditor({ page, updatePageData }) {
     ['mudSystem', 'Mud system'],
     ['densityRange', 'Density range'],
     ['viscosityRange', 'Viscosity range'],
+    ['ph', 'pH'],
+    ['fluidLoss', 'Fluid loss'],
     ['keyProducts', 'Key products', 'textarea'],
     ['programNotes', 'Program notes', 'textarea'],
     ['riskNotes', 'Risk notes', 'textarea'],
@@ -771,44 +1077,103 @@ function SectionEditor({ page, updatePageData }) {
 
 function MudProgramPage({ page, overview }) {
   if (!page) return null;
-  if (page.type === 'overview') {
+  if (page.type === 'cover') {
     const data = page.data || {};
     return (
-      <article className="mud-page">
-        <PageHeader title={data.programTitle || 'Mud Program'} subtitle={`${data.wellName || 'Well'} overview`} />
-        <section className="mud-cover-band">
-          <div>
-            <span>Prepared by</span>
-            <strong>{data.mudCompany || 'QuoteChem'}</strong>
+      <article className="mud-page report-cover-page">
+        <div className="cover-center">
+          <h1>Drilling Fluid Program</h1>
+          <h2>{data.wellName || data.programTitle || 'Untitled well'}</h2>
+          <div className="cover-client">
+            <strong>{data.operator || 'Operator not provided'}</strong>
+            <span>{data.consultant || data.location || ''}</span>
+            <span>{data.uwi || ''}</span>
+            <span>{data.fieldZone || ''}</span>
           </div>
-          <div>
-            <span>Operator</span>
-            <strong>{data.operator || 'Not provided'}</strong>
-          </div>
-          <div>
-            <span>Rig</span>
-            <strong>{data.rig || 'Not provided'}</strong>
-          </div>
-        </section>
-        <section className="mud-page-grid">
-          <InfoCard label="Well" value={data.wellName} />
-          <InfoCard label="Location" value={data.location} />
-          <InfoCard label="Total MD" value={data.totalMd} />
-          <InfoCard label="Lateral" value={data.lateralLength} />
-        </section>
-        <section className="mud-content-block">
-          <h2>Program Objective</h2>
-          <p>{data.objective || data.executiveSummary || 'Confirm the drilling objective and mud program basis before export.'}</p>
-        </section>
-        <section className="mud-diagram">
-          <div className="diagram-wellbore">
-            <span />
-            <span />
-            <span />
-          </div>
-          <div>
-            <h2>Well Plan Snapshot</h2>
-            <p>{data.executiveSummary || 'The extracted drilling program data will be turned into section pages for review.'}</p>
+          <img src={`${process.env.PUBLIC_URL}/assets/unique-energy-logo.png`} alt="Unique Energy Solutions" className="cover-logo" />
+          <dl className="cover-meta">
+            <div><dt>Attention:</dt><dd>{data.attention || '-'}</dd></div>
+            <div><dt>Sales Rep.(s)</dt><dd>{[data.salesRep, data.salesRepPhone].filter(Boolean).join('   ') || '-'}</dd></div>
+            <div><dt>Programmed Date:</dt><dd>{data.programDate || '-'}</dd></div>
+            <div><dt>Program Version:</dt><dd>{data.programVersion || '-'}</dd></div>
+            <div><dt>Warehouse:</dt><dd>{data.warehouse || '-'}</dd></div>
+          </dl>
+        </div>
+      </article>
+    );
+  }
+
+  if (page.type === 'wellInfo') {
+    const data = page.data || {};
+    const info = data.overview || overview || {};
+    return (
+      <article className="mud-page well-info-page">
+        <ReportTitle overview={info} />
+        <section className="well-info-layout">
+          <SimpleWellbore totalMd={info.totalMd || info.totalMetersDrilled} lateralLength={info.lateralLength} />
+          <div className="well-info-tables">
+            <h2>Well Information</h2>
+            <ReportTable
+              className="well-summary-table"
+              columns={[
+                ['uwi', 'UWI'],
+                ['license', 'License'],
+                ['afe', 'AFE'],
+                ['rig', 'Drilling Rig'],
+                ['groundElevation', 'Ground Elevation'],
+                ['rfElevation', 'RF Elevation'],
+                ['rfGround', 'RF-Ground'],
+              ]}
+              rows={[info]}
+            />
+            <h2>Formation Tops</h2>
+            <ReportTable
+              columns={[
+                ['formation', 'Formation'],
+                ['md', 'MD (m)'],
+                ['tvd', 'TVD (m)'],
+                ['lithology', 'Lithology'],
+                ['gradient', 'Gradient (kPa/m)'],
+                ['emd', 'EMD (kg/m3)'],
+                ['pressure', 'Pressure (kPa)'],
+                ['h2s', 'H2S (%)'],
+                ['comment', 'Comment'],
+              ]}
+              rows={data.formationTops || []}
+            />
+            <h2>Casing Strings</h2>
+            <ReportTable
+              columns={[
+                ['name', 'Name'],
+                ['od', 'OD (mm)'],
+                ['linearMass', 'Linear Mass (kg/m)'],
+                ['grade', 'Grade'],
+                ['capacity', 'Capacity (m3/m)'],
+                ['endPoint', 'End Point (mMD)'],
+              ]}
+              rows={data.casingStrings || []}
+            />
+            <h2>Volumes</h2>
+            <ReportTable
+              columns={[
+                ['holeSection', 'Hole Section'],
+                ['bitSize', 'Bit Size (mm)'],
+                ['start', 'Start (mMD)'],
+                ['end', 'End (mMD)'],
+                ['length', 'Length (m)'],
+                ['tanks', 'Tanks (m3)'],
+                ['casing', 'Casing (m3)'],
+                ['sectionVolume', 'Section Volume (m3)'],
+                ['totalOpenHole', 'Total Open Hole (m3)'],
+                ['losses', 'Losses (m3)'],
+                ['finalCirculating', 'Final Circulating (m3)'],
+                ['totalVolume', 'Total Volume (m3)'],
+              ]}
+              rows={data.volumes || []}
+            />
+            <p className="volume-summary">
+              Total Target/Lateral Meters: {info.lateralLength || '-'}, Total Meters Drilled: {info.totalMetersDrilled || info.totalMd || '-'}
+            </p>
           </div>
         </section>
       </article>
@@ -816,157 +1181,81 @@ function MudProgramPage({ page, overview }) {
   }
 
   const data = page.data || {};
-  const wellProfile = inferWellProfile(data, overview);
-  const accent = data.sectionAccent || sectionAccent((Number(data.sectionNumber) || 1) - 1);
   const sectionTitle = data.name || page.title || 'Well Section';
   const subtitleParts = [data.mudSystem, data.holeSize ? `${data.holeSize} OH` : '', data.casingSize ? `${data.casingSize} Casing` : ''].filter(Boolean);
   return (
-    <article className={`mud-page mud-section-page profile-${wellProfile}`} style={{ '--section-accent': accent }}>
-      <header className="section-print-header">
-        <span>Section {data.sectionNumber || 1}</span>
-        <h1>{overview?.programTitle || `Drilling Fluid Program - ${overview?.wellName || 'Well'}`}</h1>
-        <p>{sectionTitle}{subtitleParts.length ? ` - ${subtitleParts.join(' & ')}` : ''}</p>
-      </header>
-
-      <PropertyStack
-        items={[
-          ['Profile', displayWellProfile(wellProfile)],
-          ['Top', data.topDepth || '-'],
-          ['Bottom', data.bottomDepth || '-'],
-          ['Hole Size', data.holeSize || 'TBC'],
-          ['Casing', data.casingSize || 'TBC'],
-          ['Density', data.densityRange || 'TBC'],
-          ['Viscosity', data.viscosityRange || 'TBC'],
-          ['Mud System', data.mudSystem || 'TBC'],
-        ]}
-      />
-
-      <section className={`section-program-layout ${wellProfile}`} aria-label={`${sectionTitle} program`}>
-        {wellProfile !== 'horizontal' ? <WellboreDiagram section={data} profile={wellProfile} overview={overview} /> : null}
-        <ProcedureColumn section={data} />
-        {wellProfile === 'horizontal' ? <WellboreDiagram section={data} profile={wellProfile} overview={overview} /> : null}
+    <article className="mud-page mud-section-page">
+      <ReportTitle overview={overview} />
+      <h2 className="fluid-section-title">{sectionTitle}{subtitleParts.length ? ` - ${subtitleParts.join(' & ')}` : ''}</h2>
+      <section className="fluid-program-table" aria-label={`${sectionTitle} fluid program`}>
+        <div className="fluid-table-head properties">Properties</div>
+        <div className="fluid-table-head procedures">Procedures</div>
+        <aside className="fluid-properties">
+          {normalizeProperties(data.properties, data).length ? normalizeProperties(data.properties, data).map((item, index) => (
+            <div key={`${item.label}-${index}`} className="fluid-property">
+              <strong>{item.label}</strong>
+              <span>{item.value || '-'}</span>
+            </div>
+          )) : <div className="fluid-property"><strong>Properties</strong><span>TBC</span></div>}
+        </aside>
+        <main className="fluid-procedures">
+          {normalizeProcedures(data.procedures, data).length ? normalizeProcedures(data.procedures, data).map((group, index) => (
+            <section key={`${group.heading}-${index}`} className="fluid-procedure-group">
+              {group.heading ? <h3>{group.heading}</h3> : null}
+              {group.lines.map((line, lineIndex) => (
+                <p key={`${group.heading}-${lineIndex}`}>* {line}</p>
+              ))}
+            </section>
+          )) : <p>* Add procedures for this hole section.</p>}
+        </main>
       </section>
     </article>
   );
 }
 
-function PropertyStack({ items }) {
+function ReportTitle({ overview = {} }) {
   return (
-    <dl className="section-property-strip">
-      {items.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd>{value || 'TBC'}</dd>
-        </div>
-      ))}
-    </dl>
+    <h1 className="report-title">{overview.programTitle || `Drilling Fluid Program - ${overview.wellName || 'Untitled well'}`}</h1>
   );
 }
 
-function splitTextLines(value) {
-  return String(value || '')
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function ProcedureColumn({ section }) {
-  const groups = [
-    ['Mud Up / Treatment', section.keyProducts],
-    ['Operational Procedure', section.programNotes],
-    ['Risks / Contingencies', section.riskNotes],
-  ].filter(([, value]) => String(value || '').trim());
-
-  const fallback = [
-    ['Mud Up / Treatment', 'Add recommended products, concentrations, and treatment notes for this section.'],
-    ['Operational Procedure', 'Add drilling, monitoring, maintenance, and trip notes for the selected interval.'],
-    ['Risks / Contingencies', 'Add hole stability, losses, coal seams, casing, and field checks as required.'],
-  ];
-
+function ReportTable({ columns, rows, className = '' }) {
+  const safeRows = rows?.length ? rows : [Object.fromEntries(columns.map(([key]) => [key, '-']))];
   return (
-    <main className="section-procedure-column">
-      {(groups.length ? groups : fallback).map(([heading, body]) => (
-        <section key={heading} className="procedure-group">
-          <h2>{heading}</h2>
-          {splitTextLines(body).map((line, index) => (
-            <p key={`${heading}-${index}`}>{line}</p>
+    <table className={`report-table ${className}`}>
+      <thead>
+        <tr>
+          {columns.map(([, label]) => (
+            <th key={label}>{label}</th>
           ))}
-        </section>
-      ))}
-    </main>
+        </tr>
+      </thead>
+      <tbody>
+        {safeRows.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {columns.map(([key]) => (
+              <td key={key}>{row?.[key] || '-'}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
-function WellboreDiagram({ section, overview, profile }) {
-  const isHorizontal = profile === 'horizontal';
-  const isBoth = profile === 'both';
-  const title = isBoth ? 'Vertical and horizontal drilled hole section' : isHorizontal ? 'Horizontal drilled hole section' : 'Vertical drilled hole section';
-  const casingPath = isHorizontal ? 'M74 206 L190 206' : 'M210 50 L210 160';
-  const openPath = isHorizontal
-    ? 'M190 206 L456 206'
-    : isBoth
-      ? 'M210 160 L210 248 Q210 320 282 320 L456 320'
-      : 'M210 160 L210 360';
-  const top = section.topDepth || 'Top';
-  const bottom = section.bottomDepth || 'Bottom';
-
+function SimpleWellbore({ totalMd, lateralLength }) {
   return (
-    <figure className={`wellbore-card ${profile}`} aria-label={title}>
-      <svg className="wellbore-svg" viewBox="0 0 520 420" role="img" aria-labelledby={`wellbore-${profile}-title`}>
-        <title id={`wellbore-${profile}-title`}>{title}</title>
-        <rect className="wellbore-frame" x="18" y="18" width="484" height="384" rx="22" />
-        <path className="depth-axis" d={isHorizontal ? 'M74 252 L456 252' : 'M150 50 L150 360'} />
-
-        <g className="depth-label top">
-          <line x1={isHorizontal ? 74 : 150} y1={isHorizontal ? 226 : 50} x2={isHorizontal ? 74 : 196} y2={isHorizontal ? 252 : 50} />
-          <text x={isHorizontal ? 74 : 108} y={isHorizontal ? 218 : 54}>{top}</text>
-          <text x={isHorizontal ? 74 : 108} y={isHorizontal ? 236 : 72}>TOP</text>
-        </g>
-
-        <g className="depth-label bottom">
-          <line x1={isHorizontal || isBoth ? 456 : 150} y1={isHorizontal ? 226 : isBoth ? 320 : 360} x2={isHorizontal || isBoth ? 456 : 196} y2={isHorizontal ? 252 : isBoth ? 320 : 360} />
-          <text x={isHorizontal || isBoth ? 456 : 108} y={isHorizontal ? 218 : isBoth ? 306 : 354}>{bottom}</text>
-          <text x={isHorizontal || isBoth ? 456 : 108} y={isHorizontal ? 236 : isBoth ? 324 : 372}>BOTTOM</text>
-        </g>
-
-        <path className="casing outer" d={casingPath} />
-        <path className="casing inner" d={casingPath} />
-        <path className="casing shine" d={casingPath} />
-
-        <path className="open-hole outer" d={openPath} />
-        <path className="open-hole inner" d={openPath} />
-        <path className="open-hole shine" d={openPath} />
-
-        <circle className="shoe-marker" cx={isHorizontal ? 190 : 210} cy={isHorizontal ? 206 : 160} r="6" />
-        <circle className="end-marker" cx={isHorizontal || isBoth ? 456 : 210} cy={isHorizontal ? 206 : isBoth ? 320 : 360} r="7" />
+    <figure className="simple-wellbore" aria-label="Wellbore diagram">
+      <svg viewBox="0 0 160 820" role="img">
+        <path className="rig-line" d="M72 34 L100 118 L45 118 Z M72 34 L72 205" />
+        <path className="well-outer" d="M74 132 L74 724 Q74 790 140 790" />
+        <path className="well-inner" d="M90 132 L90 704 Q90 770 148 770" />
+        <path className="well-dash" d="M55 135 L55 720 Q55 806 146 806" />
+        <path className="well-dash" d="M104 135 L104 704 Q104 754 148 754" />
       </svg>
       <figcaption>
-        <strong>{section.topDepth || 'Top'} to {section.bottomDepth || 'Bottom'}</strong>
-        <span>{displayWellProfile(profile)} drilled hole</span>
-        <small>{overview?.wellName || 'Well'}</small>
+        Total Target/Lateral Meters: {lateralLength || '-'}, Total Meters Drilled: {totalMd || '-'}
       </figcaption>
     </figure>
-  );
-}
-
-function PageHeader({ title, subtitle }) {
-  return (
-    <header className="mud-page-header">
-      <div>
-        <span>QuoteChem Mud Program</span>
-        <h1>{title}</h1>
-        <p>{subtitle}</p>
-      </div>
-      <strong>QC</strong>
-    </header>
-  );
-}
-
-function InfoCard({ label, value }) {
-  return (
-    <div className="mud-info-card">
-      <span>{label}</span>
-      <strong>{value || 'Not provided'}</strong>
-    </div>
   );
 }

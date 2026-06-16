@@ -49,6 +49,11 @@ function asString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function cellString(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return asString(value);
+}
+
 function normalizeEmail(value) {
   return asString(value).toLowerCase();
 }
@@ -250,13 +255,26 @@ function mapProgramRunDoc(doc) {
 const emptyMudOverview = {
   programTitle: '',
   operator: '',
+  consultant: '',
   mudCompany: 'QuoteChem',
   wellName: '',
   uwi: '',
+  license: '',
+  afe: '',
   rig: '',
   location: '',
+  fieldZone: '',
   programDate: '',
+  programVersion: '',
+  warehouse: '',
+  attention: '',
+  salesRep: '',
+  salesRepPhone: '',
+  groundElevation: '',
+  rfElevation: '',
+  rfGround: '',
   totalMd: '',
+  totalMetersDrilled: '',
   lateralLength: '',
   kickoffPoint: '',
   objective: '',
@@ -273,10 +291,140 @@ const emptyMudSection = {
   mudSystem: '',
   densityRange: '',
   viscosityRange: '',
+  ph: '',
+  fluidLoss: '',
   keyProducts: '',
   riskNotes: '',
   programNotes: '',
+  properties: [],
+  procedures: [],
 };
+
+const emptyFormationTop = {
+  formation: '',
+  md: '',
+  tvd: '',
+  lithology: '',
+  gradient: '',
+  emd: '',
+  pressure: '',
+  h2s: '',
+  comment: '',
+};
+
+const emptyCasingString = {
+  name: '',
+  od: '',
+  linearMass: '',
+  grade: '',
+  capacity: '',
+  endPoint: '',
+};
+
+const emptyVolumeRow = {
+  holeSection: '',
+  bitSize: '',
+  start: '',
+  end: '',
+  length: '',
+  tanks: '',
+  casing: '',
+  sectionVolume: '',
+  totalOpenHole: '',
+  losses: '',
+  finalCirculating: '',
+  totalVolume: '',
+};
+
+function normalizeMudProperties(value = [], section = {}) {
+  const input = Array.isArray(value) ? value : [];
+  const rows = input
+    .slice(0, 18)
+    .map((item) => ({
+      label: asString(item?.label || item?.name).slice(0, 80),
+      value: asString(item?.value).slice(0, 160),
+    }))
+    .filter((item) => item.label || item.value);
+  if (rows.length) return rows;
+  return [
+    ['Viscosity (s/L)', section.viscosityRange],
+    ['Density (kg/m3)', section.densityRange],
+    ['pH', section.ph],
+    ['Fluid Loss (cc/30min)', section.fluidLoss],
+  ]
+    .filter(([, value]) => asString(value))
+    .map(([label, value]) => ({ label, value: asString(value).slice(0, 160) }));
+}
+
+function normalizeMudProcedures(value = [], section = {}) {
+  const input = Array.isArray(value) ? value : [];
+  const groups = input
+    .slice(0, 18)
+    .map((item) => ({
+      heading: asString(item?.heading || item?.title).slice(0, 120),
+      lines: (Array.isArray(item?.lines) ? item.lines : splitPlainLines(item?.body || item?.text)).slice(0, 80).map((line) => asString(line).slice(0, 500)).filter(Boolean),
+    }))
+    .filter((item) => item.heading || item.lines.length);
+  if (groups.length) return groups;
+  const fallback = [
+    ['Mud Up / Treatment', section.keyProducts],
+    ['Operational Procedure', section.programNotes],
+    ['Risks / Contingencies', section.riskNotes],
+  ].filter(([, body]) => asString(body));
+  return fallback.map(([heading, body]) => ({ heading, lines: splitPlainLines(body).slice(0, 80) }));
+}
+
+function splitPlainLines(value) {
+  return asString(value)
+    .split(/\n+|\s\*\s+|•\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function normalizeFormationTops(value = []) {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.slice(0, 40).map((row) => ({
+    formation: cellString(row.formation || row.name).slice(0, 120),
+    md: cellString(row.md || row.measuredDepth).slice(0, 60),
+    tvd: cellString(row.tvd).slice(0, 60),
+    lithology: cellString(row.lithology).slice(0, 120),
+    gradient: cellString(row.gradient).slice(0, 60),
+    emd: cellString(row.emd).slice(0, 60),
+    pressure: cellString(row.pressure).slice(0, 60),
+    h2s: cellString(row.h2s).slice(0, 60),
+    comment: cellString(row.comment || row.notes).slice(0, 240),
+  }));
+}
+
+function normalizeCasingStrings(value = []) {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.slice(0, 16).map((row) => ({
+    name: cellString(row.name).slice(0, 120),
+    od: cellString(row.od || row.outerDiameter).slice(0, 60),
+    linearMass: cellString(row.linearMass || row.weight).slice(0, 60),
+    grade: cellString(row.grade).slice(0, 60),
+    capacity: cellString(row.capacity).slice(0, 60),
+    endPoint: cellString(row.endPoint || row.endMd).slice(0, 60),
+  }));
+}
+
+function normalizeVolumeRows(value = []) {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.slice(0, 20).map((row) => ({
+    holeSection: cellString(row.holeSection || row.section).slice(0, 120),
+    bitSize: cellString(row.bitSize).slice(0, 60),
+    start: cellString(row.start || row.startMd).slice(0, 60),
+    end: cellString(row.end || row.endMd).slice(0, 60),
+    length: cellString(row.length).slice(0, 60),
+    tanks: cellString(row.tanks).slice(0, 60),
+    casing: cellString(row.casing).slice(0, 60),
+    sectionVolume: cellString(row.sectionVolume).slice(0, 60),
+    totalOpenHole: cellString(row.totalOpenHole).slice(0, 60),
+    losses: cellString(row.losses).slice(0, 60),
+    finalCirculating: cellString(row.finalCirculating).slice(0, 60),
+    totalVolume: cellString(row.totalVolume).slice(0, 60),
+  }));
+}
 
 function isPdfContentType(value) {
   return asString(value).toLowerCase() === 'application/pdf';
@@ -314,13 +462,26 @@ function normalizeMudOverview(value = {}) {
   return {
     programTitle: asString(value.programTitle).slice(0, 180),
     operator: asString(value.operator || value.customer).slice(0, 160),
+    consultant: asString(value.consultant).slice(0, 160),
     mudCompany: asString(value.mudCompany).slice(0, 160) || 'QuoteChem',
     wellName: asString(value.wellName).slice(0, 160),
     uwi: asString(value.uwi || value.api).slice(0, 100),
+    license: asString(value.license).slice(0, 80),
+    afe: asString(value.afe).slice(0, 80),
     rig: asString(value.rig).slice(0, 160),
     location: asString(value.location).slice(0, 220),
+    fieldZone: asString(value.fieldZone || value.field || value.zone).slice(0, 160),
     programDate: asString(value.programDate || value.date).slice(0, 60),
+    programVersion: asString(value.programVersion || value.version).slice(0, 60),
+    warehouse: asString(value.warehouse).slice(0, 120),
+    attention: asString(value.attention).slice(0, 120),
+    salesRep: asString(value.salesRep || value.salesRepresentative).slice(0, 120),
+    salesRepPhone: asString(value.salesRepPhone || value.phone).slice(0, 80),
+    groundElevation: asString(value.groundElevation).slice(0, 80),
+    rfElevation: asString(value.rfElevation).slice(0, 80),
+    rfGround: asString(value.rfGround).slice(0, 80),
     totalMd: asString(value.totalMd || value.totalDepth).slice(0, 80),
+    totalMetersDrilled: asString(value.totalMetersDrilled).slice(0, 80),
     lateralLength: asString(value.lateralLength).slice(0, 80),
     kickoffPoint: asString(value.kickoffPoint || value.kop).slice(0, 80),
     objective: asString(value.objective).slice(0, 3000),
@@ -340,38 +501,56 @@ function normalizeMudSections(value = []) {
     mudSystem: asString(section.mudSystem).slice(0, 180),
     densityRange: asString(section.densityRange || section.mudWeight).slice(0, 120),
     viscosityRange: asString(section.viscosityRange).slice(0, 120),
+    ph: asString(section.ph || section.pH).slice(0, 80),
+    fluidLoss: asString(section.fluidLoss).slice(0, 100),
     keyProducts: asString(section.keyProducts || section.products).slice(0, 3000),
     riskNotes: asString(section.riskNotes || section.risks).slice(0, 3000),
     programNotes: asString(section.programNotes || section.notes).slice(0, 3000),
+    properties: normalizeMudProperties(section.properties, section),
+    procedures: normalizeMudProcedures(section.procedures, section),
   }));
 }
 
-function normalizeMudPages(value = [], overview = emptyMudOverview, sections = []) {
+function normalizeMudPages(value = [], overview = emptyMudOverview, sections = [], wellInfo = {}) {
   const pages = Array.isArray(value) ? value : [];
-  if (!pages.length) return buildMudProgramPagesFromExtraction({ overview, sections });
+  if (!pages.length) return buildMudProgramPagesFromExtraction({ overview, sections, ...wellInfo });
   return pages.slice(0, 20).map((page, index) => ({
-    id: normalizeDocId(page.id) || (index === 0 ? 'overview' : `section-${index}`),
-    type: asString(page.type) === 'section' ? 'section' : 'overview',
+    id: normalizeDocId(page.id) || (index === 0 ? 'cover' : `page-${index}`),
+    type: ['cover', 'wellInfo', 'section'].includes(asString(page.type)) ? asString(page.type) : asString(page.type) === 'overview' ? 'cover' : 'section',
     title: asString(page.title).slice(0, 180) || (index === 0 ? 'Mud Program Overview' : `Section ${index}`),
     sectionId: normalizeDocId(page.sectionId),
     data: typeof page.data === 'object' && page.data ? page.data : {},
   }));
 }
 
-function buildMudProgramPagesFromExtraction({ overview = {}, sections = [] } = {}) {
+function buildMudProgramPagesFromExtraction({ overview = {}, sections = [], formationTops = [], casingStrings = [], volumes = [] } = {}) {
   const normalizedOverview = normalizeMudOverview(overview);
   const normalizedSections = normalizeMudSections(sections);
+  const normalizedFormationTops = normalizeFormationTops(formationTops);
+  const normalizedCasingStrings = normalizeCasingStrings(casingStrings);
+  const normalizedVolumes = normalizeVolumeRows(volumes);
   return [
     {
-      id: 'overview',
-      type: 'overview',
-      title: normalizedOverview.programTitle || `${normalizedOverview.wellName || 'Well'} Mud Program Overview`,
+      id: 'cover',
+      type: 'cover',
+      title: normalizedOverview.programTitle || 'Drilling Fluid Program',
       data: {
         ...normalizedOverview,
         executiveSummary:
           normalizedOverview.sourceSummary ||
           normalizedOverview.objective ||
           'Review the extracted drilling program details and confirm mud program requirements before export.',
+      },
+    },
+    {
+      id: 'well-info',
+      type: 'wellInfo',
+      title: 'Well Information',
+      data: {
+        overview: normalizedOverview,
+        formationTops: normalizedFormationTops,
+        casingStrings: normalizedCasingStrings,
+        volumes: normalizedVolumes,
       },
     },
     ...normalizedSections.map((section) => ({
@@ -388,6 +567,9 @@ function mapMudProgramDraftDoc(doc) {
   const data = doc.data() || {};
   const overview = normalizeMudOverview(data.overview || {});
   const sections = normalizeMudSections(data.sections || []);
+  const formationTops = normalizeFormationTops(data.formationTops || []);
+  const casingStrings = normalizeCasingStrings(data.casingStrings || []);
+  const volumes = normalizeVolumeRows(data.volumes || []);
   return {
     draftId: doc.id,
     status: asString(data.status) || 'uploaded',
@@ -396,7 +578,10 @@ function mapMudProgramDraftDoc(doc) {
     sourcePdfUrl: asString(data.sourcePdfUrl),
     overview,
     sections,
-    pages: normalizeMudPages(data.pages || [], overview, sections),
+    formationTops,
+    casingStrings,
+    volumes,
+    pages: normalizeMudPages(data.pages || [], overview, sections, { formationTops, casingStrings, volumes }),
     extractionError: asString(data.extractionError),
     createdBy: asString(data.createdBy),
     createdByEmail: asString(data.createdByEmail),
@@ -684,12 +869,54 @@ async function callOpenAIMudExtraction({ pdfBuffer, fileName }) {
 
   const prompt = [
     'You are extracting data from an oil-company drilling program PDF so QuoteChem can build a portrait mud program.',
-    'Return strict JSON only with keys overview and sections.',
-    'overview keys: programTitle, operator, mudCompany, wellName, uwi, rig, location, programDate, totalMd, lateralLength, kickoffPoint, objective, sourceSummary.',
-    'sections is an array. Each section keys: id, name, topDepth, bottomDepth, holeSize, casingSize, mudSystem, densityRange, viscosityRange, keyProducts, riskNotes, programNotes.',
+    'Return strict JSON only with keys overview, formationTops, casingStrings, volumes, and sections.',
+    'overview keys: programTitle, operator, consultant, mudCompany, wellName, uwi, license, afe, rig, location, fieldZone, programDate, programVersion, warehouse, attention, salesRep, salesRepPhone, groundElevation, rfElevation, rfGround, totalMd, totalMetersDrilled, lateralLength, kickoffPoint, objective, sourceSummary.',
+    'formationTops rows use keys: formation, md, tvd, lithology, gradient, emd, pressure, h2s, comment.',
+    'casingStrings rows use keys: name, od, linearMass, grade, capacity, endPoint.',
+    'volumes rows use keys: holeSection, bitSize, start, end, length, tanks, casing, sectionVolume, totalOpenHole, losses, finalCirculating, totalVolume.',
+    'sections is an array. Each section keys: id, name, topDepth, bottomDepth, holeSize, casingSize, mudSystem, densityRange, viscosityRange, ph, fluidLoss, keyProducts, riskNotes, programNotes, properties, procedures.',
+    'For each section, properties is an array of label/value pairs. procedures is an array of heading/lines groups.',
     'Do not invent exact values. If the source does not contain a value, leave it blank or write a concise note in programNotes/riskNotes.',
     `Source file name: ${fileName || 'drilling-program.pdf'}`,
   ].join('\n');
+
+  const stringObjectSchema = (shape) => ({
+    type: 'object',
+    additionalProperties: false,
+    properties: Object.fromEntries(Object.keys(shape).map((key) => [key, { type: 'string' }])),
+    required: Object.keys(shape),
+  });
+
+  const propertySchema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      label: { type: 'string' },
+      value: { type: 'string' },
+    },
+    required: ['label', 'value'],
+  };
+
+  const procedureSchema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      heading: { type: 'string' },
+      lines: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['heading', 'lines'],
+  };
+
+  const sectionSchema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...Object.fromEntries(Object.keys(emptyMudSection).filter((key) => !['properties', 'procedures'].includes(key)).map((key) => [key, { type: 'string' }])),
+      properties: { type: 'array', items: propertySchema },
+      procedures: { type: 'array', items: procedureSchema },
+    },
+    required: Object.keys(emptyMudSection),
+  };
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -730,17 +957,24 @@ async function callOpenAIMudExtraction({ pdfBuffer, fileName }) {
                 properties: Object.fromEntries(Object.keys(emptyMudOverview).map((key) => [key, { type: 'string' }])),
                 required: Object.keys(emptyMudOverview),
               },
+              formationTops: {
+                type: 'array',
+                items: stringObjectSchema(emptyFormationTop),
+              },
+              casingStrings: {
+                type: 'array',
+                items: stringObjectSchema(emptyCasingString),
+              },
+              volumes: {
+                type: 'array',
+                items: stringObjectSchema(emptyVolumeRow),
+              },
               sections: {
                 type: 'array',
-                items: {
-                  type: 'object',
-                  additionalProperties: false,
-                  properties: Object.fromEntries(Object.keys(emptyMudSection).map((key) => [key, { type: 'string' }])),
-                  required: Object.keys(emptyMudSection),
-                },
+                items: sectionSchema,
               },
             },
-            required: ['overview', 'sections'],
+            required: ['overview', 'formationTops', 'casingStrings', 'volumes', 'sections'],
           },
         },
       },
@@ -756,6 +990,9 @@ async function callOpenAIMudExtraction({ pdfBuffer, fileName }) {
   const parsed = parseOpenAIJson(extractResponsesText(data));
   return {
     overview: normalizeMudOverview(parsed.overview || {}),
+    formationTops: normalizeFormationTops(parsed.formationTops || []),
+    casingStrings: normalizeCasingStrings(parsed.casingStrings || []),
+    volumes: normalizeVolumeRows(parsed.volumes || []),
     sections: normalizeMudSections(parsed.sections || []),
     model,
   };
@@ -1984,6 +2221,9 @@ export const createMudProgramDraft = onRequest(
         sourcePdfPath: pdfPath,
         sourcePdfUrl,
         overview: emptyMudOverview,
+        formationTops: [],
+        casingStrings: [],
+        volumes: [],
         sections: [],
         pages: [],
         createdBy: user.uid,
@@ -2036,6 +2276,9 @@ export const extractMudProgramDraft = onRequest(
         {
           status: 'review_ready',
           overview: extraction.overview,
+          formationTops: extraction.formationTops,
+          casingStrings: extraction.casingStrings,
+          volumes: extraction.volumes,
           sections: extraction.sections,
           pages,
           extractionModel: extraction.model,
@@ -2075,14 +2318,20 @@ export const updateMudProgramDraft = onRequest({ region: REGION }, async (req, r
     const user = await ensureMudProgramAccess(req);
     const { ref } = await loadOwnedMudDraft(req.body?.draftId, user);
     const overview = normalizeMudOverview(req.body?.overview || {});
+    const formationTops = normalizeFormationTops(req.body?.formationTops || []);
+    const casingStrings = normalizeCasingStrings(req.body?.casingStrings || []);
+    const volumes = normalizeVolumeRows(req.body?.volumes || []);
     const sections = normalizeMudSections(req.body?.sections || []);
-    const pages = normalizeMudPages(req.body?.pages || [], overview, sections);
+    const pages = normalizeMudPages(req.body?.pages || [], overview, sections, { formationTops, casingStrings, volumes });
     const status = asString(req.body?.status).slice(0, 80) || 'editing';
 
     await ref.set(
       {
         status,
         overview,
+        formationTops,
+        casingStrings,
+        volumes,
         sections,
         pages,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -2400,6 +2649,9 @@ export const listMudProgramDrafts = onRequest({ region: REGION }, async (req, re
 export const __testables = {
   isValidTemporaryPassword,
   normalizeMiniAppIds,
+  normalizeFormationTops,
+  normalizeCasingStrings,
+  normalizeVolumeRows,
   isPdfContentType,
   normalizeMudOverview,
   normalizeMudSections,

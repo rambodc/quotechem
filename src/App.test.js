@@ -18,7 +18,20 @@ const mockMudProgramDraft = {
     rig: 'Rig 22',
     location: 'Muskeg Pad',
     programDate: '2026-06-13',
+    programVersion: 'V1',
+    warehouse: 'Lloydminster',
+    attention: 'Jared Patterson',
+    salesRep: 'Craig Bilick',
+    salesRepPhone: '403-990-3455',
+    consultant: 'Westrock Energy Consultants',
+    fieldZone: 'Colony - Hz',
+    license: 'TBD',
+    afe: '25DRL00X',
+    groundElevation: '557.16',
+    rfElevation: '561.16',
+    rfGround: '4.00',
     totalMd: '3200 m',
+    totalMetersDrilled: '3200 m',
     lateralLength: '1100 m',
     kickoffPoint: '2100 m',
     objective: 'Build a field-ready mud program from the drilling source.',
@@ -35,27 +48,69 @@ const mockMudProgramDraft = {
       mudSystem: 'Fresh water gel',
       densityRange: '1000-1050 kg/m3',
       viscosityRange: '35-45 s/L',
+      ph: 'Neutral',
+      fluidLoss: 'No Control',
       keyProducts: 'Bentonite, caustic, soda ash',
       riskNotes: 'Monitor losses and hole cleaning.',
       programNotes: 'Keep simple water-based treatment.',
+      properties: [
+        { label: 'Viscosity (s/L)', value: '35-45' },
+        { label: 'Density (kg/m3)', value: '1000-1050' },
+      ],
+      procedures: [{ heading: 'Maintenance', lines: ['Keep simple water-based treatment.'] }],
     },
   ],
+  formationTops: [{ formation: 'Surface Casing', md: '100', tvd: '100', lithology: '-', gradient: '-', emd: '-', pressure: '-', h2s: '-', comment: 'High sand content expected' }],
+  casingStrings: [{ name: 'Surface', od: '244.5', linearMass: '62.50', grade: 'H-40', capacity: '0.06225', endPoint: '650' }],
+  volumes: [{ holeSection: 'Surface', bitSize: '311', start: '0', end: '650', length: '650', tanks: '20', casing: '0', sectionVolume: '11', totalOpenHole: '11', losses: '5', finalCirculating: '31', totalVolume: '36' }],
   pages: [
     {
-      id: 'overview',
-      type: 'overview',
+      id: 'cover',
+      type: 'cover',
       title: 'North Pad Mud Program',
       data: {
         programTitle: 'North Pad Mud Program',
         operator: 'North Operator',
+        consultant: 'Westrock Energy Consultants',
         mudCompany: 'QuoteChem',
         wellName: 'Well 12-34',
+        uwi: '100/12-34',
+        fieldZone: 'Colony - Hz',
+        attention: 'Jared Patterson',
+        salesRep: 'Craig Bilick',
+        salesRepPhone: '403-990-3455',
+        programDate: '2026-06-13',
+        programVersion: 'V1',
+        warehouse: 'Lloydminster',
         rig: 'Rig 22',
         location: 'Muskeg Pad',
         totalMd: '3200 m',
         lateralLength: '1100 m',
         objective: 'Build a field-ready mud program from the drilling source.',
         executiveSummary: 'Source PDF describes surface and production intervals.',
+      },
+    },
+    {
+      id: 'well-info',
+      type: 'wellInfo',
+      title: 'Well Information',
+      data: {
+        overview: {
+          programTitle: 'North Pad Mud Program',
+          wellName: 'Well 12-34',
+          uwi: '100/12-34',
+          license: 'TBD',
+          afe: '25DRL00X',
+          rig: 'Rig 22',
+          groundElevation: '557.16',
+          rfElevation: '561.16',
+          rfGround: '4.00',
+          totalMd: '3200 m',
+          lateralLength: '1100 m',
+        },
+        formationTops: [{ formation: 'Surface Casing', md: '100', tvd: '100', lithology: '-', gradient: '-', emd: '-', pressure: '-', h2s: '-', comment: 'High sand content expected' }],
+        casingStrings: [{ name: 'Surface', od: '244.5', linearMass: '62.50', grade: 'H-40', capacity: '0.06225', endPoint: '650' }],
+        volumes: [{ holeSection: 'Surface', bitSize: '311', start: '0', end: '650', length: '650', tanks: '20', casing: '0', sectionVolume: '11', totalOpenHole: '11', losses: '5', finalCirculating: '31', totalVolume: '36' }],
       },
     },
     {
@@ -72,9 +127,16 @@ const mockMudProgramDraft = {
         mudSystem: 'Fresh water gel',
         densityRange: '1000-1050 kg/m3',
         viscosityRange: '35-45 s/L',
+        ph: 'Neutral',
+        fluidLoss: 'No Control',
         keyProducts: 'Bentonite, caustic, soda ash',
         riskNotes: 'Monitor losses and hole cleaning.',
         programNotes: 'Keep simple water-based treatment.',
+        properties: [
+          { label: 'Viscosity (s/L)', value: '35-45' },
+          { label: 'Density (kg/m3)', value: '1000-1050' },
+        ],
+        procedures: [{ heading: 'Maintenance', lines: ['Keep simple water-based treatment.'] }],
       },
     },
   ],
@@ -394,12 +456,14 @@ beforeEach(() => {
       return Promise.resolve({ draft: mockMudProgramDraft });
     }
     if (path === 'improveMudProgramPage') {
+      const selected = mockMudProgramDraft.pages.find((page) => page.id === body?.pageId) || mockMudProgramDraft.pages[0];
       return Promise.resolve({
         page: {
-          ...mockMudProgramDraft.pages[0],
+          ...selected,
           data: {
-            ...mockMudProgramDraft.pages[0].data,
+            ...selected.data,
             executiveSummary: 'Improved field-ready overview from AI.',
+            programTitle: 'Improved field-ready overview from AI.',
           },
         },
       });
@@ -713,9 +777,14 @@ describe('mini-app portal routing', () => {
     fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Edited Well 99' } });
     fireEvent.click(screen.getByRole('button', { name: /Create editable pages/i }));
 
-    expect(await screen.findByText(/Edited Well 99 overview/i)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Drilling Fluid Program/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Well Information/i })).toBeTruthy();
+    expect(screen.getByText(/Formation Tops/i)).toBeTruthy();
+    expect(screen.getByText(/Surface Hole - Fresh water gel/i)).toBeTruthy();
+    expect(document.querySelectorAll('.print-pages .mud-page')).toHaveLength(3);
     fireEvent.change(screen.getByLabelText(/Executive summary/i), { target: { value: 'Updated mud program summary.' } });
-    await waitFor(() => expect(screen.getAllByText(/Updated mud program summary/i).length).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(screen.getAllByText(/Updated mud program summary/i).length).toBeGreaterThanOrEqual(1));
+    expect(document.querySelector('.wellbore-card')).toBeNull();
   });
 
   test('Drilling Programs AI assistant updates only the selected page and print is available', async () => {
@@ -726,8 +795,9 @@ describe('mini-app portal routing', () => {
     fireEvent.change(await screen.findByLabelText(/Instruction for this page/i), { target: { value: 'Make the overview stronger.' } });
     fireEvent.click(screen.getByRole('button', { name: /Improve selected page/i }));
 
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('improveMudProgramPage', expect.objectContaining({ draftId: 'draft-1', pageId: 'overview' }), { authed: true }));
-    await waitFor(() => expect(screen.getAllByText(/Improved field-ready overview/i).length).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('improveMudProgramPage', expect.objectContaining({ draftId: 'draft-1', pageId: 'cover' }), { authed: true }));
+    await waitFor(() => expect(screen.getAllByText(/Improved field-ready overview/i).length).toBeGreaterThanOrEqual(1));
+    expect(document.querySelectorAll('.print-pages .mud-page')).toHaveLength(3);
     fireEvent.click(screen.getByRole('button', { name: /Print \/ Save PDF/i }));
     expect(window.print).toHaveBeenCalled();
   });
