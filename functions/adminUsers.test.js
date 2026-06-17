@@ -250,6 +250,10 @@ test('Uniquem inventory functions are exported', () => {
     'completeUniquemBlendJob',
     'cancelUniquemBlendJob',
     'saveUniquemPrice',
+    'createUniquemAttachmentUpload',
+    'saveUniquemAttachment',
+    'archiveUniquemAttachment',
+    'listUniquemAttachments',
   ]) {
     assert.equal(Object.hasOwn(functionExports, name), true);
   }
@@ -281,6 +285,41 @@ test('Uniquem ledger balances derive stock from movement history', () => {
     { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', unit: 'L', quantity: 75 },
     { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-2', location: 'Blend Bay', unit: 'L', quantity: 25 },
   ]);
+});
+
+test('Uniquem attachment validation accepts supported operating files', () => {
+  assert.equal(__testables.isUniquemAttachmentContentType('image/jpeg'), true);
+  assert.equal(__testables.isUniquemAttachmentContentType('video/mp4'), true);
+  assert.equal(__testables.isUniquemAttachmentContentType('application/pdf'), true);
+  assert.equal(__testables.isUniquemAttachmentContentType('application/x-msdownload'), false);
+  const attachment = __testables.normalizeUniquemAttachment({
+    entityType: 'product',
+    entityId: 'product-1',
+    kind: 'sds',
+    name: ' Clay Shield SDS.pdf ',
+    fileName: 'Clay Shield SDS.pdf',
+    contentType: 'application/pdf',
+    size: 1234,
+    path: 'uniquem/product/product-1/attachment-1-Clay-Shield-SDS.pdf',
+    url: 'https://example.com/sds.pdf',
+  });
+  assert.equal(attachment.entityType, 'product');
+  assert.equal(attachment.kind, 'sds');
+  assert.equal(attachment.fileName, 'Clay-Shield-SDS.pdf');
+  assert.equal(
+    __testables.buildUniquemAttachmentPath({ entityType: 'lot', entityId: 'lot-1', attachmentId: 'attachment-1', fileName: 'Receipt Photo.jpg' }),
+    'uniquem/lot/lot-1/attachment-1-Receipt-Photo.jpg'
+  );
+});
+
+test('Uniquem strict stock helper rejects negative-result operations', () => {
+  const balances = [{ productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: 25, unit: 'L' }];
+  assert.equal(__testables.uniquemAvailableQuantity(balances, { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main' }), 25);
+  assert.equal(__testables.assertUniquemSufficientStock(balances, { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main' }, 25), true);
+  assert.throws(
+    () => __testables.assertUniquemSufficientStock(balances, { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main' }, 26),
+    /Insufficient stock/
+  );
 });
 
 test('Uniquem blend job normalization requires input lots', () => {

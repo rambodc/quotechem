@@ -99,6 +99,7 @@
 }
 
 .uniquem-alert,
+.uniquem-success,
 .uniquem-loading,
 .uniquem-empty {
   margin: 0;
@@ -114,6 +115,12 @@
   border-color: #f0b8a8;
   background: #fff7f4;
   color: #8a2717;
+}
+
+.uniquem-success {
+  border-color: #b8e5c5;
+  background: #f0fdf4;
+  color: #166534;
 }
 
 .uniquem-stack {
@@ -275,6 +282,15 @@
   grid-template-columns: 78px minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.uniquem-product-card.active,
+.uniquem-job.active {
+  border-color: #087a24;
+  box-shadow: 0 0 0 2px rgba(8, 122, 36, 0.12);
 }
 
 .uniquem-product-thumb {
@@ -304,12 +320,15 @@
 }
 
 .uniquem-product-card span,
+.uniquem-product-card em,
+.uniquem-product-card small,
 .uniquem-job span {
   display: block;
   margin-top: 4px;
   color: #64748b;
   font-size: 0.82rem;
   font-weight: 750;
+  font-style: normal;
 }
 
 .uniquem-product-card p,
@@ -331,6 +350,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
+  width: 100%;
+  text-align: left;
 }
 
 .uniquem-job div:last-child {
@@ -355,6 +376,165 @@
 .uniquem-future h2 {
   margin: 0;
   font-size: 1.05rem;
+}
+
+.uniquem-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.uniquem-filter-grid select {
+  min-height: 38px;
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102033;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.uniquem-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.uniquem-detail-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.uniquem-detail-head h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+}
+
+.uniquem-detail-head p,
+.uniquem-detail > p,
+.uniquem-meta-grid span,
+.uniquem-preview span {
+  margin: 0;
+  color: #526173;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.uniquem-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.uniquem-detail-actions button,
+.uniquem-link-button,
+.uniquem-attachment button {
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102033;
+  font-weight: 850;
+  min-height: 34px;
+  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.uniquem-link-button {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  color: #087a24;
+  text-decoration: underline;
+}
+
+.uniquem-file-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.uniquem-file-action {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #b8c7d8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102033;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-weight: 850;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.uniquem-file-action input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.uniquem-attachment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.uniquem-attachment {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e5edf5;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fbfdff;
+}
+
+.uniquem-attachment a,
+.uniquem-attachment strong {
+  color: #0f172a;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.uniquem-attachment span {
+  display: block;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.uniquem-meta-grid,
+.uniquem-preview {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e5edf5;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.uniquem-meta-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.uniquem-preview strong {
+  color: #0f172a;
+}
+
+.uniquem-detail-image {
+  width: min(320px, 100%);
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
 }
 
 .warehouse-toolbar {
@@ -832,10 +1012,24 @@
   .uniquem-stat-grid,
   .uniquem-grid.two,
   .uniquem-product-grid,
+  .uniquem-filter-grid,
+  .uniquem-meta-grid,
   .uniquem-form,
   .uniquem-form.compact,
   .uniquem-form.receive {
     grid-template-columns: 1fr;
+  }
+
+  .uniquem-detail-head {
+    grid-template-columns: 1fr;
+  }
+
+  .uniquem-detail-actions {
+    justify-content: stretch;
+  }
+
+  .uniquem-detail-actions button {
+    flex: 1;
   }
 
   .uniquem-product-card {

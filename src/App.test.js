@@ -213,7 +213,7 @@ const mockUniquemOperations = {
       reorderPoint: 100,
       description: 'Amine clay control additive.',
       status: 'active',
-      media: [],
+      media: [{ kind: 'image', name: 'Clay Shield image', url: 'https://example.com/clay-shield.jpg' }],
     },
     {
       productId: 'product-2',
@@ -306,6 +306,40 @@ const mockUniquemOperations = {
       unit: 'L',
     },
   ],
+  attachments: [
+    {
+      attachmentId: 'attachment-1',
+      entityType: 'product',
+      entityId: 'product-1',
+      kind: 'sds',
+      name: 'Clay Shield SDS.pdf',
+      fileName: 'Clay Shield SDS.pdf',
+      contentType: 'application/pdf',
+      size: 1200,
+      path: 'uniquem/product/product-1/attachment-1-Clay-Shield-SDS.pdf',
+      url: 'https://example.com/clay-shield-sds.pdf',
+      status: 'active',
+      uploadedAt: '2026-06-15T12:00:00.000Z',
+    },
+  ],
+  attachmentsByEntity: {
+    'product:product-1': [
+      {
+        attachmentId: 'attachment-1',
+        entityType: 'product',
+        entityId: 'product-1',
+        kind: 'sds',
+        name: 'Clay Shield SDS.pdf',
+        fileName: 'Clay Shield SDS.pdf',
+        contentType: 'application/pdf',
+        size: 1200,
+        path: 'uniquem/product/product-1/attachment-1-Clay-Shield-SDS.pdf',
+        url: 'https://example.com/clay-shield-sds.pdf',
+        status: 'active',
+        uploadedAt: '2026-06-15T12:00:00.000Z',
+      },
+    ],
+  },
   dashboard: {
     productCount: 2,
     lotCount: 1,
@@ -598,9 +632,24 @@ beforeEach(() => {
         'completeUniquemBlendJob',
         'cancelUniquemBlendJob',
         'saveUniquemPrice',
+        'saveUniquemAttachment',
+        'archiveUniquemAttachment',
       ].includes(path)
     ) {
       return Promise.resolve(mockUniquemOperations);
+    }
+    if (path === 'createUniquemAttachmentUpload') {
+      return Promise.resolve({
+        attachmentId: 'attachment-new',
+        path: `uniquem/${body?.entityType}/${body?.entityId}/attachment-new-${body?.fileName || 'file'}`,
+        entityType: body?.entityType,
+        entityId: body?.entityId,
+        fileName: body?.fileName,
+        contentType: body?.contentType,
+      });
+    }
+    if (path === 'listUniquemAttachments') {
+      return Promise.resolve({ items: mockUniquemOperations.attachments, attachmentsByEntity: mockUniquemOperations.attachmentsByEntity });
     }
     if (path === 'listUniquem3DModels') {
       return Promise.resolve({ items: [mockUniquemModel] });
@@ -791,16 +840,30 @@ describe('mini-app portal routing', () => {
   });
 
   test('Uniquem inventory and production pages show ledger-backed data', async () => {
+    const { postJson } = require('./lib/api');
+    renderAt('/apps/uniquem/products', 'admin');
+    expect(await screen.findByText('Clay Shield SDS.pdf')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Edit/i })).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: /Archive/i })[0]);
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('archiveUniquemProduct', { productId: 'product-1' }, { authed: true }));
+
+    cleanup();
     renderAt('/apps/uniquem/inventory', 'admin');
     await screen.findByRole('heading', { name: 'Inventory' });
     await waitFor(() => expect(screen.getAllByText('Clay Shield (CLAY-SHIELD)').length).toBeGreaterThan(0));
     expect(screen.getAllByText('CLAY-001').length).toBeGreaterThan(0);
-    expect(screen.getByText('250 L')).toBeTruthy();
+    expect(screen.getAllByText('250 L').length).toBeGreaterThan(0);
+
+    cleanup();
+    renderAt('/apps/uniquem/receive', 'admin');
+    expect(await screen.findByText('Queued Receipt Files')).toBeTruthy();
+    expect(screen.getByLabelText('Receiving photo')).toBeTruthy();
 
     cleanup();
     renderAt('/apps/uniquem/blending', 'admin');
-    expect(await screen.findByText('Blend Job 1')).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByText('Blend Job 1').length).toBeGreaterThan(0));
     expect(screen.getByRole('button', { name: 'Complete' })).toBeTruthy();
+    expect(screen.getByText(/Movement preview/i)).toBeTruthy();
 
     cleanup();
     renderAt('/apps/uniquem/price-list', 'admin');
