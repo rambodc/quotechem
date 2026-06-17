@@ -13,6 +13,13 @@ const DRILLING_PROGRAM_TEMPLATE_COLLECTION = 'drillingProgramTemplates';
 const DRILLING_PROGRAM_RUN_COLLECTION = 'drillingProgramRuns';
 const MUD_PROGRAM_DRAFT_COLLECTION = 'mudProgramDrafts';
 const UNIQUEM_3D_MODEL_COLLECTION = 'uniquem3DModels';
+const UNIQUEM_PRODUCT_COLLECTION = 'uniquemProducts';
+const UNIQUEM_WAREHOUSE_COLLECTION = 'uniquemWarehouses';
+const UNIQUEM_LOT_COLLECTION = 'uniquemLots';
+const UNIQUEM_MOVEMENT_COLLECTION = 'uniquemStockMovements';
+const UNIQUEM_RECIPE_COLLECTION = 'uniquemRecipes';
+const UNIQUEM_BLEND_JOB_COLLECTION = 'uniquemBlendJobs';
+const UNIQUEM_PRICE_COLLECTION = 'uniquemPrices';
 const OPENAI_REFERENCE_FILE_MAX_BYTES = 12 * 1024 * 1024;
 const OPENAI_REFERENCE_TOTAL_MAX_BYTES = 18 * 1024 * 1024;
 const MUD_PROGRAM_SOURCE_MAX_BYTES = 25 * 1024 * 1024;
@@ -837,6 +844,437 @@ async function loadActiveUniquem3DModel(modelId) {
     throw err;
   }
   return { ref, snap, model };
+}
+
+function normalizeUniquemUnit(value) {
+  const unit = asString(value).toLowerCase();
+  if (['l', 'litre', 'liter', 'litres', 'liters'].includes(unit)) return 'L';
+  if (['kg', 'kilogram', 'kilograms'].includes(unit)) return 'kg';
+  if (['gal', 'gallon', 'gallons'].includes(unit)) return 'gal';
+  if (['drum', 'drums'].includes(unit)) return 'drum';
+  if (['tote', 'totes'].includes(unit)) return 'tote';
+  if (['bag', 'bags'].includes(unit)) return 'bag';
+  return asString(value).slice(0, 24) || 'L';
+}
+
+function normalizeUniquemQuantity(value, { allowNegative = false, fallback = 0 } = {}) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  const rounded = Math.round(num * 1000) / 1000;
+  if (allowNegative) return Math.max(-100000000, Math.min(100000000, rounded));
+  return Math.max(0, Math.min(100000000, rounded));
+}
+
+function normalizeUniquemProductType(value) {
+  const type = asString(value).toLowerCase();
+  return ['raw', 'blend', 'finished', 'packaging', 'supply'].includes(type) ? type : 'raw';
+}
+
+function normalizeUniquemStatus(value, allowed = ['active', 'archived'], fallback = 'active') {
+  const status = asString(value).toLowerCase();
+  return allowed.includes(status) ? status : fallback;
+}
+
+function normalizeUniquemMedia(items) {
+  return (Array.isArray(items) ? items : [])
+    .slice(0, 20)
+    .map((item = {}) => ({
+      id: normalizeDocId(item.id) || randomUUID(),
+      kind: ['image', 'sds', 'label', 'spec', 'model', 'other'].includes(asString(item.kind).toLowerCase()) ? asString(item.kind).toLowerCase() : 'other',
+      name: asString(item.name).slice(0, 160),
+      url: asString(item.url).slice(0, 1000),
+      contentType: asString(item.contentType).slice(0, 120),
+    }))
+    .filter((item) => item.name || item.url);
+}
+
+function normalizeUniquemProduct(input = {}) {
+  const name = asString(input.name).slice(0, 160);
+  if (!name) {
+    const err = new Error('Product name is required.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    name,
+    sku: asString(input.sku).toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 60),
+    type: normalizeUniquemProductType(input.type),
+    unit: normalizeUniquemUnit(input.unit),
+    reorderPoint: normalizeUniquemQuantity(input.reorderPoint),
+    description: asString(input.description).slice(0, 1200),
+    status: normalizeUniquemStatus(input.status),
+    media: normalizeUniquemMedia(input.media),
+  };
+}
+
+function normalizeUniquemWarehouse(input = {}) {
+  const name = asString(input.name).slice(0, 120);
+  if (!name) {
+    const err = new Error('Warehouse name is required.');
+    err.status = 400;
+    throw err;
+  }
+  const locations = (Array.isArray(input.locations) ? input.locations : [])
+    .map((item) => asString(item).slice(0, 80))
+    .filter(Boolean)
+    .slice(0, 80);
+  return {
+    name,
+    code: asString(input.code).toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 40),
+    locations: Array.from(new Set(locations.length ? locations : ['Main'])),
+    status: normalizeUniquemStatus(input.status),
+  };
+}
+
+function normalizeUniquemLot(input = {}) {
+  const productId = normalizeDocId(input.productId);
+  if (!productId) {
+    const err = new Error('Product is required.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    productId,
+    lotNumber: asString(input.lotNumber).slice(0, 80) || `LOT-${new Date().toISOString().slice(0, 10)}`,
+    supplier: asString(input.supplier).slice(0, 160),
+    supplierLot: asString(input.supplierLot).slice(0, 100),
+    receivedAt: asString(input.receivedAt).slice(0, 40),
+    expiryDate: asString(input.expiryDate).slice(0, 40),
+    notes: asString(input.notes).slice(0, 1200),
+    status: normalizeUniquemStatus(input.status, ['active', 'hold', 'archived'], 'active'),
+  };
+}
+
+function normalizeUniquemMovement(input = {}) {
+  const productId = normalizeDocId(input.productId);
+  const lotId = normalizeDocId(input.lotId);
+  const warehouseId = normalizeDocId(input.warehouseId);
+  const location = asString(input.location).slice(0, 80) || 'Main';
+  const quantity = normalizeUniquemQuantity(input.quantity, { allowNegative: true });
+  if (!productId || !lotId || !warehouseId || !quantity) {
+    const err = new Error('Product, lot, warehouse, location, and non-zero quantity are required.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    type: asString(input.type).slice(0, 40) || 'adjustment',
+    productId,
+    lotId,
+    warehouseId,
+    location,
+    quantity,
+    unit: normalizeUniquemUnit(input.unit),
+    reason: asString(input.reason).slice(0, 280),
+    referenceType: asString(input.referenceType).slice(0, 60),
+    referenceId: normalizeDocId(input.referenceId),
+    notes: asString(input.notes).slice(0, 1200),
+  };
+}
+
+function normalizeUniquemRecipe(input = {}) {
+  const outputProductId = normalizeDocId(input.outputProductId);
+  if (!outputProductId) {
+    const err = new Error('Output product is required.');
+    err.status = 400;
+    throw err;
+  }
+  const inputs = (Array.isArray(input.inputs) ? input.inputs : [])
+    .slice(0, 40)
+    .map((item = {}) => ({
+      productId: normalizeDocId(item.productId),
+      quantity: normalizeUniquemQuantity(item.quantity),
+      unit: normalizeUniquemUnit(item.unit),
+      notes: asString(item.notes).slice(0, 280),
+    }))
+    .filter((item) => item.productId && item.quantity > 0);
+  if (!inputs.length) {
+    const err = new Error('At least one recipe input is required.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    name: asString(input.name).slice(0, 160) || 'Blend recipe',
+    outputProductId,
+    outputQuantity: normalizeUniquemQuantity(input.outputQuantity) || 1,
+    outputUnit: normalizeUniquemUnit(input.outputUnit),
+    yieldLossPercent: clampNumber(input.yieldLossPercent, 0, 100, 0),
+    instructions: asString(input.instructions).slice(0, 3000),
+    inputs,
+    status: normalizeUniquemStatus(input.status),
+  };
+}
+
+function normalizeUniquemBlendJob(input = {}) {
+  const outputProductId = normalizeDocId(input.outputProductId);
+  const warehouseId = normalizeDocId(input.warehouseId);
+  if (!outputProductId || !warehouseId) {
+    const err = new Error('Output product and warehouse are required.');
+    err.status = 400;
+    throw err;
+  }
+  const inputs = (Array.isArray(input.inputs) ? input.inputs : [])
+    .slice(0, 60)
+    .map((item = {}) => ({
+      productId: normalizeDocId(item.productId),
+      lotId: normalizeDocId(item.lotId),
+      warehouseId: normalizeDocId(item.warehouseId) || warehouseId,
+      location: asString(item.location).slice(0, 80) || 'Main',
+      quantity: normalizeUniquemQuantity(item.quantity),
+      unit: normalizeUniquemUnit(item.unit),
+    }))
+    .filter((item) => item.productId && item.lotId && item.warehouseId && item.quantity > 0);
+  if (!inputs.length) {
+    const err = new Error('At least one input lot is required.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    recipeId: normalizeDocId(input.recipeId),
+    name: asString(input.name).slice(0, 160) || 'Blend job',
+    outputProductId,
+    outputLotNumber: asString(input.outputLotNumber).slice(0, 80) || `BLEND-${new Date().toISOString().slice(0, 10)}`,
+    outputQuantity: normalizeUniquemQuantity(input.outputQuantity),
+    outputUnit: normalizeUniquemUnit(input.outputUnit),
+    warehouseId,
+    location: asString(input.location).slice(0, 80) || 'Main',
+    notes: asString(input.notes).slice(0, 1200),
+    inputs,
+  };
+}
+
+function normalizeUniquemPrice(input = {}) {
+  const productId = normalizeDocId(input.productId);
+  if (!productId) {
+    const err = new Error('Product is required.');
+    err.status = 400;
+    throw err;
+  }
+  const price = normalizeUniquemQuantity(input.price);
+  if (!price) {
+    const err = new Error('Price must be greater than zero.');
+    err.status = 400;
+    throw err;
+  }
+  const currency = asString(input.currency).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'CAD';
+  return {
+    productId,
+    price,
+    currency: currency.length === 3 ? currency : 'CAD',
+    unit: normalizeUniquemUnit(input.unit),
+    effectiveDate: asString(input.effectiveDate).slice(0, 40) || new Date().toISOString().slice(0, 10),
+    status: normalizeUniquemStatus(input.status),
+    notes: asString(input.notes).slice(0, 800),
+  };
+}
+
+function toUniquemIso(value) {
+  return toIso(value);
+}
+
+function mapUniquemProductDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    productId: asString(data.productId) || doc.id,
+    name: asString(data.name),
+    sku: asString(data.sku),
+    type: normalizeUniquemProductType(data.type),
+    unit: normalizeUniquemUnit(data.unit),
+    reorderPoint: normalizeUniquemQuantity(data.reorderPoint),
+    description: asString(data.description),
+    status: normalizeUniquemStatus(data.status),
+    media: normalizeUniquemMedia(data.media),
+    createdAt: toUniquemIso(data.createdAt),
+    updatedAt: toUniquemIso(data.updatedAt),
+  };
+}
+
+function mapUniquemWarehouseDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    warehouseId: asString(data.warehouseId) || doc.id,
+    name: asString(data.name),
+    code: asString(data.code),
+    locations: (Array.isArray(data.locations) ? data.locations : []).map(asString).filter(Boolean),
+    status: normalizeUniquemStatus(data.status),
+    updatedAt: toUniquemIso(data.updatedAt),
+  };
+}
+
+function mapUniquemLotDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    lotId: asString(data.lotId) || doc.id,
+    productId: asString(data.productId),
+    lotNumber: asString(data.lotNumber),
+    supplier: asString(data.supplier),
+    supplierLot: asString(data.supplierLot),
+    receivedAt: asString(data.receivedAt),
+    expiryDate: asString(data.expiryDate),
+    notes: asString(data.notes),
+    status: normalizeUniquemStatus(data.status, ['active', 'hold', 'archived'], 'active'),
+    createdAt: toUniquemIso(data.createdAt),
+    updatedAt: toUniquemIso(data.updatedAt),
+  };
+}
+
+function mapUniquemMovementDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    movementId: asString(data.movementId) || doc.id,
+    type: asString(data.type),
+    productId: asString(data.productId),
+    lotId: asString(data.lotId),
+    warehouseId: asString(data.warehouseId),
+    location: asString(data.location) || 'Main',
+    quantity: normalizeUniquemQuantity(data.quantity, { allowNegative: true }),
+    unit: normalizeUniquemUnit(data.unit),
+    reason: asString(data.reason),
+    referenceType: asString(data.referenceType),
+    referenceId: asString(data.referenceId),
+    notes: asString(data.notes),
+    createdBy: asString(data.createdBy),
+    createdByEmail: asString(data.createdByEmail),
+    createdAt: toUniquemIso(data.createdAt),
+  };
+}
+
+function mapUniquemRecipeDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    recipeId: asString(data.recipeId) || doc.id,
+    name: asString(data.name),
+    outputProductId: asString(data.outputProductId),
+    outputQuantity: normalizeUniquemQuantity(data.outputQuantity) || 1,
+    outputUnit: normalizeUniquemUnit(data.outputUnit),
+    yieldLossPercent: clampNumber(data.yieldLossPercent, 0, 100, 0),
+    instructions: asString(data.instructions),
+    inputs: Array.isArray(data.inputs) ? data.inputs.map((item) => ({ ...item, quantity: normalizeUniquemQuantity(item.quantity), unit: normalizeUniquemUnit(item.unit) })) : [],
+    status: normalizeUniquemStatus(data.status),
+    updatedAt: toUniquemIso(data.updatedAt),
+  };
+}
+
+function mapUniquemBlendJobDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    jobId: asString(data.jobId) || doc.id,
+    recipeId: asString(data.recipeId),
+    name: asString(data.name),
+    outputProductId: asString(data.outputProductId),
+    outputLotId: asString(data.outputLotId),
+    outputLotNumber: asString(data.outputLotNumber),
+    outputQuantity: normalizeUniquemQuantity(data.outputQuantity),
+    outputUnit: normalizeUniquemUnit(data.outputUnit),
+    warehouseId: asString(data.warehouseId),
+    location: asString(data.location) || 'Main',
+    inputs: Array.isArray(data.inputs) ? data.inputs : [],
+    status: normalizeUniquemStatus(data.status, ['planned', 'completed', 'cancelled'], 'planned'),
+    notes: asString(data.notes),
+    createdAt: toUniquemIso(data.createdAt),
+    completedAt: toUniquemIso(data.completedAt),
+  };
+}
+
+function mapUniquemPriceDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    priceId: asString(data.priceId) || doc.id,
+    productId: asString(data.productId),
+    price: normalizeUniquemQuantity(data.price),
+    currency: asString(data.currency).toUpperCase() || 'CAD',
+    unit: normalizeUniquemUnit(data.unit),
+    effectiveDate: asString(data.effectiveDate),
+    status: normalizeUniquemStatus(data.status),
+    notes: asString(data.notes),
+    updatedAt: toUniquemIso(data.updatedAt),
+  };
+}
+
+function uniquemBalanceKey({ productId, lotId, warehouseId, location }) {
+  return [productId, lotId, warehouseId, location || 'Main'].join('|');
+}
+
+function calculateUniquemBalances(movements = []) {
+  const map = new Map();
+  for (const movement of Array.isArray(movements) ? movements : []) {
+    const quantity = normalizeUniquemQuantity(movement.quantity, { allowNegative: true });
+    if (!movement.productId || !movement.lotId || !movement.warehouseId || !quantity) continue;
+    const location = asString(movement.location) || 'Main';
+    const key = uniquemBalanceKey({ ...movement, location });
+    const current = map.get(key) || {
+      productId: movement.productId,
+      lotId: movement.lotId,
+      warehouseId: movement.warehouseId,
+      location,
+      unit: normalizeUniquemUnit(movement.unit),
+      quantity: 0,
+    };
+    current.quantity = Math.round((current.quantity + quantity) * 1000) / 1000;
+    map.set(key, current);
+  }
+  return Array.from(map.values()).filter((item) => Math.abs(item.quantity) > 0.0001);
+}
+
+async function loadUniquemOperationsData() {
+  const [productSnap, warehouseSnap, lotSnap, movementSnap, recipeSnap, jobSnap, priceSnap] = await Promise.all([
+    db.collection(UNIQUEM_PRODUCT_COLLECTION).orderBy('name').limit(500).get(),
+    db.collection(UNIQUEM_WAREHOUSE_COLLECTION).orderBy('name').limit(100).get(),
+    db.collection(UNIQUEM_LOT_COLLECTION).orderBy('createdAt', 'desc').limit(1000).get(),
+    db.collection(UNIQUEM_MOVEMENT_COLLECTION).orderBy('createdAt', 'desc').limit(2000).get(),
+    db.collection(UNIQUEM_RECIPE_COLLECTION).orderBy('updatedAt', 'desc').limit(300).get(),
+    db.collection(UNIQUEM_BLEND_JOB_COLLECTION).orderBy('createdAt', 'desc').limit(300).get(),
+    db.collection(UNIQUEM_PRICE_COLLECTION).orderBy('effectiveDate', 'desc').limit(500).get(),
+  ]);
+  const products = productSnap.docs.map(mapUniquemProductDoc);
+  const warehouses = warehouseSnap.docs.map(mapUniquemWarehouseDoc);
+  const lots = lotSnap.docs.map(mapUniquemLotDoc);
+  const movements = movementSnap.docs.map(mapUniquemMovementDoc);
+  const recipes = recipeSnap.docs.map(mapUniquemRecipeDoc);
+  const blendJobs = jobSnap.docs.map(mapUniquemBlendJobDoc);
+  const prices = priceSnap.docs.map(mapUniquemPriceDoc);
+  return {
+    products,
+    warehouses,
+    lots,
+    movements,
+    recipes,
+    blendJobs,
+    prices,
+    balances: calculateUniquemBalances(movements),
+  };
+}
+
+function buildUniquemDashboard(data = {}) {
+  const products = Array.isArray(data.products) ? data.products : [];
+  const lots = Array.isArray(data.lots) ? data.lots : [];
+  const balances = Array.isArray(data.balances) ? data.balances : [];
+  const blendJobs = Array.isArray(data.blendJobs) ? data.blendJobs : [];
+  const activeLots = new Set(lots.filter((lot) => lot.status !== 'archived').map((lot) => lot.lotId));
+  const onHandByProduct = new Map();
+  for (const balance of balances) {
+    if (!activeLots.has(balance.lotId)) continue;
+    onHandByProduct.set(balance.productId, (onHandByProduct.get(balance.productId) || 0) + balance.quantity);
+  }
+  const lowStock = products
+    .filter((product) => product.status === 'active' && product.reorderPoint > 0 && (onHandByProduct.get(product.productId) || 0) <= product.reorderPoint)
+    .map((product) => ({ productId: product.productId, name: product.name, quantity: onHandByProduct.get(product.productId) || 0, reorderPoint: product.reorderPoint, unit: product.unit }));
+  const today = new Date();
+  const soon = new Date(today.getTime() + 1000 * 60 * 60 * 24 * 60);
+  const expiringLots = lots
+    .filter((lot) => {
+      if (!lot.expiryDate || lot.status === 'archived') return false;
+      const expiry = new Date(lot.expiryDate);
+      return Number.isFinite(expiry.getTime()) && expiry <= soon;
+    })
+    .slice(0, 20);
+  return {
+    productCount: products.filter((item) => item.status === 'active').length,
+    lotCount: lots.filter((item) => item.status !== 'archived').length,
+    onHandPositions: balances.length,
+    openBlendJobs: blendJobs.filter((item) => item.status === 'planned').length,
+    lowStock,
+    expiringLots,
+  };
 }
 
 async function loadOwnedMudDraft(draftId, user) {
@@ -2390,6 +2828,449 @@ export const improveMudProgramPage = onRequest(
   }
 );
 
+export const listUniquemOperations = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    await ensureUniquemAccess(req);
+    const data = await loadUniquemOperationsData();
+    setCors(res);
+    res.status(200).json({ ok: true, ...data, dashboard: buildUniquemDashboard(data) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[listUniquemOperations] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list Uniquem operations data');
+  }
+});
+
+export const saveUniquemProduct = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const product = normalizeUniquemProduct(req.body || {});
+    const productId = normalizeDocId(req.body?.productId) || randomUUID();
+    const ref = db.collection(UNIQUEM_PRODUCT_COLLECTION).doc(productId);
+    const snap = await ref.get();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await ref.set(
+      {
+        productId,
+        ...product,
+        createdAt: snap.exists ? snap.data()?.createdAt || now : now,
+        updatedAt: now,
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+      },
+      { merge: true }
+    );
+    setCors(res);
+    res.status(200).json({ ok: true, product: mapUniquemProductDoc(await ref.get()) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[saveUniquemProduct] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to save product');
+  }
+});
+
+export const archiveUniquemProduct = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const productId = normalizeDocId(req.body?.productId);
+    if (!productId) return jsonError(res, 400, 'productId is required');
+    const ref = db.collection(UNIQUEM_PRODUCT_COLLECTION).doc(productId);
+    await ref.set(
+      { status: 'archived', updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid, updatedByEmail: user.email },
+      { merge: true }
+    );
+    setCors(res);
+    res.status(200).json({ ok: true, productId });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[archiveUniquemProduct] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to archive product');
+  }
+});
+
+export const saveUniquemWarehouse = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const warehouse = normalizeUniquemWarehouse(req.body || {});
+    const warehouseId = normalizeDocId(req.body?.warehouseId) || randomUUID();
+    const ref = db.collection(UNIQUEM_WAREHOUSE_COLLECTION).doc(warehouseId);
+    await ref.set(
+      {
+        warehouseId,
+        ...warehouse,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+      },
+      { merge: true }
+    );
+    setCors(res);
+    res.status(200).json({ ok: true, warehouse: mapUniquemWarehouseDoc(await ref.get()) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[saveUniquemWarehouse] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to save warehouse');
+  }
+});
+
+export const receiveUniquemInventory = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const lot = normalizeUniquemLot(req.body || {});
+    const warehouseId = normalizeDocId(req.body?.warehouseId);
+    const location = asString(req.body?.location).slice(0, 80) || 'Main';
+    const quantity = normalizeUniquemQuantity(req.body?.quantity);
+    const unit = normalizeUniquemUnit(req.body?.unit);
+    if (!warehouseId || !quantity) return jsonError(res, 400, 'Warehouse and quantity are required.');
+    const lotId = normalizeDocId(req.body?.lotId) || randomUUID();
+    const movementId = randomUUID();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await db.runTransaction(async (tx) => {
+      tx.set(
+        db.collection(UNIQUEM_LOT_COLLECTION).doc(lotId),
+        {
+          lotId,
+          ...lot,
+          createdAt: now,
+          updatedAt: now,
+          createdBy: user.uid,
+          createdByEmail: user.email,
+        },
+        { merge: true }
+      );
+      tx.set(db.collection(UNIQUEM_MOVEMENT_COLLECTION).doc(movementId), {
+        movementId,
+        type: 'receipt',
+        productId: lot.productId,
+        lotId,
+        warehouseId,
+        location,
+        quantity,
+        unit,
+        reason: 'Incoming stock receipt',
+        referenceType: 'receipt',
+        referenceId: movementId,
+        notes: asString(req.body?.notes).slice(0, 1200),
+        createdAt: now,
+        createdBy: user.uid,
+        createdByEmail: user.email,
+      });
+    });
+    const data = await loadUniquemOperationsData();
+    setCors(res);
+    res.status(200).json({ ok: true, lotId, movementId, ...data, dashboard: buildUniquemDashboard(data) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[receiveUniquemInventory] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to receive inventory');
+  }
+});
+
+export const transferUniquemInventory = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const productId = normalizeDocId(req.body?.productId);
+    const lotId = normalizeDocId(req.body?.lotId);
+    const fromWarehouseId = normalizeDocId(req.body?.fromWarehouseId);
+    const toWarehouseId = normalizeDocId(req.body?.toWarehouseId);
+    const fromLocation = asString(req.body?.fromLocation).slice(0, 80) || 'Main';
+    const toLocation = asString(req.body?.toLocation).slice(0, 80) || 'Main';
+    const quantity = normalizeUniquemQuantity(req.body?.quantity);
+    const unit = normalizeUniquemUnit(req.body?.unit);
+    if (!productId || !lotId || !fromWarehouseId || !toWarehouseId || !quantity) return jsonError(res, 400, 'Product, lot, source, destination, and quantity are required.');
+    const transferId = randomUUID();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await db.runTransaction(async (tx) => {
+      const outMovementId = randomUUID();
+      const inMovementId = randomUUID();
+      tx.set(db.collection(UNIQUEM_MOVEMENT_COLLECTION).doc(outMovementId), {
+        movementId: outMovementId,
+        type: 'transfer-out',
+        productId,
+        lotId,
+        warehouseId: fromWarehouseId,
+        location: fromLocation,
+        quantity: -quantity,
+        unit,
+        reason: asString(req.body?.reason).slice(0, 280) || 'Inventory transfer',
+        referenceType: 'transfer',
+        referenceId: transferId,
+        notes: asString(req.body?.notes).slice(0, 1200),
+        createdAt: now,
+        createdBy: user.uid,
+        createdByEmail: user.email,
+      });
+      tx.set(db.collection(UNIQUEM_MOVEMENT_COLLECTION).doc(inMovementId), {
+        movementId: inMovementId,
+        type: 'transfer-in',
+        productId,
+        lotId,
+        warehouseId: toWarehouseId,
+        location: toLocation,
+        quantity,
+        unit,
+        reason: asString(req.body?.reason).slice(0, 280) || 'Inventory transfer',
+        referenceType: 'transfer',
+        referenceId: transferId,
+        notes: asString(req.body?.notes).slice(0, 1200),
+        createdAt: now,
+        createdBy: user.uid,
+        createdByEmail: user.email,
+      });
+    });
+    const data = await loadUniquemOperationsData();
+    setCors(res);
+    res.status(200).json({ ok: true, transferId, ...data, dashboard: buildUniquemDashboard(data) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[transferUniquemInventory] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to transfer inventory');
+  }
+});
+
+export const adjustUniquemInventory = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const movement = normalizeUniquemMovement({ ...req.body, type: 'adjustment', referenceType: 'adjustment' });
+    if (!movement.reason) return jsonError(res, 400, 'Adjustment reason is required.');
+    const movementId = randomUUID();
+    await db.collection(UNIQUEM_MOVEMENT_COLLECTION).doc(movementId).set({
+      movementId,
+      ...movement,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: user.uid,
+      createdByEmail: user.email,
+    });
+    const data = await loadUniquemOperationsData();
+    setCors(res);
+    res.status(200).json({ ok: true, movementId, ...data, dashboard: buildUniquemDashboard(data) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[adjustUniquemInventory] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to adjust inventory');
+  }
+});
+
+export const saveUniquemRecipe = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const recipe = normalizeUniquemRecipe(req.body || {});
+    const recipeId = normalizeDocId(req.body?.recipeId) || randomUUID();
+    const ref = db.collection(UNIQUEM_RECIPE_COLLECTION).doc(recipeId);
+    await ref.set(
+      {
+        recipeId,
+        ...recipe,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+      },
+      { merge: true }
+    );
+    setCors(res);
+    res.status(200).json({ ok: true, recipe: mapUniquemRecipeDoc(await ref.get()) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[saveUniquemRecipe] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to save recipe');
+  }
+});
+
+export const createUniquemBlendJob = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const job = normalizeUniquemBlendJob(req.body || {});
+    const jobId = randomUUID();
+    await db.collection(UNIQUEM_BLEND_JOB_COLLECTION).doc(jobId).set({
+      jobId,
+      ...job,
+      status: 'planned',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: user.uid,
+      createdByEmail: user.email,
+    });
+    const data = await loadUniquemOperationsData();
+    setCors(res);
+    res.status(200).json({ ok: true, jobId, ...data, dashboard: buildUniquemDashboard(data) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[createUniquemBlendJob] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to create blend job');
+  }
+});
+
+export const completeUniquemBlendJob = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const jobId = normalizeDocId(req.body?.jobId);
+    if (!jobId) return jsonError(res, 400, 'jobId is required');
+    const jobRef = db.collection(UNIQUEM_BLEND_JOB_COLLECTION).doc(jobId);
+    const jobSnap = await jobRef.get();
+    if (!jobSnap.exists) return jsonError(res, 404, 'Blend job not found');
+    const job = mapUniquemBlendJobDoc(jobSnap);
+    if (job.status !== 'planned') return jsonError(res, 400, 'Only planned blend jobs can be completed.');
+    const data = await loadUniquemOperationsData();
+    const balances = calculateUniquemBalances(data.movements);
+    for (const input of job.inputs) {
+      const available = balances
+        .filter((item) => item.productId === input.productId && item.lotId === input.lotId && item.warehouseId === input.warehouseId && item.location === input.location)
+        .reduce((sum, item) => sum + item.quantity, 0);
+      if (available < input.quantity) return jsonError(res, 400, `Not enough inventory for input lot ${input.lotId}.`);
+    }
+    const outputLotId = randomUUID();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await db.runTransaction(async (tx) => {
+      for (const input of job.inputs) {
+        const movementId = randomUUID();
+        tx.set(db.collection(UNIQUEM_MOVEMENT_COLLECTION).doc(movementId), {
+          movementId,
+          type: 'blend-consume',
+          productId: input.productId,
+          lotId: input.lotId,
+          warehouseId: input.warehouseId,
+          location: input.location,
+          quantity: -normalizeUniquemQuantity(input.quantity),
+          unit: normalizeUniquemUnit(input.unit),
+          reason: `Consumed by ${job.name}`,
+          referenceType: 'blendJob',
+          referenceId: jobId,
+          createdAt: now,
+          createdBy: user.uid,
+          createdByEmail: user.email,
+        });
+      }
+      tx.set(db.collection(UNIQUEM_LOT_COLLECTION).doc(outputLotId), {
+        lotId: outputLotId,
+        productId: job.outputProductId,
+        lotNumber: job.outputLotNumber,
+        supplier: 'Internal blend',
+        supplierLot: '',
+        receivedAt: new Date().toISOString().slice(0, 10),
+        expiryDate: '',
+        notes: job.notes,
+        status: 'active',
+        sourceBlendJobId: jobId,
+        sourceInputs: job.inputs,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: user.uid,
+        createdByEmail: user.email,
+      });
+      const movementId = randomUUID();
+      tx.set(db.collection(UNIQUEM_MOVEMENT_COLLECTION).doc(movementId), {
+        movementId,
+        type: 'blend-produce',
+        productId: job.outputProductId,
+        lotId: outputLotId,
+        warehouseId: job.warehouseId,
+        location: job.location,
+        quantity: job.outputQuantity,
+        unit: job.outputUnit,
+        reason: `Produced by ${job.name}`,
+        referenceType: 'blendJob',
+        referenceId: jobId,
+        createdAt: now,
+        createdBy: user.uid,
+        createdByEmail: user.email,
+      });
+      tx.set(jobRef, { status: 'completed', outputLotId, completedAt: now, completedBy: user.uid, completedByEmail: user.email }, { merge: true });
+    });
+    const refreshed = await loadUniquemOperationsData();
+    setCors(res);
+    res.status(200).json({ ok: true, jobId, outputLotId, ...refreshed, dashboard: buildUniquemDashboard(refreshed) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[completeUniquemBlendJob] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to complete blend job');
+  }
+});
+
+export const cancelUniquemBlendJob = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const jobId = normalizeDocId(req.body?.jobId);
+    if (!jobId) return jsonError(res, 400, 'jobId is required');
+    await db.collection(UNIQUEM_BLEND_JOB_COLLECTION).doc(jobId).set(
+      {
+        status: 'cancelled',
+        cancelledReason: asString(req.body?.reason).slice(0, 280),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+      },
+      { merge: true }
+    );
+    const data = await loadUniquemOperationsData();
+    setCors(res);
+    res.status(200).json({ ok: true, jobId, ...data, dashboard: buildUniquemDashboard(data) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[cancelUniquemBlendJob] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to cancel blend job');
+  }
+});
+
+export const saveUniquemPrice = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+
+  try {
+    const user = await ensureUniquemAccess(req);
+    const price = normalizeUniquemPrice(req.body || {});
+    const priceId = normalizeDocId(req.body?.priceId) || randomUUID();
+    const ref = db.collection(UNIQUEM_PRICE_COLLECTION).doc(priceId);
+    await ref.set(
+      {
+        priceId,
+        ...price,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: user.uid,
+        updatedByEmail: user.email,
+      },
+      { merge: true }
+    );
+    setCors(res);
+    res.status(200).json({ ok: true, price: mapUniquemPriceDoc(await ref.get()) });
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    logger.error('[saveUniquemPrice] failed', { error: error?.message || String(error) });
+    return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to save price');
+  }
+});
+
 export const generateUniquem3DScene = onRequest(
   { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
   async (req, res) => {
@@ -2667,6 +3548,15 @@ export const __testables = {
   mapUniquem3DVersionDoc,
   filterActiveUniquem3DModels,
   buildUniquemVersionDoc,
+  normalizeUniquemProduct,
+  normalizeUniquemWarehouse,
+  normalizeUniquemLot,
+  normalizeUniquemMovement,
+  normalizeUniquemRecipe,
+  normalizeUniquemBlendJob,
+  normalizeUniquemPrice,
+  calculateUniquemBalances,
+  buildUniquemDashboard,
   normalizeAdminUserEmailInput,
   emailBelongsToAnotherUser,
   canEditInviteStatus,

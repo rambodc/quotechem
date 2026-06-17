@@ -220,7 +220,23 @@ function App() {
             path="/apps/uniquem"
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="overview">
-                <Navigate to="/apps/uniquem/3d" replace />
+                <Navigate to="/apps/uniquem/dashboard" replace />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/dashboard"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="dashboard">
+                <Uniquem page="dashboard" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/products"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="products">
+                <Uniquem page="products" />
               </MiniAppRoute>
             }
           />
@@ -229,6 +245,30 @@ function App() {
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="inventory">
                 <Uniquem page="inventory" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/receive"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="receive">
+                <Uniquem page="receive" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/blending"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="blending">
+                <Uniquem page="blending" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/uniquem/movements"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="movements">
+                <Uniquem page="movements" />
               </MiniAppRoute>
             }
           />

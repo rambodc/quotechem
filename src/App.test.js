@@ -202,6 +202,120 @@ const mockUniquemVersions = [
   },
 ];
 
+const mockUniquemOperations = {
+  products: [
+    {
+      productId: 'product-1',
+      name: 'Clay Shield',
+      sku: 'CLAY-SHIELD',
+      type: 'raw',
+      unit: 'L',
+      reorderPoint: 100,
+      description: 'Amine clay control additive.',
+      status: 'active',
+      media: [],
+    },
+    {
+      productId: 'product-2',
+      name: 'Main Hole Blend',
+      sku: 'MHB-200',
+      type: 'blend',
+      unit: 'L',
+      reorderPoint: 50,
+      description: 'Finished blend product.',
+      status: 'active',
+      media: [],
+    },
+  ],
+  warehouses: [
+    {
+      warehouseId: 'warehouse-1',
+      name: 'Lloydminster',
+      code: 'LLD',
+      locations: ['Main', 'Blend Bay'],
+      status: 'active',
+    },
+  ],
+  lots: [
+    {
+      lotId: 'lot-1',
+      productId: 'product-1',
+      lotNumber: 'CLAY-001',
+      supplier: 'Supplier Co',
+      supplierLot: 'SUP-1',
+      receivedAt: '2026-06-15',
+      expiryDate: '2026-07-01',
+      status: 'active',
+    },
+  ],
+  movements: [
+    {
+      movementId: 'movement-1',
+      type: 'receipt',
+      productId: 'product-1',
+      lotId: 'lot-1',
+      warehouseId: 'warehouse-1',
+      location: 'Main',
+      quantity: 250,
+      unit: 'L',
+      createdAt: '2026-06-15T12:00:00.000Z',
+    },
+  ],
+  recipes: [
+    {
+      recipeId: 'recipe-1',
+      name: 'Main Hole Blend Recipe',
+      outputProductId: 'product-2',
+      outputQuantity: 100,
+      outputUnit: 'L',
+      inputs: [{ productId: 'product-1', quantity: 25, unit: 'L' }],
+      status: 'active',
+    },
+  ],
+  blendJobs: [
+    {
+      jobId: 'job-1',
+      name: 'Blend Job 1',
+      outputProductId: 'product-2',
+      outputQuantity: 100,
+      outputUnit: 'L',
+      warehouseId: 'warehouse-1',
+      location: 'Blend Bay',
+      inputs: [{ productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: 25, unit: 'L' }],
+      status: 'planned',
+    },
+  ],
+  prices: [
+    {
+      priceId: 'price-1',
+      productId: 'product-1',
+      price: 12.5,
+      currency: 'CAD',
+      unit: 'L',
+      effectiveDate: '2026-06-15',
+      status: 'active',
+    },
+  ],
+  balances: [
+    {
+      productId: 'product-1',
+      lotId: 'lot-1',
+      warehouseId: 'warehouse-1',
+      location: 'Main',
+      quantity: 250,
+      unit: 'L',
+    },
+  ],
+  dashboard: {
+    productCount: 2,
+    lotCount: 1,
+    onHandPositions: 1,
+    openBlendJobs: 1,
+    lowStock: [],
+    expiringLots: [],
+  },
+};
+
 jest.mock('./firebase', () => ({
   auth: {},
   db: {},
@@ -468,6 +582,26 @@ beforeEach(() => {
         },
       });
     }
+    if (path === 'listUniquemOperations') {
+      return Promise.resolve(mockUniquemOperations);
+    }
+    if (
+      [
+        'saveUniquemProduct',
+        'archiveUniquemProduct',
+        'saveUniquemWarehouse',
+        'receiveUniquemInventory',
+        'transferUniquemInventory',
+        'adjustUniquemInventory',
+        'saveUniquemRecipe',
+        'createUniquemBlendJob',
+        'completeUniquemBlendJob',
+        'cancelUniquemBlendJob',
+        'saveUniquemPrice',
+      ].includes(path)
+    ) {
+      return Promise.resolve(mockUniquemOperations);
+    }
     if (path === 'listUniquem3DModels') {
       return Promise.resolve({ items: [mockUniquemModel] });
     }
@@ -573,7 +707,7 @@ describe('mini-app portal routing', () => {
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.getByRole('link', { name: /Drilling Programs/i }).getAttribute('href')).toBe('/apps/drilling-programs');
-    expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/3d');
+    expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/dashboard');
     expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -616,7 +750,7 @@ describe('mini-app portal routing', () => {
     renderAt('/portal', 'user', ['uniquem']);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/3d');
+    expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/dashboard');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
 
     cleanup();
@@ -632,9 +766,14 @@ describe('mini-app portal routing', () => {
     expect(screen.getByTestId('uniquem-creator-canvas')).toBeTruthy();
   });
 
-  test('Uniquem subpages render blank shells and base route opens 3D', async () => {
+  test('Uniquem operations pages render real inventory system views and base route opens dashboard', async () => {
     const cases = [
+      ['/apps/uniquem/dashboard', 'Dashboard'],
+      ['/apps/uniquem/products', 'Products'],
       ['/apps/uniquem/inventory', 'Inventory'],
+      ['/apps/uniquem/receive', 'Receive Stock'],
+      ['/apps/uniquem/blending', 'Blending'],
+      ['/apps/uniquem/movements', 'Movements'],
       ['/apps/uniquem/price-list', 'Price List'],
       ['/apps/uniquem/shipping', 'Shipping'],
       ['/apps/uniquem/orders', 'Orders'],
@@ -647,8 +786,25 @@ describe('mini-app portal routing', () => {
     }
 
     renderAt('/apps/uniquem', 'admin');
-    expect(await screen.findByRole('heading', { name: '3D Warehouse' })).toBeTruthy();
-    expect(window.location.pathname).toBe('/apps/uniquem/3d');
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy();
+    expect(window.location.pathname).toBe('/apps/uniquem/dashboard');
+  });
+
+  test('Uniquem inventory and production pages show ledger-backed data', async () => {
+    renderAt('/apps/uniquem/inventory', 'admin');
+    await screen.findByRole('heading', { name: 'Inventory' });
+    await waitFor(() => expect(screen.getAllByText('Clay Shield (CLAY-SHIELD)').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('CLAY-001').length).toBeGreaterThan(0);
+    expect(screen.getByText('250 L')).toBeTruthy();
+
+    cleanup();
+    renderAt('/apps/uniquem/blending', 'admin');
+    expect(await screen.findByText('Blend Job 1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Complete' })).toBeTruthy();
+
+    cleanup();
+    renderAt('/apps/uniquem/price-list', 'admin');
+    expect(await screen.findByText('CAD 12.50 / L')).toBeTruthy();
   });
 
   test('Uniquem 3D Creator creates a saved model with prompt and optional image', async () => {

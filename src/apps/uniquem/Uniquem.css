@@ -34,6 +34,329 @@
   min-height: calc(100vh - 152px);
 }
 
+.uniquem-ops-page {
+  display: grid;
+  gap: 14px;
+  min-height: calc(100vh - 152px);
+  color: #102033;
+}
+
+.uniquem-ops-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #d9e2ec;
+  padding-bottom: 12px;
+}
+
+.uniquem-ops-head p {
+  margin: 0 0 4px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.uniquem-ops-head h1 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #0f172a;
+  font-size: 1.85rem;
+  line-height: 1.12;
+}
+
+.uniquem-ops-head button,
+.uniquem-form button,
+.uniquem-job button {
+  border: 1px solid #b8c7d8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102033;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-weight: 850;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.uniquem-form button,
+.uniquem-job button:first-child {
+  border-color: #087a24;
+  background: #087a24;
+  color: #ffffff;
+}
+
+.uniquem-job button:last-child {
+  color: #8a2717;
+  border-color: #f0b8a8;
+}
+
+.uniquem-alert,
+.uniquem-loading,
+.uniquem-empty {
+  margin: 0;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  color: #526173;
+  font-weight: 700;
+}
+
+.uniquem-alert {
+  border-color: #f0b8a8;
+  background: #fff7f4;
+  color: #8a2717;
+}
+
+.uniquem-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.uniquem-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.uniquem-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.uniquem-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.uniquem-stat,
+.uniquem-panel,
+.uniquem-product-card,
+.uniquem-job,
+.uniquem-future {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.uniquem-stat {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.uniquem-stat span,
+.uniquem-form-note {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.uniquem-stat strong {
+  color: #0f172a;
+  font-size: 1.55rem;
+}
+
+.uniquem-panel {
+  display: grid;
+  align-content: start;
+}
+
+.uniquem-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e5edf5;
+  padding: 11px 12px;
+}
+
+.uniquem-panel h2 {
+  margin: 0;
+  color: #102033;
+  font-size: 1rem;
+}
+
+.uniquem-panel > :not(header) {
+  margin: 12px;
+}
+
+.uniquem-table-wrap {
+  overflow: auto;
+}
+
+.uniquem-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.uniquem-table th,
+.uniquem-table td {
+  border-bottom: 1px solid #e5edf5;
+  padding: 9px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.uniquem-table th {
+  color: #475569;
+  font-size: 0.73rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.uniquem-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.uniquem-form.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.uniquem-form.receive {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.uniquem-form label {
+  display: grid;
+  gap: 4px;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.uniquem-form input,
+.uniquem-form select,
+.uniquem-form textarea,
+.uniquem-filter {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102033;
+  font: inherit;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+.uniquem-form textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.uniquem-form .wide {
+  grid-column: 1 / -1;
+}
+
+.uniquem-product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.uniquem-product-card {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+}
+
+.uniquem-product-thumb {
+  width: 78px;
+  aspect-ratio: 1;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #f2f6fa;
+  display: grid;
+  place-items: center;
+  color: #087a24;
+  overflow: hidden;
+}
+
+.uniquem-product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.uniquem-product-card strong,
+.uniquem-job strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.uniquem-product-card span,
+.uniquem-job span {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.uniquem-product-card p,
+.uniquem-future p {
+  margin: 8px 0 0;
+  color: #526173;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.uniquem-job-list {
+  display: grid;
+  gap: 8px;
+}
+
+.uniquem-job {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.uniquem-job div:last-child {
+  display: flex;
+  gap: 8px;
+}
+
+.uniquem-future {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 16px;
+}
+
+.uniquem-future svg {
+  color: #087a24;
+  width: 32px;
+  height: 32px;
+}
+
+.uniquem-future h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
 .warehouse-toolbar {
   display: flex;
   align-items: end;
@@ -501,6 +824,33 @@
 }
 
 @media (max-width: 760px) {
+  .uniquem-ops-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .uniquem-stat-grid,
+  .uniquem-grid.two,
+  .uniquem-product-grid,
+  .uniquem-form,
+  .uniquem-form.compact,
+  .uniquem-form.receive {
+    grid-template-columns: 1fr;
+  }
+
+  .uniquem-product-card {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .uniquem-product-thumb {
+    width: 64px;
+  }
+
+  .uniquem-job {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .warehouse-toolbar {
     align-items: stretch;
     flex-direction: column;

@@ -236,6 +236,71 @@ test('Uniquem saved model mapping normalizes active and archived records', () =>
   assert.equal(__testables.normalizeUniquemModelStatus('unexpected'), 'active');
 });
 
+test('Uniquem inventory functions are exported', () => {
+  for (const name of [
+    'listUniquemOperations',
+    'saveUniquemProduct',
+    'archiveUniquemProduct',
+    'saveUniquemWarehouse',
+    'receiveUniquemInventory',
+    'transferUniquemInventory',
+    'adjustUniquemInventory',
+    'saveUniquemRecipe',
+    'createUniquemBlendJob',
+    'completeUniquemBlendJob',
+    'cancelUniquemBlendJob',
+    'saveUniquemPrice',
+  ]) {
+    assert.equal(Object.hasOwn(functionExports, name), true);
+  }
+});
+
+test('Uniquem product and price normalizers keep operations input safe', () => {
+  assert.deepEqual(__testables.normalizeUniquemProduct({ name: ' Clay Shield ', sku: 'clay shield!!', type: 'bad', unit: 'litres', reorderPoint: '12.3456' }), {
+    name: 'Clay Shield',
+    sku: 'CLAYSHIELD',
+    type: 'raw',
+    unit: 'L',
+    reorderPoint: 12.346,
+    description: '',
+    status: 'active',
+    media: [],
+  });
+  assert.equal(__testables.normalizeUniquemPrice({ productId: 'product-1', price: '15.50', currency: 'cad', unit: 'kg' }).currency, 'CAD');
+  assert.throws(() => __testables.normalizeUniquemProduct({ name: '' }), /Product name is required/);
+  assert.throws(() => __testables.normalizeUniquemPrice({ productId: 'product-1', price: 0 }), /Price must be greater than zero/);
+});
+
+test('Uniquem ledger balances derive stock from movement history', () => {
+  const balances = __testables.calculateUniquemBalances([
+    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: 100, unit: 'L' },
+    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: -25, unit: 'L' },
+    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-2', location: 'Blend Bay', quantity: 25, unit: 'L' },
+  ]);
+  assert.deepEqual(balances, [
+    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', unit: 'L', quantity: 75 },
+    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-2', location: 'Blend Bay', unit: 'L', quantity: 25 },
+  ]);
+});
+
+test('Uniquem blend job normalization requires input lots', () => {
+  const job = __testables.normalizeUniquemBlendJob({
+    name: ' Main blend ',
+    outputProductId: 'product-2',
+    outputQuantity: '100',
+    outputUnit: 'l',
+    warehouseId: 'warehouse-1',
+    inputs: [{ productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: '25', unit: 'l' }],
+  });
+  assert.equal(job.name, 'Main blend');
+  assert.equal(job.outputUnit, 'L');
+  assert.equal(job.inputs[0].quantity, 25);
+  assert.throws(
+    () => __testables.normalizeUniquemBlendJob({ outputProductId: 'product-2', outputQuantity: 100, warehouseId: 'warehouse-1', inputs: [] }),
+    /At least one input lot is required/
+  );
+});
+
 test('Uniquem version mapping preserves source and normalized scene', () => {
   const doc = {
     id: 'version-1',
