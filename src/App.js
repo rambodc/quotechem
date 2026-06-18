@@ -168,6 +168,13 @@ function App() {
       <UserContext.Provider value={contextValue}>
         <Routes>
           <Route path="/" element={<CatalogHome />} />
+          <Route path="/operations" element={<CatalogHome page="operations" />} />
+          <Route path="/chemicals" element={<CatalogHome page="chemicals" />} />
+          <Route path="/technology" element={<CatalogHome page="technology" />} />
+          <Route path="/health-safety" element={<CatalogHome page="safety" />} />
+          <Route path="/careers" element={<CatalogHome page="careers" />} />
+          <Route path="/locations" element={<CatalogHome page="locations" />} />
+          <Route path="/contact-us" element={<CatalogHome page="contact" />} />
           <Route path="/chemicals/:slug" element={<ProductPage />} />
           <Route path="/offline/drilling-fluids-report" element={<OfflineDrillingFluidsReport />} />
           <Route path="/invite/:token" element={firebaseUser ? <Navigate to="/portal" replace /> : <InviteRegister />} />

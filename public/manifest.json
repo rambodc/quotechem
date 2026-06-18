@@ -1,6 +1,6 @@
 {
-  "short_name": "QuoteChem",
-  "name": "QuoteChem",
+  "short_name": "Kemko",
+  "name": "Kemko Specialty Chemicals",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#0d1f2a",
+  "background_color": "#f7f9f8"
 }

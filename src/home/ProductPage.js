@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { getProductBySlug } from './productData';
-import './Catalog.css';
+import { ContactPanel, PublicShell } from './PublicLayout';
 
 export default function ProductPage() {
   const { slug } = useParams();
@@ -10,70 +10,59 @@ export default function ProductPage() {
   if (!product) return <Navigate to="/" replace />;
 
   return (
-    <main className="product-page" style={{ '--accent': product.accent }}>
-      <nav className="catalog-nav product-nav" aria-label="Product navigation">
-        <Link to="/" className="catalog-brand" aria-label="QuoteChem home">
-          <img src={`${process.env.PUBLIC_URL}/assets/QuoteChem Logo 500.png`} alt="QuoteChem" />
-        </Link>
-        <Link to="/portal" className="catalog-chat-link">Portal</Link>
-      </nav>
-
-      <section className="product-hero">
+    <PublicShell pageClass="product-detail-page">
+      <section className="product-hero" style={{ '--accent': product.accent }}>
         <div className="product-copy">
-          <Link to="/" className="back-link">
-            Back to catalog
+          <Link to="/chemicals" className="back-link">
+            Back to Chemicals
           </Link>
-          <p className="catalog-kicker">{product.eyebrow}</p>
+          <p className="eyebrow">{product.category}</p>
           <h1>{product.name}</h1>
           <p>{product.description}</p>
-          <div className="catalog-actions">
-            <a href="#product-video" className="secondary-catalog-action">
-              Watch overview
-            </a>
+          <div className="hero-actions">
+            <Link to="/contact-us" className="primary-action">
+              Contact Sales
+            </Link>
+            <Link to="/technology" className="secondary-action">
+              Technical Support
+            </Link>
           </div>
         </div>
-
         <div className="product-media">
-          <img src={`${process.env.PUBLIC_URL}${product.image}`} alt={`${product.name} supply example`} />
+          <img src={`${process.env.PUBLIC_URL}${product.image}`} alt="" />
         </div>
       </section>
 
-      <section id="product-video" className="product-video-section" aria-labelledby="product-video-title">
-        <div className="video-placeholder" aria-label={`${product.name} overview video placeholder`}>
-          <span className="video-orbit video-orbit-one" />
-          <span className="video-orbit video-orbit-two" />
-          <span className="video-play" aria-hidden>
-            ▶
-          </span>
-        </div>
-        <div>
-          <p className="catalog-kicker">Process overview</p>
-          <h2 id="product-video-title">A clearer path from chemical need to qualified supplier response.</h2>
-          <p>
-            This overview area is ready for a product video. For now it uses a motion-rich placeholder to show where real product media can live while keeping the page polished on mobile and desktop.
-          </p>
-        </div>
-      </section>
-
-      <section className="product-detail-grid" aria-label={`${product.name} details`}>
+      <section className="product-detail-grid" aria-label={`${product.name} details`} style={{ '--accent': product.accent }}>
         <article>
-          <h2>Common applications</h2>
+          <p className="eyebrow">Key benefits</p>
+          <h2>Why teams use {product.name}</h2>
+          <ul>
+            {product.benefits.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </article>
+        <article>
+          <p className="eyebrow">Applications</p>
+          <h2>Common field uses</h2>
           <ul>
             {product.applications.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
         </article>
-
-        <article>
-          <h2>Quote-ready details</h2>
-          <ul>
-            {product.specs.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </article>
       </section>
-    </main>
+
+      <section className="readable-section product-summary">
+        <p>
+          Product selection depends on fluid conditions, application temperature, materials compatibility, logistics,
+          and operational objectives. Kemko can help confirm whether {product.name} is the right fit or whether a custom
+          formulation would better match the job.
+        </p>
+      </section>
+
+      <ContactPanel heading={`Discuss ${product.name} with Kemko.`} />
+    </PublicShell>
   );
 }

@@ -1173,7 +1173,7 @@ describe('mini-app portal routing', () => {
   test('public chat route is not available', async () => {
     renderSignedOutAt('/chat');
 
-    expect(await screen.findByRole('heading', { name: /Explore industrial chemical sourcing workflows/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Advanced Solutions in Specialty Chemicals/i })).toBeTruthy();
     await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
