@@ -1,17 +1,6 @@
-import { FiFileText, FiPackage, FiShield, FiUser } from 'react-icons/fi';
+import { FiPackage, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
-  {
-    id: 'drilling-programs',
-    label: 'Drilling Programs',
-    description: 'Generate AI-assisted drilling program PDFs from managed instruction templates.',
-    icon: FiFileText,
-    iconImage: '/assets/portal-icons/drilling-programs.png',
-    adminOnly: false,
-    defaultVisibleForRoles: ['admin'],
-    defaultPath: '/apps/drilling-programs',
-    navItems: [],
-  },
   {
     id: 'uniquem',
     label: 'Uniquem',

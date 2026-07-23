@@ -14,10 +14,7 @@ test('temporary password validation rejects shorter values', () => {
 });
 
 test('managed mini app normalization includes access-managed apps only', () => {
-  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-programs', 'uniquem', 'account']), [
-    'drilling-programs',
-    'uniquem',
-  ]);
+  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-programs', 'uniquem', 'account']), ['uniquem']);
 });
 
 test('admin user email input is normalized and validated', () => {
@@ -76,59 +73,6 @@ test('removed quote and RFQ functions are not exported', () => {
   ]) {
     assert.equal(Object.hasOwn(functionExports, name), false);
   }
-});
-
-test('mud program extraction page builder creates cover, well info, and section pages', () => {
-  const pages = __testables.buildMudProgramPagesFromExtraction({
-    overview: {
-      programTitle: 'North Pad Mud Program',
-      wellName: 'Well 12-34',
-      sourceSummary: 'Extracted source summary.',
-    },
-    formationTops: [{ formation: 'Surface Casing', md: '100' }],
-    casingStrings: [{ name: 'Surface', od: '244.5' }],
-    volumes: [{ holeSection: 'Surface', totalVolume: '36' }],
-    sections: [
-      {
-        id: 'surface',
-        name: 'Surface Hole',
-        topDepth: '0 m',
-        bottomDepth: '650 m',
-        properties: [{ label: 'Viscosity (s/L)', value: '40 - 90' }],
-        procedures: [{ heading: 'Spud', lines: ['Fill tanks with fresh water.'] }],
-      },
-    ],
-  });
-
-  assert.equal(pages.length, 3);
-  assert.equal(pages[0].type, 'cover');
-  assert.equal(pages[0].data.executiveSummary, 'Extracted source summary.');
-  assert.equal(pages[1].type, 'wellInfo');
-  assert.equal(pages[1].data.formationTops[0].formation, 'Surface Casing');
-  assert.equal(pages[2].type, 'section');
-  assert.equal(pages[2].title, 'Surface Hole');
-  assert.equal(pages[2].data.properties[0].label, 'Viscosity (s/L)');
-});
-
-test('mud program table normalizers keep report rows safe', () => {
-  assert.deepEqual(__testables.normalizeFormationTops([{ formation: 'A'.repeat(130), md: 100, extra: 'drop' }])[0], {
-    formation: 'A'.repeat(120),
-    md: '100',
-    tvd: '',
-    lithology: '',
-    gradient: '',
-    emd: '',
-    pressure: '',
-    h2s: '',
-    comment: '',
-  });
-  assert.equal(__testables.normalizeCasingStrings([{ name: 'Surface', od: 244.5 }])[0].od, '244.5');
-  assert.equal(__testables.normalizeVolumeRows([{ holeSection: 'Main', totalVolume: 184.9 }])[0].totalVolume, '184.9');
-});
-
-test('mud program PDF validation only accepts application PDFs', () => {
-  assert.equal(__testables.isPdfContentType('application/pdf'), true);
-  assert.equal(__testables.isPdfContentType('image/png'), false);
 });
 
 test('Uniquem scene normalization clamps and drops unsafe objects', () => {
@@ -268,7 +212,7 @@ test('Uniquem package operations validate decimal quantities and draft inputs', 
   assert.equal(operationTestables.recipeInput({ name: 'Blend', outputProductId: 'product-2', ingredients: [{ productId: 'product-1', amount: 20 }] }).ingredients[0].amount, 20);
 });
 
-test('Uniquem product and price normalizers keep operations input safe', () => {
+test('Uniquem product normalization keeps operations input safe', () => {
   assert.deepEqual(__testables.normalizeUniquemProduct({ name: ' Clay Shield ', description: ' Bagged additive ', packageType: 'Bag', packageAmount: '20', measurementUnit: 'kg', packagesPerPallet: '20' }), {
     name: 'Clay Shield',
     description: 'Bagged additive',
@@ -278,23 +222,9 @@ test('Uniquem product and price normalizers keep operations input safe', () => {
     packagesPerPallet: 20,
     status: 'active',
   });
-  assert.equal(__testables.normalizeUniquemPrice({ productId: 'product-1', price: '15.50', currency: 'cad', unit: 'kg' }).currency, 'CAD');
   assert.throws(() => __testables.normalizeUniquemProduct({ name: '' }), /Product name is required/);
   assert.throws(() => __testables.normalizeUniquemProduct({ name: 'Test', packageType: 'Bag', packageAmount: 0, measurementUnit: 'kg' }), /Package amount/);
   assert.throws(() => __testables.normalizeUniquemProduct({ name: 'Test', packageType: 'Bag', packageAmount: 20, measurementUnit: 'kg', packagesPerPallet: 1.5 }), /whole number/);
-  assert.throws(() => __testables.normalizeUniquemPrice({ productId: 'product-1', price: 0 }), /Price must be greater than zero/);
-});
-
-test('Uniquem ledger balances derive stock from movement history', () => {
-  const balances = __testables.calculateUniquemBalances([
-    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: 100, unit: 'L' },
-    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: -25, unit: 'L' },
-    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-2', location: 'Blend Bay', quantity: 25, unit: 'L' },
-  ]);
-  assert.deepEqual(balances, [
-    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', unit: 'L', quantity: 75 },
-    { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-2', location: 'Blend Bay', unit: 'L', quantity: 25 },
-  ]);
 });
 
 test('Uniquem attachment validation accepts supported operating files', () => {
@@ -322,33 +252,6 @@ test('Uniquem attachment validation accepts supported operating files', () => {
   );
 });
 
-test('Uniquem strict stock helper rejects negative-result operations', () => {
-  const balances = [{ productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: 25, unit: 'L' }];
-  assert.equal(__testables.uniquemAvailableQuantity(balances, { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main' }), 25);
-  assert.equal(__testables.assertUniquemSufficientStock(balances, { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main' }, 25), true);
-  assert.throws(
-    () => __testables.assertUniquemSufficientStock(balances, { productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main' }, 26),
-    /Insufficient stock/
-  );
-});
-
-test('Uniquem blend job normalization requires input lots', () => {
-  const job = __testables.normalizeUniquemBlendJob({
-    name: ' Main blend ',
-    outputProductId: 'product-2',
-    outputQuantity: '100',
-    outputUnit: 'l',
-    warehouseId: 'warehouse-1',
-    inputs: [{ productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: '25', unit: 'l' }],
-  });
-  assert.equal(job.name, 'Main blend');
-  assert.equal(job.outputUnit, 'L');
-  assert.equal(job.inputs[0].quantity, 25);
-  assert.throws(
-    () => __testables.normalizeUniquemBlendJob({ outputProductId: 'product-2', outputQuantity: 100, warehouseId: 'warehouse-1', inputs: [] }),
-    /At least one input lot is required/
-  );
-});
 
 test('Uniquem version mapping preserves source and normalized scene', () => {
   const doc = {

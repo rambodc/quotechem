@@ -13,9 +13,8 @@ QuoteChem is a React/Firebase app for a public chemical catalog and an authentic
 
 The portal launcher reads app definitions from `src/apps/registry/miniApps.js`.
 
-- `Drilling Programs`: AI-assisted mud program extraction and page editing
 - `Uniquem`: warehouse and 3D operations views
-- `User Access`: admin user invites, app access, and email templates
+- `User Access`: admin user invites and app access
 - `Account`: profile and sign-in settings
 
 Portal icons are 200px by 200px PNG assets stored in:
@@ -28,13 +27,12 @@ The launcher uses those image assets with animated load, hover, focus, and press
 
 ## Cloud Functions
 
-Main function exports live in `functions/api.js` and are re-exported from `functions/index.js`.
+Function exports are assembled in `functions/index.js` from the focused API and Uniquem operations modules.
 
 Key groups:
 
 - User access: invites, invite acceptance, and mini-app permissions
-- Email templates: list, save, and test send
-- Drilling programs: PDF draft creation, extraction, autosave, page improvement, and draft listing
+- Uniquem operations: products, inventory, receiving, shipping, production, attachments, and safe deletion
 - Uniquem 3D: model generation, versioning, restore, archive, and listing
 
 ## Required Configuration
@@ -57,9 +55,9 @@ Function secrets include:
 
 ```text
 OPENAI_API_KEY
-SENDGRID_API_KEY
-QUOTECHEM_FROM_EMAIL
-QUOTECHEM_SALES_EMAIL
+EMAIL_SMTP_USER
+EMAIL_SMTP_PASSWORD
+EMAIL_FROM_ADDRESS
 ```
 
 ## Development
@@ -89,14 +87,10 @@ Build:
 npm run build
 ```
 
-Deploy functions:
+Production deployment:
 
 ```bash
-firebase deploy --project quotechemfb --only functions
+git push origin production
 ```
 
-Deploy hosting:
-
-```bash
-firebase deploy --project quotechemfb --only hosting
-```
+The existing GitHub Actions workflows deploy Hosting and Functions. Do not deploy directly from a local machine.

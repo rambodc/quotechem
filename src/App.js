@@ -13,7 +13,6 @@ import ChangePassword from './account/ChangePassword';
 import PortalLayout from './layout/PortalLayout';
 import AppLauncher from './apps/launcher';
 import { canAccessMiniApp, getMiniApp } from './apps/registry/miniApps';
-import DrillingPrograms from './apps/drilling-programs';
 import Uniquem from './apps/uniquem';
 import UserAccess from './admin/UserAccess';
 
@@ -198,15 +197,6 @@ function App() {
           />
           <Route path="/account" element={<Navigate to="/portal" replace />} />
           <Route path="/account/*" element={<Navigate to="/portal" replace />} />
-
-          <Route
-            path="/apps/drilling-programs"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="drilling-programs" appPath="overview">
-                <DrillingPrograms />
-              </MiniAppRoute>
-            }
-          />
 
           <Route
             path="/apps/uniquem"

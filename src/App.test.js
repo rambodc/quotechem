@@ -4,145 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 let mockAuthUser = null;
 let mockProfile = { role: 'user', firstName: '', lastName: '', enabledMiniApps: null };
 
-const mockMudProgramDraft = {
-  draftId: 'draft-1',
-  status: 'review_ready',
-  sourceFileName: 'operator-drilling-program.pdf',
-  overview: {
-    programTitle: 'North Pad Mud Program',
-    operator: 'North Operator',
-    mudCompany: 'QuoteChem',
-    wellName: 'Well 12-34',
-    uwi: '100/12-34',
-    rig: 'Rig 22',
-    location: 'Muskeg Pad',
-    programDate: '2026-06-13',
-    programVersion: 'V1',
-    warehouse: 'Lloydminster',
-    attention: 'Jared Patterson',
-    salesRep: 'Craig Bilick',
-    salesRepPhone: '403-990-3455',
-    consultant: 'Westrock Energy Consultants',
-    fieldZone: 'Colony - Hz',
-    license: 'TBD',
-    afe: '25DRL00X',
-    groundElevation: '557.16',
-    rfElevation: '561.16',
-    rfGround: '4.00',
-    totalMd: '3200 m',
-    totalMetersDrilled: '3200 m',
-    lateralLength: '1100 m',
-    kickoffPoint: '2100 m',
-    objective: 'Build a field-ready mud program from the drilling source.',
-    sourceSummary: 'Source PDF describes surface and production intervals.',
-  },
-  sections: [
-    {
-      id: 'section-1',
-      name: 'Surface Hole',
-      topDepth: '0 m',
-      bottomDepth: '650 m',
-      holeSize: '311 mm',
-      casingSize: '244.5 mm',
-      mudSystem: 'Fresh water gel',
-      densityRange: '1000-1050 kg/m3',
-      viscosityRange: '35-45 s/L',
-      ph: 'Neutral',
-      fluidLoss: 'No Control',
-      keyProducts: 'Bentonite, caustic, soda ash',
-      riskNotes: 'Monitor losses and hole cleaning.',
-      programNotes: 'Keep simple water-based treatment.',
-      properties: [
-        { label: 'Viscosity (s/L)', value: '35-45' },
-        { label: 'Density (kg/m3)', value: '1000-1050' },
-      ],
-      procedures: [{ heading: 'Maintenance', lines: ['Keep simple water-based treatment.'] }],
-    },
-  ],
-  formationTops: [{ formation: 'Surface Casing', md: '100', tvd: '100', lithology: '-', gradient: '-', emd: '-', pressure: '-', h2s: '-', comment: 'High sand content expected' }],
-  casingStrings: [{ name: 'Surface', od: '244.5', linearMass: '62.50', grade: 'H-40', capacity: '0.06225', endPoint: '650' }],
-  volumes: [{ holeSection: 'Surface', bitSize: '311', start: '0', end: '650', length: '650', tanks: '20', casing: '0', sectionVolume: '11', totalOpenHole: '11', losses: '5', finalCirculating: '31', totalVolume: '36' }],
-  pages: [
-    {
-      id: 'cover',
-      type: 'cover',
-      title: 'North Pad Mud Program',
-      data: {
-        programTitle: 'North Pad Mud Program',
-        operator: 'North Operator',
-        consultant: 'Westrock Energy Consultants',
-        mudCompany: 'QuoteChem',
-        wellName: 'Well 12-34',
-        uwi: '100/12-34',
-        fieldZone: 'Colony - Hz',
-        attention: 'Jared Patterson',
-        salesRep: 'Craig Bilick',
-        salesRepPhone: '403-990-3455',
-        programDate: '2026-06-13',
-        programVersion: 'V1',
-        warehouse: 'Lloydminster',
-        rig: 'Rig 22',
-        location: 'Muskeg Pad',
-        totalMd: '3200 m',
-        lateralLength: '1100 m',
-        objective: 'Build a field-ready mud program from the drilling source.',
-        executiveSummary: 'Source PDF describes surface and production intervals.',
-      },
-    },
-    {
-      id: 'well-info',
-      type: 'wellInfo',
-      title: 'Well Information',
-      data: {
-        overview: {
-          programTitle: 'North Pad Mud Program',
-          wellName: 'Well 12-34',
-          uwi: '100/12-34',
-          license: 'TBD',
-          afe: '25DRL00X',
-          rig: 'Rig 22',
-          groundElevation: '557.16',
-          rfElevation: '561.16',
-          rfGround: '4.00',
-          totalMd: '3200 m',
-          lateralLength: '1100 m',
-        },
-        formationTops: [{ formation: 'Surface Casing', md: '100', tvd: '100', lithology: '-', gradient: '-', emd: '-', pressure: '-', h2s: '-', comment: 'High sand content expected' }],
-        casingStrings: [{ name: 'Surface', od: '244.5', linearMass: '62.50', grade: 'H-40', capacity: '0.06225', endPoint: '650' }],
-        volumes: [{ holeSection: 'Surface', bitSize: '311', start: '0', end: '650', length: '650', tanks: '20', casing: '0', sectionVolume: '11', totalOpenHole: '11', losses: '5', finalCirculating: '31', totalVolume: '36' }],
-      },
-    },
-    {
-      id: 'section-1',
-      type: 'section',
-      title: 'Surface Hole',
-      sectionId: 'section-1',
-      data: {
-        name: 'Surface Hole',
-        topDepth: '0 m',
-        bottomDepth: '650 m',
-        holeSize: '311 mm',
-        casingSize: '244.5 mm',
-        mudSystem: 'Fresh water gel',
-        densityRange: '1000-1050 kg/m3',
-        viscosityRange: '35-45 s/L',
-        ph: 'Neutral',
-        fluidLoss: 'No Control',
-        keyProducts: 'Bentonite, caustic, soda ash',
-        riskNotes: 'Monitor losses and hole cleaning.',
-        programNotes: 'Keep simple water-based treatment.',
-        properties: [
-          { label: 'Viscosity (s/L)', value: '35-45' },
-          { label: 'Density (kg/m3)', value: '1000-1050' },
-        ],
-        procedures: [{ heading: 'Maintenance', lines: ['Keep simple water-based treatment.'] }],
-      },
-    },
-  ],
-  createdAt: '2026-06-13T11:00:00.000Z',
-  updatedAt: '2026-06-13T12:00:00.000Z',
-};
-
 const mockUniquemScene = {
   title: 'Saved Stage Product',
   summary: 'Saved model from the shared Uniquem library.',
@@ -496,31 +357,6 @@ beforeEach(() => {
       });
     }
     if (path === 'acceptInvite') return Promise.resolve({ email: 'invited@example.com', customToken: 'custom-token' });
-    if (path === 'listMudProgramDrafts') {
-      return Promise.resolve({ items: [mockMudProgramDraft] });
-    }
-    if (path === 'createMudProgramDraft') {
-      return Promise.resolve({ draft: { ...mockMudProgramDraft, draftId: 'draft-new', pages: [] } });
-    }
-    if (path === 'extractMudProgramDraft') {
-      return Promise.resolve({ draft: { ...mockMudProgramDraft, draftId: 'draft-new' } });
-    }
-    if (path === 'updateMudProgramDraft') {
-      return Promise.resolve({ draft: mockMudProgramDraft });
-    }
-    if (path === 'improveMudProgramPage') {
-      const selected = mockMudProgramDraft.pages.find((page) => page.id === body?.pageId) || mockMudProgramDraft.pages[0];
-      return Promise.resolve({
-        page: {
-          ...selected,
-          data: {
-            ...selected.data,
-            executiveSummary: 'Improved field-ready overview from AI.',
-            programTitle: 'Improved field-ready overview from AI.',
-          },
-        },
-      });
-    }
     if (path === 'listUniquemWorkspace') {
       return Promise.resolve(mockUniquemOperations);
     }
@@ -652,7 +488,6 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.getByRole('link', { name: /Drilling Programs/i }).getAttribute('href')).toBe('/apps/drilling-programs');
     expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/dashboard');
     expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
@@ -663,7 +498,6 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /User Access/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
@@ -674,7 +508,6 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -862,78 +695,19 @@ describe('mini-app portal routing', () => {
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('archiveUniquem3DModel', { modelId: 'model-1' }, { authed: true }));
   });
 
-  test('basic users with Drilling Programs enabled can upload and review a mud program draft', async () => {
-    const { postJson } = require('./lib/api');
-    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
-
-    expect(await screen.findByRole('heading', { name: /Build portrait mud programs/i })).toBeTruthy();
-    expect(await screen.findByText(/operator-drilling-program.pdf/i)).toBeTruthy();
-
-    const file = new File(['pdf'], 'new-drilling-program.pdf', { type: 'application/pdf' });
-    fireEvent.change(screen.getByLabelText(/Choose PDF file/i), { target: { files: [file] } });
-    fireEvent.click(screen.getByRole('button', { name: /Upload and extract/i }));
-
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('createMudProgramDraft', expect.objectContaining({ fileName: 'new-drilling-program.pdf' }), { authed: true }));
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('extractMudProgramDraft', { draftId: 'draft-new' }, { authed: true }));
-    expect(await screen.findByRole('heading', { name: /Review extraction/i })).toBeTruthy();
-    expect(screen.getByDisplayValue('Well 12-34')).toBeTruthy();
-  });
-
-  test('Drilling Programs review creates editable pages and updates preview fields', async () => {
-    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
-
-    fireEvent.click(await screen.findByRole('button', { name: /North Pad Mud Program/i }));
-    expect(await screen.findByRole('button', { name: /Print \/ Save PDF/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Review extraction/i }));
-    expect(await screen.findByRole('heading', { name: /Review extraction/i })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Edited Well 99' } });
-    fireEvent.click(screen.getByRole('button', { name: /Create editable pages/i }));
-
-    expect(await screen.findByRole('heading', { name: /Drilling Fluid Program/i })).toBeTruthy();
-    expect(await screen.findByRole('heading', { name: /Well Information/i })).toBeTruthy();
-    expect(screen.getByText(/Formation Tops/i)).toBeTruthy();
-    expect(screen.getByText(/Surface Hole - Fresh water gel/i)).toBeTruthy();
-    expect(document.querySelectorAll('.print-pages .mud-page')).toHaveLength(3);
-    fireEvent.change(screen.getByLabelText(/Executive summary/i), { target: { value: 'Updated mud program summary.' } });
-    await waitFor(() => expect(screen.getAllByText(/Updated mud program summary/i).length).toBeGreaterThanOrEqual(1));
-    expect(document.querySelector('.wellbore-card')).toBeNull();
-  });
-
-  test('Drilling Programs AI assistant updates only the selected page and print is available', async () => {
-    const { postJson } = require('./lib/api');
-    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
-
-    fireEvent.click(await screen.findByRole('button', { name: /North Pad Mud Program/i }));
-    fireEvent.change(await screen.findByLabelText(/Instruction for this page/i), { target: { value: 'Make the overview stronger.' } });
-    fireEvent.click(screen.getByRole('button', { name: /Improve selected page/i }));
-
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('improveMudProgramPage', expect.objectContaining({ draftId: 'draft-1', pageId: 'cover' }), { authed: true }));
-    await waitFor(() => expect(screen.getAllByText(/Improved field-ready overview/i).length).toBeGreaterThanOrEqual(1));
-    expect(document.querySelectorAll('.print-pages .mud-page')).toHaveLength(3);
-    fireEvent.click(screen.getByRole('button', { name: /Print \/ Save PDF/i }));
-    expect(window.print).toHaveBeenCalled();
-  });
-
-  test('Drilling Programs shows a desktop-only message on mobile widths', async () => {
-    window.matchMedia = jest.fn((query) => ({
-      matches: query.includes('max-width') ? true : false,
-      media: query,
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn(),
-      addListener: jest.fn(),
-      removeListener: jest.fn(),
-    }));
-    renderAt('/apps/drilling-programs', 'user', ['drilling-programs']);
-
-    expect(await screen.findByRole('heading', { name: /desktop-only/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Upload and extract/i })).not.toBeTruthy();
-  });
 
   test('removed Quotes routes redirect through the app fallback', async () => {
     renderAt('/apps/quotes/dashboard', 'admin');
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Dashboard' })).not.toBeTruthy();
+    expect(window.location.pathname).toBe('/portal');
+  });
+
+  test('removed Drilling Programs route redirects through the app fallback', async () => {
+    renderAt('/apps/drilling-programs', 'admin');
+
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(window.location.pathname).toBe('/portal');
   });
 
@@ -1027,7 +801,6 @@ describe('mini-app portal routing', () => {
     expect(screen.getByLabelText(/Last name/i)).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
     expect(screen.queryByRole('button', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.getByRole('button', { name: /Drilling Programs/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Uniquem/i })).toBeTruthy();
     const sendButtons = screen.getAllByRole('button', { name: /^Send invite$/i });
     fireEvent.click(sendButtons[sendButtons.length - 1]);

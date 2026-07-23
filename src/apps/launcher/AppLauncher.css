@@ -41,13 +41,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.mini-app-tile.app-drilling-programs {
-  --tile-accent: #c026d3;
-  --tile-glow-soft: rgba(217, 70, 239, 0.26);
-  --tile-glow-strong: rgba(217, 70, 239, 0.34);
-  --tile-focus: #f0abfc;
-}
-
 .mini-app-tile.app-uniquem {
   --tile-accent: #0f766e;
   --tile-glow-soft: rgba(20, 184, 166, 0.28);
