@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { admin, db, storage } from '../../core/firebase.js';
