@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as functionExports from './index.js';
 import { __testables } from './api.js';
+import { __testables as operationTestables } from './uniquemOperations.js';
 import { __emailTestables } from './email.js';
 
 test('temporary password validation accepts six characters', () => {
@@ -13,8 +14,7 @@ test('temporary password validation rejects shorter values', () => {
 });
 
 test('managed mini app normalization includes access-managed apps only', () => {
-  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-fluids-report', 'drilling-programs', 'uniquem', 'account']), [
-    'drilling-fluids-report',
+  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-programs', 'uniquem', 'account']), [
     'drilling-programs',
     'uniquem',
   ]);
@@ -238,18 +238,18 @@ test('Uniquem saved model mapping normalizes active and archived records', () =>
 
 test('Uniquem inventory functions are exported', () => {
   for (const name of [
-    'listUniquemOperations',
+    'listUniquemWorkspace',
     'saveUniquemProduct',
-    'archiveUniquemProduct',
-    'saveUniquemWarehouse',
-    'receiveUniquemInventory',
-    'transferUniquemInventory',
-    'adjustUniquemInventory',
-    'saveUniquemRecipe',
-    'createUniquemBlendJob',
-    'completeUniquemBlendJob',
-    'cancelUniquemBlendJob',
-    'saveUniquemPrice',
+    'saveUniquemWarehouseV2',
+    'deleteUniquemWarehouse',
+    'adjustUniquemInventoryV2',
+    'createUniquemReceipt',
+    'saveUniquemShipment',
+    'completeUniquemShipment',
+    'saveUniquemRecipeV2',
+    'saveUniquemProductionRun',
+    'completeUniquemProductionRun',
+    'deleteUniquemProduct',
     'createUniquemAttachmentUpload',
     'saveUniquemAttachment',
     'archiveUniquemAttachment',
@@ -259,19 +259,29 @@ test('Uniquem inventory functions are exported', () => {
   }
 });
 
+test('Uniquem package operations validate decimal quantities and draft inputs', () => {
+  assert.equal(operationTestables.qty('1.2344'), 1.234);
+  assert.equal(operationTestables.signedQty('-0.5'), -0.5);
+  assert.throws(() => operationTestables.qty(0), /greater than zero/);
+  assert.throws(() => operationTestables.signedQty(0), /cannot be zero/);
+  assert.deepEqual(operationTestables.shipmentInput({ customer: 'Test', lines: [{ batchId: 'batch-1', packageQuantity: '0.25' }] }).lines, [{ batchId: 'batch-1', packageQuantity: 0.25 }]);
+  assert.equal(operationTestables.recipeInput({ name: 'Blend', outputProductId: 'product-2', ingredients: [{ productId: 'product-1', amount: 20 }] }).ingredients[0].amount, 20);
+});
+
 test('Uniquem product and price normalizers keep operations input safe', () => {
-  assert.deepEqual(__testables.normalizeUniquemProduct({ name: ' Clay Shield ', sku: 'clay shield!!', type: 'bad', unit: 'litres', reorderPoint: '12.3456' }), {
+  assert.deepEqual(__testables.normalizeUniquemProduct({ name: ' Clay Shield ', description: ' Bagged additive ', packageType: 'Bag', packageAmount: '20', measurementUnit: 'kg', packagesPerPallet: '20' }), {
     name: 'Clay Shield',
-    sku: 'CLAYSHIELD',
-    type: 'raw',
-    unit: 'L',
-    reorderPoint: 12.346,
-    description: '',
+    description: 'Bagged additive',
+    packageType: 'Bag',
+    packageAmount: 20,
+    measurementUnit: 'kg',
+    packagesPerPallet: 20,
     status: 'active',
-    media: [],
   });
   assert.equal(__testables.normalizeUniquemPrice({ productId: 'product-1', price: '15.50', currency: 'cad', unit: 'kg' }).currency, 'CAD');
   assert.throws(() => __testables.normalizeUniquemProduct({ name: '' }), /Product name is required/);
+  assert.throws(() => __testables.normalizeUniquemProduct({ name: 'Test', packageType: 'Bag', packageAmount: 0, measurementUnit: 'kg' }), /Package amount/);
+  assert.throws(() => __testables.normalizeUniquemProduct({ name: 'Test', packageType: 'Bag', packageAmount: 20, measurementUnit: 'kg', packagesPerPallet: 1.5 }), /whole number/);
   assert.throws(() => __testables.normalizeUniquemPrice({ productId: 'product-1', price: 0 }), /Price must be greater than zero/);
 });
 
@@ -307,8 +317,8 @@ test('Uniquem attachment validation accepts supported operating files', () => {
   assert.equal(attachment.kind, 'sds');
   assert.equal(attachment.fileName, 'Clay-Shield-SDS.pdf');
   assert.equal(
-    __testables.buildUniquemAttachmentPath({ entityType: 'lot', entityId: 'lot-1', attachmentId: 'attachment-1', fileName: 'Receipt Photo.jpg' }),
-    'uniquem/lot/lot-1/attachment-1-Receipt-Photo.jpg'
+    __testables.buildUniquemAttachmentPath({ entityType: 'receipt', entityId: 'receipt-1', attachmentId: 'attachment-1', fileName: 'Receipt Photo.jpg' }),
+    'uniquem/receipt/receipt-1/attachment-1-Receipt-Photo.jpg'
   );
 });
 

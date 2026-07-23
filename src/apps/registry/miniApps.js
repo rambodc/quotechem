@@ -1,17 +1,6 @@
-import { FiDroplet, FiFileText, FiPackage, FiShield, FiUser } from 'react-icons/fi';
+import { FiFileText, FiPackage, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
-  {
-    id: 'drilling-fluids-report',
-    label: 'Testing Offline',
-    description: 'Offline-capable testing workspace for field report workflows.',
-    icon: FiDroplet,
-    iconImage: '/assets/portal-icons/drilling-fluids-report.png',
-    adminOnly: false,
-    defaultVisibleForRoles: ['admin'],
-    defaultPath: '/apps/drilling-fluids-report',
-    navItems: [],
-  },
   {
     id: 'drilling-programs',
     label: 'Drilling Programs',
@@ -26,7 +15,7 @@ export const MINI_APPS = [
   {
     id: 'uniquem',
     label: 'Uniquem',
-    description: 'Manage warehouse inventory, pricing, shipping, orders, and 3D operations views.',
+    description: 'Manage products, package inventory, receiving, shipping, production, and 3D views.',
     icon: FiPackage,
     adminOnly: false,
     defaultVisibleForRoles: ['admin'],
@@ -35,12 +24,9 @@ export const MINI_APPS = [
       { path: '/apps/uniquem/dashboard', label: 'Dashboard' },
       { path: '/apps/uniquem/products', label: 'Products' },
       { path: '/apps/uniquem/inventory', label: 'Inventory' },
-      { path: '/apps/uniquem/receive', label: 'Receive Stock' },
-      { path: '/apps/uniquem/blending', label: 'Blending' },
-      { path: '/apps/uniquem/movements', label: 'Movements' },
-      { path: '/apps/uniquem/price-list', label: 'Price List' },
+      { path: '/apps/uniquem/receiving', label: 'Receiving' },
       { path: '/apps/uniquem/shipping', label: 'Shipping' },
-      { path: '/apps/uniquem/orders', label: 'Orders' },
+      { path: '/apps/uniquem/production', label: 'Production' },
       { path: '/apps/uniquem/3d', label: '3D' },
       { path: '/apps/uniquem/3d-creator', label: '3D Creator' },
     ],

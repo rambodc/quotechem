@@ -4,21 +4,21 @@ import { FiFileText, FiImage, FiPackage, FiVideo } from 'react-icons/fi';
 export const EMPTY_DATA = {
   products: [],
   warehouses: [],
-  lots: [],
-  movements: [],
+  batches: [],
+  ledger: [],
+  receipts: [],
+  shipments: [],
   recipes: [],
-  blendJobs: [],
-  prices: [],
+  productionRuns: [],
   attachments: [],
   attachmentsByEntity: {},
-  balances: [],
   dashboard: {
     productCount: 0,
-    lotCount: 0,
-    onHandPositions: 0,
-    openBlendJobs: 0,
-    lowStock: [],
-    expiringLots: [],
+    warehouseCount: 0,
+    inventoryPositions: 0,
+    totalPackages: 0,
+    draftShipments: 0,
+    draftProductionRuns: 0,
   },
 };
 
@@ -37,11 +37,34 @@ export function byId(items, key) {
 
 export function productLabel(product) {
   if (!product) return 'Unknown product';
-  return product.sku ? `${product.name} (${product.sku})` : product.name;
+  return product.name;
 }
 
 export function formatQty(quantity, unit) {
   return `${Number(quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${unit || ''}`.trim();
+}
+
+export function packageSummary(product, packageQuantity) {
+  const packages = Number(packageQuantity || 0);
+  const amount = packages * Number(product?.packageAmount || 0);
+  const pallets = product?.packagesPerPallet ? packages / Number(product.packagesPerPallet) : null;
+  return `${formatQty(packages, 'packages')} • ${pallets == null ? 'No pallet configuration' : formatQty(pallets, 'pallets')} • ${formatQty(amount, product?.measurementUnit)}`;
+}
+
+export function Drawer({ title, busy, onClose, children }) {
+  React.useEffect(() => {
+    const close = (event) => { if (event.key === 'Escape' && !busy) onClose(); };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [busy, onClose]);
+  return (
+    <div className="uniquem-product-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+      <aside className="uniquem-product-drawer" aria-label={title}>
+        <div className="uniquem-product-drawer-head"><div><span>Uniquem</span><h2>{title}</h2></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close">×</button></div>
+        {children}
+      </aside>
+    </div>
+  );
 }
 
 export function entityKey(entityType, entityId) {
@@ -54,8 +77,7 @@ export function entityAttachments(data, entityType, entityId) {
 
 export function getProductImage(product, data) {
   const uploaded = entityAttachments(data, 'product', product?.productId).find((item) => item.kind === 'image' && item.url);
-  if (uploaded?.url) return uploaded.url;
-  return (product?.media || []).find((item) => item.kind === 'image' && item.url)?.url || '';
+  return uploaded?.url || '';
 }
 
 export function getBalance(data, target) {
@@ -129,7 +151,7 @@ export function AttachmentIcon({ attachment }) {
   return <FiFileText aria-hidden="true" />;
 }
 
-export function AttachmentList({ attachments, onArchive }) {
+export function AttachmentList({ attachments, onArchive, actionLabel = 'Archive' }) {
   if (!attachments.length) return <p className="uniquem-empty">No files attached.</p>;
   return (
     <div className="uniquem-attachment-list">
@@ -140,7 +162,7 @@ export function AttachmentList({ attachments, onArchive }) {
             <a href={attachment.url} target="_blank" rel="noreferrer">{attachment.name || attachment.fileName}</a>
             <span>{attachment.kind} - {attachment.contentType || 'file'} - {attachment.uploadedAt ? attachment.uploadedAt.slice(0, 10) : 'new'}</span>
           </div>
-          {onArchive ? <button type="button" onClick={() => onArchive(attachment.attachmentId)}>Archive</button> : null}
+          {onArchive ? <button type="button" onClick={() => onArchive(attachment.attachmentId)}>{actionLabel}</button> : null}
         </article>
       ))}
     </div>

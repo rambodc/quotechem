@@ -13,7 +13,6 @@ QuoteChem is a React/Firebase app for a public chemical catalog and an authentic
 
 The portal launcher reads app definitions from `src/apps/registry/miniApps.js`.
 
-- `Testing Offline`: offline-capable drilling fluids report setup
 - `Drilling Programs`: AI-assisted mud program extraction and page editing
 - `Uniquem`: warehouse and 3D operations views
 - `User Access`: admin user invites, app access, and email templates

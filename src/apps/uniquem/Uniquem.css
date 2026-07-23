@@ -277,6 +277,70 @@
   gap: 12px;
 }
 
+.uniquem-products-page { display: grid; gap: 14px; }
+.uniquem-products-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.uniquem-products-toolbar h2, .uniquem-products-toolbar p { margin: 0; }
+.uniquem-products-toolbar p { margin-top: 4px; color: #64748b; }
+.uniquem-products-toolbar button, .uniquem-product-row > button, .uniquem-product-save {
+  border: 0; border-radius: 9px; background: #087a24; color: #fff; min-height: 40px; padding: 9px 13px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 850; cursor: pointer;
+}
+.uniquem-product-search input { width: min(440px, 100%); min-height: 40px; border: 1px solid #cbd8e6; border-radius: 9px; padding: 9px 11px; font: inherit; }
+.uniquem-product-list { display: grid; gap: 9px; }
+.uniquem-product-row {
+  display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; gap: 13px;
+  border: 1px solid #d9e2ec; border-radius: 10px; background: #fff; padding: 10px 12px; cursor: pointer;
+}
+.uniquem-product-row:hover, .uniquem-product-row:focus-visible { border-color: #82b690; box-shadow: 0 0 0 2px rgba(8, 122, 36, 0.1); outline: none; }
+.uniquem-product-row .uniquem-product-thumb { width: 58px; }
+.uniquem-product-row-copy { min-width: 0; display: grid; gap: 5px; }
+.uniquem-product-row-copy strong { color: #0f172a; font-size: 1rem; }
+.uniquem-product-row-copy span { color: #64748b; font-size: 0.84rem; }
+.uniquem-product-row > button { border: 1px solid #cbd8e6; background: #fff; color: #102033; }
+.uniquem-products-empty {
+  min-height: 240px; border: 1px dashed #b8c7d8; border-radius: 12px; display: grid; place-items: center;
+  align-content: center; gap: 7px; color: #64748b; text-align: center; padding: 24px;
+}
+.uniquem-products-empty svg { width: 38px; height: 38px; color: #087a24; }
+.uniquem-products-empty h3, .uniquem-products-empty p { margin: 0; }
+.uniquem-product-drawer {
+  position: fixed; inset: 0 0 0 auto; width: min(520px, 100vw); background: #fff; border-left: 1px solid #d8e5f2;
+  box-shadow: -12px 0 32px rgba(15, 23, 42, 0.16); padding: 18px; overflow: auto; z-index: 40;
+}
+.uniquem-product-drawer-backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(15, 23, 42, 0.38); }
+.uniquem-product-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e5edf5; padding-bottom: 14px; }
+.uniquem-product-drawer-head span { color: #087a24; font-size: 0.75rem; font-weight: 900; text-transform: uppercase; }
+.uniquem-product-drawer-head h2 { margin: 3px 0 0; }
+.uniquem-product-drawer-head button { width: 38px; height: 38px; border: 1px solid #cbd8e6; border-radius: 9px; background: #fff; color: #102033; display: grid; place-items: center; cursor: pointer; }
+.uniquem-product-drawer-form, .uniquem-product-fields, .uniquem-product-view { display: grid; gap: 15px; margin-top: 16px; }
+.uniquem-product-fields label, .uniquem-product-drawer-form > label, .uniquem-line-editor label { display: grid; gap: 6px; color: #475569; font-size: 0.82rem; font-weight: 800; }
+.uniquem-product-fields label span { display: flex; justify-content: space-between; }
+.uniquem-product-fields label em { color: #94a3b8; font-style: normal; font-weight: 650; }
+.uniquem-product-fields input, .uniquem-product-fields select, .uniquem-product-fields textarea,
+.uniquem-product-drawer-form > label input, .uniquem-product-drawer-form > label select, .uniquem-product-drawer-form > label textarea,
+.uniquem-line-editor input, .uniquem-line-editor select {
+  width: 100%; box-sizing: border-box; border: 1px solid #cbd8e6; border-radius: 9px; padding: 10px 11px; color: #102033; font: inherit;
+}
+.uniquem-line-editor { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; padding: 10px; border: 1px solid #e5edf5; border-radius: 9px; }
+.uniquem-product-drawer-form > button { border: 0; border-radius: 9px; background: #087a24; color: #fff; min-height: 40px; padding: 9px 13px; font-weight: 850; cursor: pointer; }
+.uniquem-product-drawer-form > button.uniquem-danger { background: #fff; color: #b42318; border: 1px solid #efb4ae; }
+.uniquem-product-drawer-form > button:disabled { opacity: 0.6; cursor: wait; }
+.uniquem-product-fields textarea { resize: vertical; }
+.uniquem-product-field-row { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+.uniquem-field-error { color: #b42318; font-weight: 700; }
+.uniquem-package-preview { border-radius: 9px; background: #f0fdf4; color: #166534; padding: 11px; display: grid; gap: 4px; font-size: 0.84rem; }
+.uniquem-product-files { border-top: 1px solid #e5edf5; padding-top: 15px; }
+.uniquem-product-files h3 { margin: 0 0 12px; }
+.uniquem-product-save { width: 100%; }
+.uniquem-product-save:disabled { opacity: 0.65; cursor: wait; }
+.uniquem-product-view section { border-top: 1px solid #e5edf5; padding-top: 14px; }
+.uniquem-product-view h3, .uniquem-product-view p { margin: 0; }
+.uniquem-product-view p { margin-top: 6px; color: #526173; line-height: 1.55; }
+.uniquem-product-hero-image { width: 100%; max-height: 300px; object-fit: contain; border-radius: 10px; background: #f8fafc; }
+.uniquem-product-edit-image { width: 110px; height: 110px; object-fit: cover; border-radius: 9px; border: 1px solid #d9e2ec; margin-bottom: 10px; }
+.uniquem-product-image-placeholder { min-height: 180px; display: grid; place-items: center; border-radius: 10px; background: #f2f6fa; color: #087a24; }
+.uniquem-product-image-placeholder svg { width: 54px; height: 54px; }
+
 .uniquem-product-card {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);
@@ -1004,6 +1068,14 @@
 }
 
 @media (max-width: 760px) {
+  .uniquem-products-toolbar { align-items: stretch; flex-direction: column; }
+  .uniquem-products-toolbar button { width: 100%; }
+  .uniquem-product-row { grid-template-columns: 50px minmax(0, 1fr); }
+  .uniquem-product-row .uniquem-product-thumb { width: 50px; }
+  .uniquem-product-row > button { grid-column: 1 / -1; width: 100%; }
+  .uniquem-product-field-row { grid-template-columns: 1fr; }
+  .uniquem-line-editor { grid-template-columns: 1fr; }
+  .uniquem-product-drawer { width: 100vw; box-sizing: border-box; }
   .uniquem-ops-head {
     align-items: stretch;
     flex-direction: column;

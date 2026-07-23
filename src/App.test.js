@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 let mockAuthUser = null;
 let mockProfile = { role: 'user', firstName: '', lastName: '', enabledMiniApps: null };
-let mockLocalReports = [];
 
 const mockMudProgramDraft = {
   draftId: 'draft-1',
@@ -207,24 +206,22 @@ const mockUniquemOperations = {
     {
       productId: 'product-1',
       name: 'Clay Shield',
-      sku: 'CLAY-SHIELD',
-      type: 'raw',
-      unit: 'L',
-      reorderPoint: 100,
       description: 'Amine clay control additive.',
+      packageType: 'Bag',
+      packageAmount: 20,
+      measurementUnit: 'kg',
+      packagesPerPallet: 20,
       status: 'active',
-      media: [{ kind: 'image', name: 'Clay Shield image', url: 'https://example.com/clay-shield.jpg' }],
     },
     {
       productId: 'product-2',
       name: 'Main Hole Blend',
-      sku: 'MHB-200',
-      type: 'blend',
-      unit: 'L',
-      reorderPoint: 50,
       description: 'Finished blend product.',
+      packageType: 'Tote',
+      packageAmount: 1000,
+      measurementUnit: 'L',
+      packagesPerPallet: null,
       status: 'active',
-      media: [],
     },
   ],
   warehouses: [
@@ -306,6 +303,11 @@ const mockUniquemOperations = {
       unit: 'L',
     },
   ],
+  batches: [{ batchId: 'batch-1', productId: 'product-1', warehouseId: 'warehouse-1', location: 'Main', lotNumber: 'CLAY-001', packageQuantity: 12.5, sourceType: 'receipt', sourceId: 'receipt-1' }],
+  ledger: [{ ledgerId: 'ledger-1', type: 'receiving', batchId: 'batch-1', productId: 'product-1', warehouseId: 'warehouse-1', location: 'Main', packageQuantity: 12.5, referenceId: 'receipt-1', createdAt: '2026-06-15T12:00:00.000Z' }],
+  receipts: [{ receiptId: 'receipt-1', batchId: 'batch-1', productId: 'product-1', warehouseId: 'warehouse-1', location: 'Main', lotNumber: 'CLAY-001', packageQuantity: 12.5, supplier: 'Supplier Co', receivedDate: '2026-06-15', status: 'posted' }],
+  shipments: [{ shipmentId: 'shipment-1', customer: 'Field Customer', destination: 'Rig 12', shippingDate: '2026-06-16', referenceNumber: 'SHIP-1', status: 'draft', lines: [{ batchId: 'batch-1', packageQuantity: 1 }] }],
+  productionRuns: [{ runId: 'run-1', recipeId: 'recipe-1', outputPackages: 1, warehouseId: 'warehouse-1', location: 'Blend Bay', status: 'draft', allocations: [{ batchId: 'batch-1', packageQuantity: 1.25 }] }],
   attachments: [
     {
       attachmentId: 'attachment-1',
@@ -397,28 +399,11 @@ jest.mock('three/examples/jsm/controls/OrbitControls', () => ({
   })),
 }));
 
-jest.mock('./apps/drilling-fluids-report/drillingFluidsStore', () => ({
-  listDrillingFluidReports: jest.fn(() => Promise.resolve(mockLocalReports)),
-  saveDrillingFluidReport: jest.fn((report) => {
-    mockLocalReports = [report, ...mockLocalReports.filter((item) => item.localId !== report.localId)];
-    return Promise.resolve(report);
-  }),
-  updateDrillingFluidReport: jest.fn((localId, patch) => {
-    const existing = mockLocalReports.find((item) => item.localId === localId) || { localId, payload: {} };
-    const updated = { ...existing, ...patch };
-    mockLocalReports = [updated, ...mockLocalReports.filter((item) => item.localId !== localId)];
-    return Promise.resolve(updated);
-  }),
-}));
-
 beforeEach(() => {
   const { onAuthStateChanged, signInWithCustomToken, signOut, updatePassword } = require('firebase/auth');
   const { getDoc, onSnapshot, serverTimestamp, setDoc } = require('firebase/firestore');
   const { postJson } = require('./lib/api');
   const { auth } = require('./firebase');
-  const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
-
-  mockLocalReports = [];
   window.localStorage.clear();
   window.innerWidth = 1280;
   window.print = jest.fn();
@@ -525,17 +510,6 @@ beforeEach(() => {
   });
   serverTimestamp.mockImplementation(() => 'server-timestamp');
   setDoc.mockImplementation(() => Promise.resolve());
-  drillingStore.listDrillingFluidReports.mockImplementation(() => Promise.resolve(mockLocalReports));
-  drillingStore.saveDrillingFluidReport.mockImplementation((report) => {
-    mockLocalReports = [report, ...mockLocalReports.filter((item) => item.localId !== report.localId)];
-    return Promise.resolve(report);
-  });
-  drillingStore.updateDrillingFluidReport.mockImplementation((localId, patch) => {
-    const existing = mockLocalReports.find((item) => item.localId === localId) || { localId, payload: {} };
-    const updated = { ...existing, ...patch };
-    mockLocalReports = [updated, ...mockLocalReports.filter((item) => item.localId !== localId)];
-    return Promise.resolve(updated);
-  });
 
   postJson.mockImplementation((path, body) => {
     if (path === 'adminListUsers') {
@@ -548,7 +522,7 @@ beforeEach(() => {
             lastName: 'Chen',
             role: 'user',
             profilePhotoThumbUrl: 'https://example.com/riley-50.jpg',
-            enabledMiniApps: ['drilling-fluids-report'],
+            enabledMiniApps: [],
           },
         ],
         invites: [
@@ -569,7 +543,7 @@ beforeEach(() => {
             firstName: 'Riley',
             lastName: 'Chen',
             role: 'user',
-            enabledMiniApps: ['drilling-fluids-report'],
+            enabledMiniApps: [],
             expiresAt: Date.now() + 86400000,
           },
         ],
@@ -616,22 +590,15 @@ beforeEach(() => {
         },
       });
     }
-    if (path === 'listUniquemOperations') {
+    if (path === 'listUniquemWorkspace') {
       return Promise.resolve(mockUniquemOperations);
     }
     if (
       [
         'saveUniquemProduct',
-        'archiveUniquemProduct',
-        'saveUniquemWarehouse',
-        'receiveUniquemInventory',
-        'transferUniquemInventory',
-        'adjustUniquemInventory',
-        'saveUniquemRecipe',
-        'createUniquemBlendJob',
-        'completeUniquemBlendJob',
-        'cancelUniquemBlendJob',
-        'saveUniquemPrice',
+        'saveUniquemWarehouseV2', 'deleteUniquemWarehouse', 'adjustUniquemInventoryV2', 'createUniquemReceipt',
+        'saveUniquemShipment', 'deleteUniquemShipment', 'completeUniquemShipment',
+        'saveUniquemRecipeV2', 'deleteUniquemRecipeV2', 'saveUniquemProductionRun', 'deleteUniquemProductionRun', 'completeUniquemProductionRun', 'deleteUniquemProduct',
         'saveUniquemAttachment',
         'archiveUniquemAttachment',
       ].includes(path)
@@ -754,7 +721,6 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.getByRole('link', { name: /Drilling Programs/i }).getAttribute('href')).toBe('/apps/drilling-programs');
     expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/dashboard');
     expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
@@ -766,7 +732,6 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /User Access/i })).not.toBeTruthy();
@@ -778,18 +743,6 @@ describe('mini-app portal routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Testing Offline/i })).not.toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
-    expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
-  });
-
-  test('basic users with Testing Offline enabled see that app and Account only', async () => {
-    renderAt('/portal', 'user', ['drilling-fluids-report']);
-
-    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.getByRole('link', { name: /Testing Offline/i }).getAttribute('href')).toBe('/apps/drilling-fluids-report');
     expect(screen.queryByRole('link', { name: /Drilling Programs/i })).not.toBeTruthy();
     expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
@@ -820,12 +773,9 @@ describe('mini-app portal routing', () => {
       ['/apps/uniquem/dashboard', 'Dashboard'],
       ['/apps/uniquem/products', 'Products'],
       ['/apps/uniquem/inventory', 'Inventory'],
-      ['/apps/uniquem/receive', 'Receive Stock'],
-      ['/apps/uniquem/blending', 'Blending'],
-      ['/apps/uniquem/movements', 'Movements'],
-      ['/apps/uniquem/price-list', 'Price List'],
+      ['/apps/uniquem/receiving', 'Receiving'],
       ['/apps/uniquem/shipping', 'Shipping'],
-      ['/apps/uniquem/orders', 'Orders'],
+      ['/apps/uniquem/production', 'Production'],
     ];
 
     for (const [path, title] of cases) {
@@ -839,35 +789,47 @@ describe('mini-app portal routing', () => {
     expect(window.location.pathname).toBe('/apps/uniquem/dashboard');
   });
 
-  test('Uniquem inventory and production pages show ledger-backed data', async () => {
-    const { postJson } = require('./lib/api');
+  test('Uniquem products use list, view, create, and edit drawers', async () => {
     renderAt('/apps/uniquem/products', 'admin');
-    expect(await screen.findByText('Clay Shield SDS.pdf')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Edit/i })).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: /Archive/i })[0]);
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('archiveUniquemProduct', { productId: 'product-1' }, { authed: true }));
+    expect(await screen.findByText('20 kg per bag • 20 bags per pallet • 400 kg per pallet')).toBeTruthy();
+    expect(screen.queryByText('Clay Shield SDS.pdf')).not.toBeTruthy();
 
-    cleanup();
+    fireEvent.click(screen.getByText('Clay Shield'));
+    expect(await screen.findByRole('complementary', { name: 'View product' })).toBeTruthy();
+    expect(screen.getByText('Clay Shield SDS.pdf')).toBeTruthy();
+    expect(screen.queryByLabelText('Add SDS')).not.toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'View product' })).not.toBeTruthy());
+    fireEvent.click(screen.getByText('Clay Shield').closest('article').querySelector('button'));
+    expect(await screen.findByRole('complementary', { name: 'Edit product' })).toBeTruthy();
+    expect(screen.getByText('Add SDS')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Edit product' })).not.toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Create Product/i }));
+    expect(await screen.findByRole('complementary', { name: 'Create product' })).toBeTruthy();
+    expect(screen.getByText('SDS')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Create product' }));
+    expect(screen.getByText('Product name is required.')).toBeTruthy();
+    expect(screen.getByText('Enter an amount greater than zero.')).toBeTruthy();
+  });
+
+  test('Uniquem inventory and production pages show ledger-backed data', async () => {
     renderAt('/apps/uniquem/inventory', 'admin');
     await screen.findByRole('heading', { name: 'Inventory' });
-    await waitFor(() => expect(screen.getAllByText('Clay Shield (CLAY-SHIELD)').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Clay Shield').length).toBeGreaterThan(0));
     expect(screen.getAllByText('CLAY-001').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('250 L').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/12.5 packages/).length).toBeGreaterThan(0);
 
     cleanup();
-    renderAt('/apps/uniquem/receive', 'admin');
-    expect(await screen.findByText('Queued Receipt Files')).toBeTruthy();
-    expect(screen.getByLabelText('Receiving photo')).toBeTruthy();
+    renderAt('/apps/uniquem/receiving', 'admin');
+    expect(await screen.findByText('Supplier Co')).toBeTruthy();
 
     cleanup();
-    renderAt('/apps/uniquem/blending', 'admin');
-    await waitFor(() => expect(screen.getAllByText('Blend Job 1').length).toBeGreaterThan(0));
-    expect(screen.getByRole('button', { name: 'Complete' })).toBeTruthy();
-    expect(screen.getByText(/Movement preview/i)).toBeTruthy();
-
-    cleanup();
-    renderAt('/apps/uniquem/price-list', 'admin');
-    expect(await screen.findByText('CAD 12.50 / L')).toBeTruthy();
+    renderAt('/apps/uniquem/production', 'admin');
+    expect((await screen.findAllByText('Main Hole Blend Recipe')).length).toBeGreaterThan(0);
+    expect(screen.getByText('draft')).toBeTruthy();
   });
 
   test('Uniquem 3D Creator creates a saved model with prompt and optional image', async () => {
@@ -1052,102 +1014,9 @@ describe('mini-app portal routing', () => {
     expect(window.location.pathname).toBe('/portal');
   });
 
-  test('admin users can open User Access and Testing Offline mini apps', async () => {
+  test('admin users can open User Access', async () => {
     renderAt('/apps/user-access', 'admin');
     expect(await screen.findByRole('heading', { name: 'User Access' })).toBeTruthy();
-
-    cleanup();
-    renderAt('/apps/drilling-fluids-report', 'admin');
-    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Prepare Offline App/i })).toBeTruthy();
-    expect(screen.getByText(/Account prepared/i)).toBeTruthy();
-    expect(screen.getByText(/Offline page cached/i)).toBeTruthy();
-    expect(screen.getByText(/Add to Home Screen/i)).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Test Offline Page/i }).getAttribute('href')).toBe('/offline/drilling-fluids-report?offline-check=1');
-    expect(screen.getByRole('link', { name: /Open Offline Report/i }).getAttribute('href')).toBe('/offline/drilling-fluids-report');
-    fireEvent.click(screen.getByRole('button', { name: /Prepare Offline App/i }));
-    await waitFor(() => expect(window.navigator.serviceWorker.register).toHaveBeenCalledWith('/offline/drilling-fluids-sw.js', { scope: '/offline/' }));
-    expect(window.navigator.serviceWorker.getRegistrations).toHaveBeenCalled();
-    await waitFor(() => expect(window.localStorage.getItem('quotechem:offline-drilling-user')).toContain('admin@example.com'));
-  });
-
-  test('offline Testing Offline renders outside the portal and saves locally', async () => {
-    const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
-    renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
-
-    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
-    expect(document.querySelector('link[rel="manifest"]').getAttribute('href')).toBe('/offline/drilling-fluids-manifest.json');
-    expect(screen.queryByRole('button', { name: /Apps/i })).not.toBeTruthy();
-    expect(screen.getByLabelText(/Density/i)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Offline Well' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
-
-    await waitFor(() => expect(drillingStore.saveDrillingFluidReport).toHaveBeenCalled());
-    expect(await screen.findByText(/Saved locally on this device/i)).toBeTruthy();
-    expect(await screen.findByText(/Offline Well/i)).toBeTruthy();
-  });
-
-  test('offline Testing Offline uploads pending reports when prepared and signed in', async () => {
-    const { setDoc } = require('firebase/firestore');
-    const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
-    window.localStorage.setItem(
-      'quotechem:offline-drilling-user',
-      JSON.stringify({ uid: 'user-1', email: 'user@example.com', preparedAt: '2026-06-09T00:00:00.000Z' })
-    );
-    renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
-
-    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'North Pad 12' } });
-    fireEvent.change(screen.getByLabelText(/Density/i), { target: { value: '10.2 ppg' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
-
-    await waitFor(() => expect(drillingStore.saveDrillingFluidReport).toHaveBeenCalled());
-    expect(await screen.findByText(/Saved locally on this device/i)).toBeTruthy();
-    expect(await screen.findByText(/North Pad 12/i)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /^Upload$/i }));
-    await waitFor(() => expect(setDoc).toHaveBeenCalled());
-    expect(await screen.findByText(/1 report uploaded/i)).toBeTruthy();
-  });
-
-  test('offline Testing Offline asks users to sign in before upload without identity', async () => {
-    renderSignedOutAt('/offline/drilling-fluids-report');
-
-    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /^Upload$/i }));
-
-    expect(await screen.findByText(/Sign in to upload/i)).toBeTruthy();
-  });
-
-  test('offline Testing Offline disables upload offline but keeps local save available', async () => {
-    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
-    const drillingStore = require('./apps/drilling-fluids-report/drillingFluidsStore');
-    renderAt('/offline/drilling-fluids-report', 'user', ['drilling-fluids-report']);
-
-    expect(await screen.findByRole('heading', { name: 'Testing Offline' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Upload$/i }).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText(/Well name/i), { target: { value: 'Offline Well' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save locally/i }));
-
-    await waitFor(() => expect(drillingStore.saveDrillingFluidReport).toHaveBeenCalled());
-    expect(await screen.findByText(/Saved locally on this device/i)).toBeTruthy();
-  });
-
-  test('drilling service worker only falls back for the dedicated offline route', () => {
-    const fs = require('fs');
-    const source = fs.readFileSync(`${process.cwd()}/public/offline/drilling-fluids-sw.js`, 'utf8');
-    expect(source).toContain("const OFFLINE_ROUTE = '/offline/drilling-fluids-report'");
-    expect(source).not.toContain("const SHELL_URLS = ['/'");
-    expect(source).not.toContain("caches.match('/')");
-    expect(source).not.toContain('caches.match(\'/\')');
-    expect(source).not.toContain("const OFFLINE_ROUTE = '/apps/drilling-fluids-report'");
-  });
-
-  test('drilling manifest is scoped to offline routes only', () => {
-    const fs = require('fs');
-    const manifest = JSON.parse(fs.readFileSync(`${process.cwd()}/public/offline/drilling-fluids-manifest.json`, 'utf8'));
-    expect(manifest.start_url).toBe('/offline/drilling-fluids-report');
-    expect(manifest.scope).toBe('/offline/');
   });
 
   test('admin and basic users can open the Account mini app', async () => {
@@ -1227,7 +1096,6 @@ describe('mini-app portal routing', () => {
     expect(screen.getByLabelText(/Last name/i)).toBeTruthy();
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
     expect(screen.queryByRole('button', { name: /Quotes/i })).not.toBeTruthy();
-    expect(screen.getByRole('button', { name: /Testing Offline/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Drilling Programs/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Uniquem/i })).toBeTruthy();
     const sendButtons = screen.getAllByRole('button', { name: /^Send invite$/i });

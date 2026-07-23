@@ -13,7 +13,6 @@ import ChangePassword from './account/ChangePassword';
 import PortalLayout from './layout/PortalLayout';
 import AppLauncher from './apps/launcher';
 import { canAccessMiniApp, getMiniApp } from './apps/registry/miniApps';
-import { DrillingFluidsReport, OfflineDrillingFluidsReport } from './apps/drilling-fluids-report';
 import DrillingPrograms from './apps/drilling-programs';
 import Uniquem from './apps/uniquem';
 import UserAccess from './admin/UserAccess';
@@ -135,8 +134,6 @@ function App() {
           const cached = readCachedProfile(u.uid);
           if (cached) {
             setAppUser(buildAppUser(u, cached, { offlineProfile: true }));
-          } else if (!navigator.onLine && window.location.pathname === '/apps/drilling-fluids-report') {
-            setAppUser(buildAppUser(u, { enabledMiniApps: ['drilling-fluids-report'] }, { offlineProfileUnavailable: true }));
           } else {
             setAppUser(buildAppUser(u));
           }
@@ -146,8 +143,6 @@ function App() {
         const cached = readCachedProfile(u.uid);
         if (cached) {
           setAppUser(buildAppUser(u, cached, { offlineProfile: true }));
-        } else if (!navigator.onLine && window.location.pathname === '/apps/drilling-fluids-report') {
-          setAppUser(buildAppUser(u, { enabledMiniApps: ['drilling-fluids-report'] }, { offlineProfileUnavailable: true }));
         } else {
           setAppUser(buildAppUser(u));
         }
@@ -176,7 +171,6 @@ function App() {
           <Route path="/locations" element={<CatalogHome page="locations" />} />
           <Route path="/contact-us" element={<CatalogHome page="contact" />} />
           <Route path="/chemicals/:slug" element={<ProductPage />} />
-          <Route path="/offline/drilling-fluids-report" element={<OfflineDrillingFluidsReport />} />
           <Route path="/invite/:token" element={firebaseUser ? <Navigate to="/portal" replace /> : <InviteRegister />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route
@@ -204,15 +198,6 @@ function App() {
           />
           <Route path="/account" element={<Navigate to="/portal" replace />} />
           <Route path="/account/*" element={<Navigate to="/portal" replace />} />
-
-          <Route
-            path="/apps/drilling-fluids-report"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="drilling-fluids-report" appPath="overview">
-                <DrillingFluidsReport />
-              </MiniAppRoute>
-            }
-          />
 
           <Route
             path="/apps/drilling-programs"
@@ -256,34 +241,18 @@ function App() {
             }
           />
           <Route
-            path="/apps/uniquem/receive"
+            path="/apps/uniquem/receiving"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="receive">
-                <Uniquem page="receive" />
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="receiving">
+                <Uniquem page="receiving" />
               </MiniAppRoute>
             }
           />
           <Route
-            path="/apps/uniquem/blending"
+            path="/apps/uniquem/production"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="blending">
-                <Uniquem page="blending" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/uniquem/movements"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="movements">
-                <Uniquem page="movements" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/uniquem/price-list"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="price-list">
-                <Uniquem page="price-list" />
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="production">
+                <Uniquem page="production" />
               </MiniAppRoute>
             }
           />
@@ -292,14 +261,6 @@ function App() {
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="shipping">
                 <Uniquem page="shipping" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/uniquem/orders"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="orders">
-                <Uniquem page="orders" />
               </MiniAppRoute>
             }
           />

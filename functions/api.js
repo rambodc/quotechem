@@ -126,8 +126,8 @@ async function requireAdmin(req) {
   return user;
 }
 
-const MINI_APP_IDS = ['drilling-fluids-report', 'drilling-programs', 'uniquem', 'user-access', 'account'];
-const ACCESS_MANAGED_MINI_APP_IDS = ['drilling-fluids-report', 'drilling-programs', 'uniquem'];
+const MINI_APP_IDS = ['drilling-programs', 'uniquem', 'user-access', 'account'];
+const ACCESS_MANAGED_MINI_APP_IDS = ['drilling-programs', 'uniquem'];
 
 function normalizeMiniAppIds(value) {
   if (!Array.isArray(value)) return null;
@@ -866,27 +866,9 @@ function normalizeUniquemQuantity(value, { allowNegative = false, fallback = 0 }
   return Math.max(0, Math.min(100000000, rounded));
 }
 
-function normalizeUniquemProductType(value) {
-  const type = asString(value).toLowerCase();
-  return ['raw', 'blend', 'finished', 'packaging', 'supply'].includes(type) ? type : 'raw';
-}
-
 function normalizeUniquemStatus(value, allowed = ['active', 'archived'], fallback = 'active') {
   const status = asString(value).toLowerCase();
   return allowed.includes(status) ? status : fallback;
-}
-
-function normalizeUniquemMedia(items) {
-  return (Array.isArray(items) ? items : [])
-    .slice(0, 20)
-    .map((item = {}) => ({
-      id: normalizeDocId(item.id) || randomUUID(),
-      kind: ['image', 'sds', 'label', 'spec', 'model', 'other'].includes(asString(item.kind).toLowerCase()) ? asString(item.kind).toLowerCase() : 'other',
-      name: asString(item.name).slice(0, 160),
-      url: asString(item.url).slice(0, 1000),
-      contentType: asString(item.contentType).slice(0, 120),
-    }))
-    .filter((item) => item.name || item.url);
 }
 
 function normalizeUniquemProduct(input = {}) {
@@ -896,15 +878,41 @@ function normalizeUniquemProduct(input = {}) {
     err.status = 400;
     throw err;
   }
+  const packageTypes = ['Bag', 'Pail', 'Drum', 'Tote', 'Box/Case', 'Other'];
+  const packageType = packageTypes.includes(asString(input.packageType)) ? asString(input.packageType) : '';
+  if (!packageType) {
+    const err = new Error('Packaging type is required.');
+    err.status = 400;
+    throw err;
+  }
+  const packageAmount = normalizeUniquemQuantity(input.packageAmount);
+  if (packageAmount <= 0) {
+    const err = new Error('Package amount must be greater than zero.');
+    err.status = 400;
+    throw err;
+  }
+  const measurementUnit = ['kg', 'L'].includes(asString(input.measurementUnit)) ? asString(input.measurementUnit) : '';
+  if (!measurementUnit) {
+    const err = new Error('Measurement unit must be kg or L.');
+    err.status = 400;
+    throw err;
+  }
+  const packagesPerPallet = input.packagesPerPallet === null || input.packagesPerPallet === '' || input.packagesPerPallet === undefined
+    ? null
+    : Number(input.packagesPerPallet);
+  if (packagesPerPallet !== null && (!Number.isInteger(packagesPerPallet) || packagesPerPallet <= 0)) {
+    const err = new Error('Packages per pallet must be a whole number greater than zero.');
+    err.status = 400;
+    throw err;
+  }
   return {
     name,
-    sku: asString(input.sku).toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 60),
-    type: normalizeUniquemProductType(input.type),
-    unit: normalizeUniquemUnit(input.unit),
-    reorderPoint: normalizeUniquemQuantity(input.reorderPoint),
     description: asString(input.description).slice(0, 1200),
-    status: normalizeUniquemStatus(input.status),
-    media: normalizeUniquemMedia(input.media),
+    packageType,
+    packageAmount,
+    measurementUnit,
+    packagesPerPallet,
+    status: 'active',
   };
 }
 
@@ -1070,7 +1078,7 @@ function normalizeUniquemPrice(input = {}) {
 
 function normalizeUniquemAttachmentEntityType(value) {
   const type = asString(value).toLowerCase();
-  if (['product', 'lot', 'receipt', 'movement', 'blendjob', 'shipping', 'order'].includes(type)) return type;
+  if (['product', 'receipt', 'shipment', 'production-run'].includes(type)) return type;
   const err = new Error('Attachment entity type is invalid.');
   err.status = 400;
   throw err;
@@ -1202,13 +1210,12 @@ function mapUniquemProductDoc(doc) {
   return {
     productId: asString(data.productId) || doc.id,
     name: asString(data.name),
-    sku: asString(data.sku),
-    type: normalizeUniquemProductType(data.type),
-    unit: normalizeUniquemUnit(data.unit),
-    reorderPoint: normalizeUniquemQuantity(data.reorderPoint),
     description: asString(data.description),
+    packageType: asString(data.packageType),
+    packageAmount: normalizeUniquemQuantity(data.packageAmount),
+    measurementUnit: asString(data.measurementUnit),
+    packagesPerPallet: data.packagesPerPallet === null || data.packagesPerPallet === undefined ? null : Number(data.packagesPerPallet),
     status: normalizeUniquemStatus(data.status),
-    media: normalizeUniquemMedia(data.media),
     createdAt: toUniquemIso(data.createdAt),
     updatedAt: toUniquemIso(data.updatedAt),
   };
@@ -1352,7 +1359,7 @@ async function loadUniquemOperationsData() {
     db.collection(UNIQUEM_PRICE_COLLECTION).orderBy('effectiveDate', 'desc').limit(500).get(),
     db.collection(UNIQUEM_ATTACHMENT_COLLECTION).orderBy('updatedAt', 'desc').limit(1000).get(),
   ]);
-  const products = productSnap.docs.map(mapUniquemProductDoc);
+  const products = productSnap.docs.map(mapUniquemProductDoc).filter((product) => product.status === 'active');
   const warehouses = warehouseSnap.docs.map(mapUniquemWarehouseDoc);
   const lots = lotSnap.docs.map(mapUniquemLotDoc);
   const movements = movementSnap.docs.map(mapUniquemMovementDoc);
@@ -1385,9 +1392,7 @@ function buildUniquemDashboard(data = {}) {
     if (!activeLots.has(balance.lotId)) continue;
     onHandByProduct.set(balance.productId, (onHandByProduct.get(balance.productId) || 0) + balance.quantity);
   }
-  const lowStock = products
-    .filter((product) => product.status === 'active' && product.reorderPoint > 0 && (onHandByProduct.get(product.productId) || 0) <= product.reorderPoint)
-    .map((product) => ({ productId: product.productId, name: product.name, quantity: onHandByProduct.get(product.productId) || 0, reorderPoint: product.reorderPoint, unit: product.unit }));
+  const lowStock = [];
   const today = new Date();
   const soon = new Date(today.getTime() + 1000 * 60 * 60 * 24 * 60);
   const expiringLots = lots
@@ -2994,7 +2999,7 @@ export const saveUniquemProduct = onRequest({ region: REGION }, async (req, res)
         updatedBy: user.uid,
         updatedByEmail: user.email,
       },
-      { merge: true }
+      { merge: false }
     );
     setCors(res);
     res.status(200).json({ ok: true, product: mapUniquemProductDoc(await ref.get()) });
@@ -3002,28 +3007,6 @@ export const saveUniquemProduct = onRequest({ region: REGION }, async (req, res)
     const status = Number(error?.status) || 500;
     logger.error('[saveUniquemProduct] failed', { error: error?.message || String(error) });
     return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to save product');
-  }
-});
-
-export const archiveUniquemProduct = onRequest({ region: REGION }, async (req, res) => {
-  if (preflight(req, res)) return;
-  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
-
-  try {
-    const user = await ensureUniquemAccess(req);
-    const productId = normalizeDocId(req.body?.productId);
-    if (!productId) return jsonError(res, 400, 'productId is required');
-    const ref = db.collection(UNIQUEM_PRODUCT_COLLECTION).doc(productId);
-    await ref.set(
-      { status: 'archived', updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid, updatedByEmail: user.email },
-      { merge: true }
-    );
-    setCors(res);
-    res.status(200).json({ ok: true, productId });
-  } catch (error) {
-    const status = Number(error?.status) || 500;
-    logger.error('[archiveUniquemProduct] failed', { error: error?.message || String(error) });
-    return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to archive product');
   }
 });
 

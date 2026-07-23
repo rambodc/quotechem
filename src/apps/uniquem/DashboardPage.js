@@ -1,56 +1,19 @@
 import React from 'react';
-import { DataTable, formatQty, MovementTable, Panel, productLabel } from './UniquemShared';
-
-function StatGrid({ data }) {
-  const stats = [
-    ['Active products', data.dashboard.productCount],
-    ['Active lots', data.dashboard.lotCount],
-    ['Stock positions', data.dashboard.onHandPositions],
-    ['Open blend jobs', data.dashboard.openBlendJobs],
-  ];
-  return (
-    <div className="uniquem-stat-grid">
-      {stats.map(([label, value]) => (
-        <div className="uniquem-stat" key={label}>
-          <span>{label}</span>
-          <strong>{value || 0}</strong>
-        </div>
-      ))}
-    </div>
-  );
-}
+import { DataTable, formatQty, Panel, productLabel } from './UniquemShared';
 
 export default function DashboardPage({ data, lookups }) {
-  return (
-    <div className="uniquem-stack">
-      <StatGrid data={data} />
-      <div className="uniquem-grid two">
-        <Panel title="Low Stock">
-          <DataTable
-            empty="No low stock products."
-            columns={['Product', 'On hand', 'Reorder']}
-            rows={(data.dashboard.lowStock || []).map((item) => [
-              item.name,
-              formatQty(item.quantity, item.unit),
-              formatQty(item.reorderPoint, item.unit),
-            ])}
-          />
-        </Panel>
-        <Panel title="Expiring Lots">
-          <DataTable
-            empty="No lots expiring in the next 60 days."
-            columns={['Lot', 'Product', 'Expiry']}
-            rows={(data.dashboard.expiringLots || []).map((lot) => [
-              lot.lotNumber,
-              productLabel(lookups.products.get(lot.productId)),
-              lot.expiryDate || '-',
-            ])}
-          />
-        </Panel>
-      </div>
-      <Panel title="Recent Movements">
-        <MovementTable movements={data.movements.slice(0, 8)} lookups={lookups} />
-      </Panel>
-    </div>
-  );
+  const stats = [
+    ['Products', data.dashboard.productCount], ['Warehouses', data.dashboard.warehouseCount],
+    ['Available packages', formatQty(data.dashboard.totalPackages, '')], ['Draft shipments', data.dashboard.draftShipments],
+    ['Draft production runs', data.dashboard.draftProductionRuns],
+  ];
+  return <div className="uniquem-stack">
+    <div className="uniquem-stat-grid">{stats.map(([label, value]) => <div className="uniquem-stat" key={label}><span>{label}</span><strong>{value || 0}</strong></div>)}</div>
+    <Panel title="Recent inventory activity">
+      <DataTable empty="No inventory activity yet." columns={['Date', 'Activity', 'Product', 'Packages', 'Warehouse / location', 'Reason']} rows={data.ledger.slice(0, 12).map((item) => [
+        item.createdAt?.slice(0, 10) || '-', item.type, productLabel(lookups.products.get(item.productId)), formatQty(item.packageQuantity, 'packages'),
+        `${lookups.warehouses.get(item.warehouseId)?.name || item.warehouseId || '-'} / ${item.location || 'Main'}`, item.reason || '-',
+      ])} />
+    </Panel>
+  </div>;
 }
