@@ -3,7 +3,7 @@ import { db } from '../../core/firebase.js';
 import { COLLECTIONS as C, handler, id, now, signedQty, text } from './helpers.js';
 import { workspace } from './workspace.js';
 
-export const adjustUniquemInventoryV2 = handler(async (req, user) => {
+export const adjustUniquemInventory = handler(async (req, user) => {
   const batchId = id(req.body?.batchId);
   const quantity = signedQty(req.body?.packageQuantity);
   const reason = text(req.body?.reason, 800);

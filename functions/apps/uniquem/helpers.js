@@ -1,7 +1,7 @@
 export const COLLECTIONS = {
-  products: 'uniquemProducts', warehouses: 'uniquemWarehousesV2', batches: 'uniquemInventoryBatches',
-  ledger: 'uniquemInventoryLedger', receipts: 'uniquemReceiptsV2', shipments: 'uniquemShipments',
-  recipes: 'uniquemRecipesV2', runs: 'uniquemProductionRuns', attachments: 'uniquemAttachments',
+  products: 'uniquemProducts', warehouses: 'uniquemWarehouses', batches: 'uniquemInventoryBatches',
+  ledger: 'uniquemInventoryLedger', receipts: 'uniquemReceipts', shipments: 'uniquemShipments',
+  recipes: 'uniquemRecipes', runs: 'uniquemProductionRuns', attachments: 'uniquemAttachments',
 };
 
 export function normalizeUniquemQuantity(value, { allowNegative = false, fallback = 0 } = {}) {

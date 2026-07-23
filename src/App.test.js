@@ -363,9 +363,9 @@ beforeEach(() => {
     if (
       [
         'saveUniquemProduct',
-        'saveUniquemWarehouseV2', 'deleteUniquemWarehouse', 'adjustUniquemInventoryV2', 'createUniquemReceipt',
+        'saveUniquemWarehouse', 'deleteUniquemWarehouse', 'adjustUniquemInventory', 'createUniquemReceipt',
         'saveUniquemShipment', 'deleteUniquemShipment', 'completeUniquemShipment',
-        'saveUniquemRecipeV2', 'deleteUniquemRecipeV2', 'saveUniquemProductionRun', 'deleteUniquemProductionRun', 'completeUniquemProductionRun', 'deleteUniquemProduct',
+        'saveUniquemRecipe', 'deleteUniquemRecipe', 'saveUniquemProductionRun', 'deleteUniquemProductionRun', 'completeUniquemProductionRun', 'deleteUniquemProduct',
         'saveUniquemAttachment',
         'archiveUniquemAttachment',
       ].includes(path)

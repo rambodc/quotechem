@@ -10,13 +10,13 @@ export function recipeInput(body = {}) {
   return { name, outputProductId, ingredients, notes: text(body.notes, 1500) };
 }
 
-export const saveUniquemRecipeV2 = handler(async (req, user) => {
+export const saveUniquemRecipe = handler(async (req, user) => {
   const recipeId = id(req.body?.recipeId) || randomUUID(); const ref = db.collection(C.recipes).doc(recipeId); const old = await ref.get();
   await ref.set({ recipeId, ...recipeInput(req.body), createdAt: old.exists ? old.data().createdAt || now() : now(), updatedAt: now(), updatedBy: user.uid });
   return { recipeId, ...(await workspace()) };
 });
 
-export const deleteUniquemRecipeV2 = handler(async (req) => {
+export const deleteUniquemRecipe = handler(async (req) => {
   const recipeId = id(req.body?.recipeId); const used = await db.collection(C.runs).where('recipeId', '==', recipeId).limit(1).get();
   if (!used.empty) throw Object.assign(new Error('This recipe is used by production history and cannot be deleted.'), { status: 409 });
   await db.collection(C.recipes).doc(recipeId).delete(); return workspace();

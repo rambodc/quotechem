@@ -4,7 +4,7 @@ import * as functions from './index.js';
 
 const EXPECTED_EXPORTS = [
   'acceptInvite',
-  'adjustUniquemInventoryV2',
+  'adjustUniquemInventory',
   'adminCancelInvite',
   'adminInviteUser',
   'adminListUsers',
@@ -20,7 +20,7 @@ const EXPECTED_EXPORTS = [
   'createUniquemReceipt',
   'deleteUniquemProduct',
   'deleteUniquemProductionRun',
-  'deleteUniquemRecipeV2',
+  'deleteUniquemRecipe',
   'deleteUniquemShipment',
   'deleteUniquemWarehouse',
   'generateUniquem3DScene',
@@ -35,9 +35,9 @@ const EXPECTED_EXPORTS = [
   'saveUniquemAttachment',
   'saveUniquemProduct',
   'saveUniquemProductionRun',
-  'saveUniquemRecipeV2',
+  'saveUniquemRecipe',
   'saveUniquemShipment',
-  'saveUniquemWarehouseV2',
+  'saveUniquemWarehouse',
 ];
 
 test('deployment entry point exposes the exact production Function contract', () => {

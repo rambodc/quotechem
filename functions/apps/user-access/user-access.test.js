@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as functionExports from '../../index.js';
 import * as userHelpers from './helpers.js';
 import { normalizeMiniAppIds } from '../../core/auth.js';
 
@@ -15,7 +14,7 @@ test('temporary password validation rejects shorter values', () => {
 });
 
 test('managed mini app normalization includes access-managed apps only', () => {
-  assert.deepEqual(__testables.normalizeMiniAppIds(['quotes', 'drilling-programs', 'uniquem', 'account']), ['uniquem']);
+  assert.deepEqual(__testables.normalizeMiniAppIds(['unknown-app', 'uniquem', 'account']), ['uniquem']);
 });
 
 test('admin user email input is normalized and validated', () => {
@@ -45,33 +44,4 @@ test('invite acceptance identity comes from invite record only', () => {
     firstName: 'Invited',
     lastName: 'Person',
   });
-});
-
-test('legacy direct user creation function is not exported', () => {
-  assert.equal(Object.hasOwn(functionExports, 'adminCreateUser'), false);
-});
-
-test('invite management functions are exported and template admin endpoints are removed', () => {
-  assert.equal(Object.hasOwn(functionExports, 'adminUpdateInvite'), true);
-  assert.equal(Object.hasOwn(functionExports, 'adminCancelInvite'), true);
-  assert.equal(Object.hasOwn(functionExports, 'adminListEmailTemplates'), false);
-  assert.equal(Object.hasOwn(functionExports, 'adminSaveEmailTemplate'), false);
-  assert.equal(Object.hasOwn(functionExports, 'adminSendTestEmail'), false);
-});
-
-test('removed quote and RFQ functions are not exported', () => {
-  for (const name of [
-    'createPublicSession',
-    'chatPublicAssistant',
-    'finalizePublicSession',
-    'adminDashboardSummary',
-    'adminListLeads',
-    'adminGetLeadDetail',
-    'adminUpdateLead',
-    'adminAddLeadNote',
-    'adminListCustomers',
-    'adminGetCustomerTimeline',
-  ]) {
-    assert.equal(Object.hasOwn(functionExports, name), false);
-  }
 });

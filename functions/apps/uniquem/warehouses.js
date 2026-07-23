@@ -3,7 +3,7 @@ import { db } from '../../core/firebase.js';
 import { COLLECTIONS as C, handler, id, now, text } from './helpers.js';
 import { workspace } from './workspace.js';
 
-export const saveUniquemWarehouseV2 = handler(async (req, user) => {
+export const saveUniquemWarehouse = handler(async (req, user) => {
   const name = text(req.body?.name, 120);
   if (!name) throw Object.assign(new Error('Warehouse name is required.'), { status: 400 });
   const warehouseId = id(req.body?.warehouseId) || randomUUID();
