@@ -46,7 +46,7 @@ jobs:
         run: find functions -path 'functions/node_modules' -prune -o -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Test Functions
-        run: npm test --prefix functions
+        run: env -u GOOGLE_APPLICATION_CREDENTIALS -u CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE -u GOOGLE_GHA_CREDS_PATH npm test --prefix functions
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
