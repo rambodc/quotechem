@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
-import { admin, auth, db, storage } from './firebaseAdmin.js';
+import { admin, auth, db, storage } from '../core/firebase.js';
 
 async function testFirestore(uid, runId) {
   const ref = db.collection('diagnostics').doc(uid).collection('runs').doc(runId);

@@ -27,7 +27,22 @@ The launcher uses those image assets with animated load, hover, focus, and press
 
 ## Cloud Functions
 
-Function exports are assembled in `functions/index.js` from the focused API and Uniquem operations modules.
+Function exports are assembled in `functions/index.js`, which is the only deployment entry point.
+
+Backend modules are organized by ownership:
+
+```text
+functions/
+  core/                  # Firebase, authentication, HTTP, and common values
+  services/              # Shared integrations such as email
+  platform/              # Operational diagnostics
+  apps/user-access/      # Users and invitations
+  apps/uniquem/          # Resource and workflow modules
+```
+
+New mini apps belong under `functions/apps/<app-id>/`. Keep related endpoints together by
+resource or workflow, put reusable infrastructure in `core/` or `services/`, and explicitly
+re-export every deployed handler from `functions/index.js`.
 
 Key groups:
 

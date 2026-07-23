@@ -43,7 +43,10 @@ jobs:
         run: npm ci --prefix functions
 
       - name: Syntax check deployed function modules
-        run: find functions -maxdepth 1 -name '*.js' -print0 | xargs -0 -n1 node --check
+        run: find functions -path 'functions/node_modules' -prune -o -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Test Functions
+        run: npm test --prefix functions
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
