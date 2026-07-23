@@ -48,6 +48,13 @@
   --tile-focus: #99f6e4;
 }
 
+.mini-app-tile.app-three-d {
+  --tile-accent: #2563eb;
+  --tile-glow-soft: rgba(59, 130, 246, 0.28);
+  --tile-glow-strong: rgba(59, 130, 246, 0.38);
+  --tile-focus: #93c5fd;
+}
+
 .mini-app-tile.app-user-access {
   --tile-accent: #d97706;
   --tile-glow-soft: rgba(245, 158, 11, 0.3);

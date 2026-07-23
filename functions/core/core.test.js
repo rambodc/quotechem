@@ -54,5 +54,5 @@ test('shared authentication rejects missing bearer tokens', async () => {
 });
 
 test('shared mini-app normalization drops unknown and removed app IDs', () => {
-  assert.deepEqual(normalizeMiniAppIds(['uniquem', 'drilling-programs', 'quotes', 'uniquem']), ['uniquem']);
+  assert.deepEqual(normalizeMiniAppIds(['uniquem', 'three-d', 'unknown-app', 'uniquem']), ['uniquem', 'three-d']);
 });

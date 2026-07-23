@@ -14,7 +14,7 @@ test('temporary password validation rejects shorter values', () => {
 });
 
 test('managed mini app normalization includes access-managed apps only', () => {
-  assert.deepEqual(__testables.normalizeMiniAppIds(['unknown-app', 'uniquem', 'account']), ['uniquem']);
+  assert.deepEqual(__testables.normalizeMiniAppIds(['unknown-app', 'uniquem', 'three-d', 'account']), ['uniquem', 'three-d']);
 });
 
 test('admin user email input is normalized and validated', () => {

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { __testables } from './three-d.js';
+import { __testables } from './models.js';
 
-test('Uniquem scene normalization clamps and drops unsafe objects', () => {
-  const scene = __testables.normalizeUniquemScene({
+test('ThreeD scene normalization clamps and drops unsafe objects', () => {
+  const scene = __testables.normalizeThreeDScene({
     title: 'A'.repeat(120),
     summary: 'Generated scene',
     cameraHint: { distance: 999, target: [100, 2, -100] },
@@ -44,13 +44,13 @@ test('Uniquem scene normalization clamps and drops unsafe objects', () => {
   assert.equal(scene.objects[0].textureKind, 'plain');
 });
 
-test('Uniquem creator image validation accepts supported images only', () => {
-  assert.equal(__testables.isUniquemCreatorImageContentType('image/png'), true);
-  assert.equal(__testables.isUniquemCreatorImageContentType('image/jpeg'), true);
-  assert.equal(__testables.isUniquemCreatorImageContentType('image/webp'), true);
-  assert.equal(__testables.isUniquemCreatorImageContentType('application/pdf'), false);
+test('ThreeD creator image validation accepts supported images only', () => {
+  assert.equal(__testables.isThreeDCreatorImageContentType('image/png'), true);
+  assert.equal(__testables.isThreeDCreatorImageContentType('image/jpeg'), true);
+  assert.equal(__testables.isThreeDCreatorImageContentType('image/webp'), true);
+  assert.equal(__testables.isThreeDCreatorImageContentType('application/pdf'), false);
 
-  const image = __testables.normalizeUniquemCreatorImage({
+  const image = __testables.normalizeThreeDCreatorImage({
     name: 'stage.webp',
     contentType: 'image/webp',
     dataUrl: `data:image/webp;base64,${Buffer.from('image').toString('base64')}`,
@@ -60,7 +60,7 @@ test('Uniquem creator image validation accepts supported images only', () => {
   assert.equal(image.bytes, 5);
   assert.throws(
     () =>
-      __testables.normalizeUniquemCreatorImage({
+      __testables.normalizeThreeDCreatorImage({
         name: 'stage.pdf',
         contentType: 'application/pdf',
         dataUrl: `data:application/pdf;base64,${Buffer.from('pdf').toString('base64')}`,
@@ -69,7 +69,7 @@ test('Uniquem creator image validation accepts supported images only', () => {
   );
 });
 
-test('Uniquem saved model mapping normalizes active and archived records', () => {
+test('ThreeD saved model mapping normalizes active and archived records', () => {
   const doc = {
     id: 'model-1',
     data: () => ({
@@ -99,15 +99,15 @@ test('Uniquem saved model mapping normalizes active and archived records', () =>
     }),
   };
 
-  const model = __testables.mapUniquem3DModelDoc(doc);
+  const model = __testables.mapThreeDModelDoc(doc);
   assert.equal(model.modelId, 'model-1');
   assert.equal(model.status, 'archived');
   assert.equal(model.versionCount, 2);
   assert.equal(model.scene.cameraHint.distance, 70);
-  assert.equal(__testables.normalizeUniquemModelStatus('unexpected'), 'active');
+  assert.equal(__testables.normalizeThreeDModelStatus('unexpected'), 'active');
 });
 
-test('Uniquem version mapping preserves source and normalized scene', () => {
+test('ThreeD version mapping preserves source and normalized scene', () => {
   const doc = {
     id: 'version-1',
     data: () => ({
@@ -136,13 +136,13 @@ test('Uniquem version mapping preserves source and normalized scene', () => {
     }),
   };
 
-  const version = __testables.mapUniquem3DVersionDoc(doc);
+  const version = __testables.mapThreeDVersionDoc(doc);
   assert.equal(version.versionId, 'version-1');
   assert.equal(version.source, 'ai-edit');
   assert.equal(version.scene.objects[0].type, 'speakerStack');
 });
 
-test('Uniquem model list filtering hides archived models and sorts active models', () => {
+test('ThreeD model list filtering hides archived models and sorts active models', () => {
   const items = [
     { modelId: 'old-active', status: 'active', updatedAt: '2026-06-15T10:00:00.000Z' },
     { modelId: 'archived-newer', status: 'archived', updatedAt: '2026-06-16T12:00:00.000Z' },
@@ -150,7 +150,7 @@ test('Uniquem model list filtering hides archived models and sorts active models
   ];
 
   assert.deepEqual(
-    __testables.filterActiveUniquem3DModels(items).map((item) => item.modelId),
+    __testables.filterActiveThreeDModels(items).map((item) => item.modelId),
     ['new-active', 'old-active']
   );
 });

@@ -1,10 +1,10 @@
-import { FiPackage, FiShield, FiUser } from 'react-icons/fi';
+import { FiBox, FiPackage, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
   {
     id: 'uniquem',
     label: 'Uniquem',
-    description: 'Manage products, package inventory, receiving, shipping, production, and 3D views.',
+    description: 'Manage products, package inventory, receiving, shipping, and production.',
     icon: FiPackage,
     adminOnly: false,
     defaultVisibleForRoles: ['admin'],
@@ -16,8 +16,19 @@ export const MINI_APPS = [
       { path: '/apps/uniquem/receiving', label: 'Receiving' },
       { path: '/apps/uniquem/shipping', label: 'Shipping' },
       { path: '/apps/uniquem/production', label: 'Production' },
-      { path: '/apps/uniquem/3d', label: '3D' },
-      { path: '/apps/uniquem/3d-creator', label: '3D Creator' },
+    ],
+  },
+  {
+    id: 'three-d',
+    label: '3D',
+    description: 'View the 3D warehouse and create saved 3D models.',
+    icon: FiBox,
+    adminOnly: false,
+    defaultVisibleForRoles: ['admin'],
+    defaultPath: '/apps/3d/viewer',
+    navItems: [
+      { path: '/apps/3d/viewer', label: '3D' },
+      { path: '/apps/3d/creator', label: '3D Creator' },
     ],
   },
   {

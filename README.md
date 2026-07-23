@@ -13,7 +13,8 @@ QuoteChem is a React/Firebase app for a public chemical catalog and an authentic
 
 The portal launcher reads app definitions from `src/apps/registry/miniApps.js`.
 
-- `Uniquem`: warehouse and 3D operations views
+- `Uniquem`: products, inventory, receiving, shipping, and production
+- `3D`: warehouse viewer and AI-assisted 3D model creator
 - `User Access`: admin user invites and app access
 - `Account`: profile and sign-in settings
 
@@ -38,6 +39,7 @@ functions/
   platform/              # Operational diagnostics
   apps/user-access/      # Users and invitations
   apps/uniquem/          # Resource and workflow modules
+  apps/three-d/          # 3D model generation and versioning
 ```
 
 New mini apps belong under `functions/apps/<app-id>/`. Keep related endpoints together by
@@ -48,7 +50,7 @@ Key groups:
 
 - User access: invites, invite acceptance, and mini-app permissions
 - Uniquem operations: products, inventory, receiving, shipping, production, attachments, and safe deletion
-- Uniquem 3D: model generation, versioning, restore, archive, and listing
+- 3D: model generation, versioning, restore, archive, and listing
 
 ## Required Configuration
 

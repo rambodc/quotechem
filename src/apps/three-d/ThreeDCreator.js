@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FiArchive, FiImage, FiRefreshCw, FiRotateCcw, FiSend, FiTrash2 } from 'react-icons/fi';
 import { postJson } from '../../lib/api';
-import UniquemScenePreview from './UniquemScenePreview';
+import ScenePreview from './ScenePreview';
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -39,7 +39,7 @@ function upsertModel(models, model) {
   return [model, ...models.filter((item) => item.modelId !== model.modelId)];
 }
 
-export default function Uniquem3DCreator() {
+export default function ThreeDCreator() {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState(null);
   const [models, setModels] = useState([]);
@@ -57,7 +57,7 @@ export default function Uniquem3DCreator() {
 
   const refreshModels = async (selectModelId = selectedModel?.modelId) => {
     try {
-      const data = await postJson('listUniquem3DModels', {}, { authed: true });
+      const data = await postJson('listThreeDModels', {}, { authed: true });
       const items = Array.isArray(data.items) ? data.items : [];
       setModels(items);
       if (selectModelId) {
@@ -74,7 +74,7 @@ export default function Uniquem3DCreator() {
   useEffect(() => {
     let active = true;
     setLoadingModels(true);
-    postJson('listUniquem3DModels', {}, { authed: true })
+    postJson('listThreeDModels', {}, { authed: true })
       .then((data) => {
         if (!active) return;
         const items = Array.isArray(data.items) ? data.items : [];
@@ -115,7 +115,7 @@ export default function Uniquem3DCreator() {
     setLoading(true);
     setError('');
     try {
-      const data = await postJson('getUniquem3DModel', { modelId }, { authed: true });
+      const data = await postJson('getThreeDModel', { modelId }, { authed: true });
       setSelectedModel(data.model || null);
       setVersions(Array.isArray(data.versions) ? data.versions : []);
       setScene(data.model?.scene || INITIAL_SCENE);
@@ -146,7 +146,7 @@ export default function Uniquem3DCreator() {
             dataUrl: await readFileAsDataUrl(image),
           }
         : null;
-      const endpoint = selectedModel ? 'reviseUniquem3DModel' : 'createUniquem3DModel';
+      const endpoint = selectedModel ? 'reviseThreeDModel' : 'createThreeDModel';
       const payload = selectedModel
         ? { modelId: selectedModel.modelId, prompt: trimmed, image: imagePayload }
         : { prompt: trimmed, image: imagePayload };
@@ -174,7 +174,7 @@ export default function Uniquem3DCreator() {
     setLoading(true);
     setError('');
     try {
-      const data = await postJson('restoreUniquem3DModelVersion', { modelId: selectedModel.modelId, versionId }, { authed: true });
+      const data = await postJson('restoreThreeDModelVersion', { modelId: selectedModel.modelId, versionId }, { authed: true });
       const restoredModel = data.model || null;
       setSelectedModel(restoredModel);
       setVersions(Array.isArray(data.versions) ? data.versions : []);
@@ -196,7 +196,7 @@ export default function Uniquem3DCreator() {
     setLoading(true);
     setError('');
     try {
-      await postJson('archiveUniquem3DModel', { modelId: selectedModel.modelId }, { authed: true });
+      await postJson('archiveThreeDModel', { modelId: selectedModel.modelId }, { authed: true });
       const archivedId = selectedModel.modelId;
       const remaining = models.filter((item) => item.modelId !== archivedId);
       setModels(remaining);
@@ -223,11 +223,11 @@ export default function Uniquem3DCreator() {
   };
 
   return (
-    <section className="uniquem-creator-page" aria-labelledby="uniquem-creator-title">
+    <section className="three-d-creator-page" aria-labelledby="three-d-creator-title">
       <div className="warehouse-toolbar">
         <div>
-          <p>Uniquem</p>
-          <h1 id="uniquem-creator-title">3D Creator</h1>
+          <p>3D</p>
+          <h1 id="three-d-creator-title">3D Creator</h1>
         </div>
         <div className="warehouse-actions">
           <button type="button" onClick={() => refreshModels()} disabled={loading || loadingModels}>
@@ -270,9 +270,9 @@ export default function Uniquem3DCreator() {
               <small>{selectedModel ? `${selectedModel.versionCount || 0} saved versions` : 'The first generation will be saved automatically.'}</small>
             </div>
 
-            <label htmlFor="uniquem-creator-prompt">Prompt</label>
+            <label htmlFor="three-d-creator-prompt">Prompt</label>
             <textarea
-              id="uniquem-creator-prompt"
+              id="three-d-creator-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={selectedModel ? 'Edit this full product: add stairs, make the LED wall wider, move speakers to both sides...' : 'Create a stage entrance with two LED pillars, truss towers, speakers, and a runway...'}
@@ -280,8 +280,8 @@ export default function Uniquem3DCreator() {
               maxLength={2200}
             />
 
-            <label className="creator-file" htmlFor="uniquem-creator-image">
-              <input id="uniquem-creator-image" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} />
+            <label className="creator-file" htmlFor="three-d-creator-image">
+              <input id="three-d-creator-image" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} />
               <span>
                 <FiImage size={18} />
                 Image reference
@@ -329,7 +329,7 @@ export default function Uniquem3DCreator() {
             </div>
           </form>
 
-          <UniquemScenePreview scene={scene} />
+          <ScenePreview scene={scene} />
         </div>
       </div>
     </section>

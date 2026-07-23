@@ -244,7 +244,7 @@ function addObject(group, object) {
   if (object.type === 'label') addLabel(group, object);
 }
 
-export default function UniquemScenePreview({ scene }) {
+export default function ScenePreview({ scene }) {
   const containerRef = useRef(null);
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
@@ -377,7 +377,7 @@ export default function UniquemScenePreview({ scene }) {
         </button>
       </div>
       <div className="creator-canvas-wrap">
-        <div ref={containerRef} className="creator-canvas" data-testid="uniquem-creator-canvas">
+        <div ref={containerRef} className="creator-canvas" data-testid="three-d-creator-canvas">
           {unsupported ? (
             <div className="warehouse-fallback">
               <strong>3D creator preview</strong>

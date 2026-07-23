@@ -1,8 +1,8 @@
 import { admin, db } from './firebase.js';
 import { asString, normalizeRole } from './values.js';
 
-export const MINI_APP_IDS = ['uniquem', 'user-access', 'account'];
-export const ACCESS_MANAGED_MINI_APP_IDS = ['uniquem'];
+export const MINI_APP_IDS = ['uniquem', 'three-d', 'user-access', 'account'];
+export const ACCESS_MANAGED_MINI_APP_IDS = ['uniquem', 'three-d'];
 
 export function normalizeMiniAppIds(value) {
   if (!Array.isArray(value)) return null;

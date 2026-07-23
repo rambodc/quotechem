@@ -7,15 +7,15 @@ import { requireMiniAppAccess } from '../../core/auth.js';
 import { REGION, jsonError, preflight, setCors } from '../../core/http.js';
 import { asString, normalizeDocId, readSecret, toIso } from '../../core/values.js';
 
-const ensureUniquemAccess = (req) => requireMiniAppAccess(req, 'uniquem');
+const ensureThreeDAccess = (req) => requireMiniAppAccess(req, 'three-d');
 
-const UNIQUEM_3D_MODEL_COLLECTION = 'uniquem3DModels';
-const UNIQUEM_CREATOR_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-const UNIQUEM_CREATOR_PROMPT_MAX_CHARS = 2200;
-const UNIQUEM_SCENE_OBJECT_MAX = 80;
-const UNIQUEM_OBJECT_TYPES = ['box', 'cylinder', 'plane', 'platform', 'stairs', 'trussTower', 'speakerStack', 'ledPanel', 'lightBeam', 'label'];
-const UNIQUEM_MATERIAL_KINDS = ['matte', 'metal', 'glow', 'screen'];
-const UNIQUEM_TEXTURE_KINDS = ['plain', 'grid', 'cosmic', 'sunset'];
+const THREE_D_MODEL_COLLECTION = 'threeDModels';
+const THREE_D_CREATOR_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+const THREE_D_CREATOR_PROMPT_MAX_CHARS = 2200;
+const THREE_D_SCENE_OBJECT_MAX = 80;
+const THREE_D_OBJECT_TYPES = ['box', 'cylinder', 'plane', 'platform', 'stairs', 'trussTower', 'speakerStack', 'ledPanel', 'lightBeam', 'label'];
+const THREE_D_MATERIAL_KINDS = ['matte', 'metal', 'glow', 'screen'];
+const THREE_D_TEXTURE_KINDS = ['plain', 'grid', 'cosmic', 'sunset'];
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 
 function parseOpenAIJson(raw) {
@@ -53,11 +53,11 @@ function normalizeHexColor(value, fallback = '#64748b') {
   return /^#[0-9a-fA-F]{6}$/.test(text) ? text.toLowerCase() : fallback;
 }
 
-function normalizeUniquemSceneObject(item = {}, index = 0) {
+function normalizeThreeDSceneObject(item = {}, index = 0) {
   const type = asString(item.type);
-  if (!UNIQUEM_OBJECT_TYPES.includes(type)) return null;
-  const materialKind = UNIQUEM_MATERIAL_KINDS.includes(asString(item.materialKind)) ? asString(item.materialKind) : 'matte';
-  const textureKind = UNIQUEM_TEXTURE_KINDS.includes(asString(item.textureKind)) ? asString(item.textureKind) : 'plain';
+  if (!THREE_D_OBJECT_TYPES.includes(type)) return null;
+  const materialKind = THREE_D_MATERIAL_KINDS.includes(asString(item.materialKind)) ? asString(item.materialKind) : 'matte';
+  const textureKind = THREE_D_TEXTURE_KINDS.includes(asString(item.textureKind)) ? asString(item.textureKind) : 'plain';
   return {
     id: asString(item.id).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || `object-${index + 1}`,
     type,
@@ -71,7 +71,7 @@ function normalizeUniquemSceneObject(item = {}, index = 0) {
   };
 }
 
-function fallbackUniquemScene() {
+function fallbackThreeDScene() {
   return {
     title: 'Generated Object Group',
     summary: 'The request produced a safe starter object group. Regenerate with more detail for a richer preview.',
@@ -103,13 +103,13 @@ function fallbackUniquemScene() {
   };
 }
 
-function normalizeUniquemScene(value = {}) {
+function normalizeThreeDScene(value = {}) {
   const rawObjects = Array.isArray(value.objects) ? value.objects : [];
   const objects = rawObjects
-    .slice(0, UNIQUEM_SCENE_OBJECT_MAX)
-    .map((item, index) => normalizeUniquemSceneObject(item, index))
+    .slice(0, THREE_D_SCENE_OBJECT_MAX)
+    .map((item, index) => normalizeThreeDSceneObject(item, index))
     .filter(Boolean);
-  if (!objects.length) return fallbackUniquemScene();
+  if (!objects.length) return fallbackThreeDScene();
 
   return {
     title: asString(value.title).slice(0, 80) || 'Generated 3D Concept',
@@ -122,14 +122,14 @@ function normalizeUniquemScene(value = {}) {
   };
 }
 
-function isUniquemCreatorImageContentType(value) {
+function isThreeDCreatorImageContentType(value) {
   return ['image/png', 'image/jpeg', 'image/webp'].includes(asString(value).toLowerCase());
 }
 
-function normalizeUniquemCreatorImage(image) {
+function normalizeThreeDCreatorImage(image) {
   if (!image) return null;
   const contentType = asString(image.contentType).toLowerCase();
-  if (!isUniquemCreatorImageContentType(contentType)) {
+  if (!isThreeDCreatorImageContentType(contentType)) {
     const err = new Error('Use a PNG, JPG, or WebP image.');
     err.status = 400;
     throw err;
@@ -143,7 +143,7 @@ function normalizeUniquemCreatorImage(image) {
   }
   const base64 = dataUrl.slice(prefix.length);
   const bytes = Buffer.byteLength(base64, 'base64');
-  if (!bytes || bytes > UNIQUEM_CREATOR_IMAGE_MAX_BYTES) {
+  if (!bytes || bytes > THREE_D_CREATOR_IMAGE_MAX_BYTES) {
     const err = new Error('Image must be 8 MB or smaller.');
     err.status = 400;
     throw err;
@@ -156,19 +156,19 @@ function normalizeUniquemCreatorImage(image) {
   };
 }
 
-function normalizeUniquemModelStatus(value) {
+function normalizeThreeDModelStatus(value) {
   return asString(value) === 'archived' ? 'archived' : 'active';
 }
 
-function mapUniquem3DModelDoc(doc) {
+function mapThreeDModelDoc(doc) {
   const data = doc.data() || {};
-  const scene = normalizeUniquemScene(data.scene || {});
+  const scene = normalizeThreeDScene(data.scene || {});
   return {
     modelId: asString(data.modelId) || doc.id,
     title: asString(data.title) || scene.title,
     summary: asString(data.summary) || scene.summary,
     scene,
-    status: normalizeUniquemModelStatus(data.status),
+    status: normalizeThreeDModelStatus(data.status),
     createdBy: asString(data.createdBy),
     createdByEmail: asString(data.createdByEmail),
     createdAt: toIso(data.createdAt),
@@ -180,11 +180,11 @@ function mapUniquem3DModelDoc(doc) {
   };
 }
 
-function mapUniquem3DVersionDoc(doc) {
+function mapThreeDVersionDoc(doc) {
   const data = doc.data() || {};
   return {
     versionId: asString(data.versionId) || doc.id,
-    scene: normalizeUniquemScene(data.scene || {}),
+    scene: normalizeThreeDScene(data.scene || {}),
     prompt: asString(data.prompt),
     model: asString(data.model),
     source: ['ai-generate', 'ai-edit', 'restore'].includes(asString(data.source)) ? asString(data.source) : 'ai-edit',
@@ -194,9 +194,9 @@ function mapUniquem3DVersionDoc(doc) {
   };
 }
 
-function filterActiveUniquem3DModels(models = [], limit = 100) {
+function filterActiveThreeDModels(models = [], limit = 100) {
   return (Array.isArray(models) ? models : [])
-    .filter((model) => normalizeUniquemModelStatus(model.status) === 'active')
+    .filter((model) => normalizeThreeDModelStatus(model.status) === 'active')
     .sort((a, b) => {
       const aTime = asString(a.updatedAt);
       const bTime = asString(b.updatedAt);
@@ -205,11 +205,11 @@ function filterActiveUniquem3DModels(models = [], limit = 100) {
     .slice(0, limit);
 }
 
-function buildUniquemVersionDoc({ versionId, scene, prompt, model, source, user }) {
+function buildThreeDVersionDoc({ versionId, scene, prompt, model, source, user }) {
   return {
     versionId,
-    scene: normalizeUniquemScene(scene),
-    prompt: asString(prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS),
+    scene: normalizeThreeDScene(scene),
+    prompt: asString(prompt).slice(0, THREE_D_CREATOR_PROMPT_MAX_CHARS),
     model: asString(model).slice(0, 80),
     source: ['ai-generate', 'ai-edit', 'restore'].includes(asString(source)) ? asString(source) : 'ai-edit',
     createdBy: user.uid,
@@ -218,21 +218,21 @@ function buildUniquemVersionDoc({ versionId, scene, prompt, model, source, user 
   };
 }
 
-async function loadActiveUniquem3DModel(modelId) {
+async function loadActiveThreeDModel(modelId) {
   const id = normalizeDocId(modelId);
   if (!id) {
     const err = new Error('modelId is required');
     err.status = 400;
     throw err;
   }
-  const ref = db.collection(UNIQUEM_3D_MODEL_COLLECTION).doc(id);
+  const ref = db.collection(THREE_D_MODEL_COLLECTION).doc(id);
   const snap = await ref.get();
   if (!snap.exists) {
     const err = new Error('Model not found');
     err.status = 404;
     throw err;
   }
-  const model = mapUniquem3DModelDoc(snap);
+  const model = mapThreeDModelDoc(snap);
   if (model.status === 'archived') {
     const err = new Error('Model not found');
     err.status = 404;
@@ -241,7 +241,7 @@ async function loadActiveUniquem3DModel(modelId) {
   return { ref, snap, model };
 }
 
-function uniquemSceneJsonSchema() {
+function threeDSceneJsonSchema() {
   const vectorSchema = {
     type: 'array',
     minItems: 3,
@@ -265,20 +265,20 @@ function uniquemSceneJsonSchema() {
       },
       objects: {
         type: 'array',
-        maxItems: UNIQUEM_SCENE_OBJECT_MAX,
+        maxItems: THREE_D_SCENE_OBJECT_MAX,
         items: {
           type: 'object',
           additionalProperties: false,
           properties: {
             id: { type: 'string' },
-            type: { type: 'string', enum: UNIQUEM_OBJECT_TYPES },
+            type: { type: 'string', enum: THREE_D_OBJECT_TYPES },
             label: { type: 'string' },
             position: vectorSchema,
             scale: vectorSchema,
             rotationY: { type: 'number' },
             color: { type: 'string' },
-            materialKind: { type: 'string', enum: UNIQUEM_MATERIAL_KINDS },
-            textureKind: { type: 'string', enum: UNIQUEM_TEXTURE_KINDS },
+            materialKind: { type: 'string', enum: THREE_D_MATERIAL_KINDS },
+            textureKind: { type: 'string', enum: THREE_D_TEXTURE_KINDS },
           },
           required: ['id', 'type', 'label', 'position', 'scale', 'rotationY', 'color', 'materialKind', 'textureKind'],
         },
@@ -288,7 +288,7 @@ function uniquemSceneJsonSchema() {
   };
 }
 
-async function callOpenAIUniquemScene({ prompt, image, previousScene }) {
+async function callOpenAIThreeDScene({ prompt, image, previousScene }) {
   const apiKey = readSecret(OPENAI_API_KEY);
   const model = asString(process.env.OPENAI_DOCUMENT_MODEL) || 'gpt-5.5';
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
@@ -297,14 +297,14 @@ async function callOpenAIUniquemScene({ prompt, image, previousScene }) {
     {
       type: 'input_text',
       text: [
-        'Create one procedural Three.js object group as JSON for QuoteChem Uniquem 3D Creator.',
+        'Create one procedural Three.js object group as JSON for QuoteChem 3D Creator.',
         'Describe the requested object with safe primitive objects only. Do not return code, URLs, external assets, GLB files, SVG, CSS, or markdown.',
         'Use these object types only: box, cylinder, plane, platform, stairs, trussTower, speakerStack, ledPanel, lightBeam, label.',
         'Use scale and positions in meters. Keep the full object group near the origin and camera-friendly.',
         'For screens, signage, neon, or artwork, use ledPanel with textureKind cosmic, sunset, or grid.',
         'Use labels sparingly for useful signage or major parts.',
         `User prompt: ${prompt}`,
-        previousScene ? `Previous scene to refine or replace: ${JSON.stringify(normalizeUniquemScene(previousScene)).slice(0, 9000)}` : 'No previous scene.',
+        previousScene ? `Previous scene to refine or replace: ${JSON.stringify(normalizeThreeDScene(previousScene)).slice(0, 9000)}` : 'No previous scene.',
       ].join('\n'),
     },
   ];
@@ -339,9 +339,9 @@ async function callOpenAIUniquemScene({ prompt, image, previousScene }) {
         verbosity: 'medium',
         format: {
           type: 'json_schema',
-          name: 'uniquem_3d_scene',
+          name: 'three_d_scene',
           strict: true,
-          schema: uniquemSceneJsonSchema(),
+          schema: threeDSceneJsonSchema(),
         },
       },
     }),
@@ -349,12 +349,12 @@ async function callOpenAIUniquemScene({ prompt, image, previousScene }) {
 
   if (!response.ok) {
     const failureText = await response.text();
-    throw new Error(`OpenAI Uniquem 3D scene generation failed: ${response.status} ${failureText}`);
+    throw new Error(`OpenAI 3D scene generation failed: ${response.status} ${failureText}`);
   }
 
   const parsed = parseOpenAIJson(extractResponsesText(await response.json()));
   return {
-    scene: normalizeUniquemScene(parsed),
+    scene: normalizeThreeDScene(parsed),
     model,
   };
 }
@@ -370,82 +370,82 @@ function extractResponsesText(data) {
   return chunks.join('\n').trim();
 }
 
-export const generateUniquem3DScene = onRequest(
+export const generateThreeDScene = onRequest(
   { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
   async (req, res) => {
     if (preflight(req, res)) return;
     if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
     try {
-      await ensureUniquemAccess(req);
-      const prompt = asString(req.body?.prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS);
+      await ensureThreeDAccess(req);
+      const prompt = asString(req.body?.prompt).slice(0, THREE_D_CREATOR_PROMPT_MAX_CHARS);
       if (!prompt) return jsonError(res, 400, 'Prompt is required.');
-      const image = normalizeUniquemCreatorImage(req.body?.image || null);
+      const image = normalizeThreeDCreatorImage(req.body?.image || null);
       const previousScene = req.body?.previousScene && typeof req.body.previousScene === 'object' ? req.body.previousScene : null;
 
-      const generated = await callOpenAIUniquemScene({ prompt, image, previousScene });
+      const generated = await callOpenAIThreeDScene({ prompt, image, previousScene });
       setCors(res);
       res.status(200).json({ ok: true, scene: generated.scene, model: generated.model });
     } catch (error) {
       const status = Number(error?.status) || 500;
-      logger.error('[generateUniquem3DScene] failed', { error: error?.message || String(error) });
+      logger.error('[generateThreeDScene] failed', { error: error?.message || String(error) });
       return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to generate 3D scene');
     }
   }
 );
 
-export const listUniquem3DModels = onRequest({ region: REGION }, async (req, res) => {
+export const listThreeDModels = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
   try {
-    await ensureUniquemAccess(req);
-    const snap = await db.collection(UNIQUEM_3D_MODEL_COLLECTION).orderBy('updatedAt', 'desc').limit(200).get();
-    const items = filterActiveUniquem3DModels(snap.docs.map(mapUniquem3DModelDoc), 100);
+    await ensureThreeDAccess(req);
+    const snap = await db.collection(THREE_D_MODEL_COLLECTION).orderBy('updatedAt', 'desc').limit(200).get();
+    const items = filterActiveThreeDModels(snap.docs.map(mapThreeDModelDoc), 100);
     setCors(res);
     res.status(200).json({ ok: true, items });
   } catch (error) {
     const status = Number(error?.status) || 500;
-    logger.error('[listUniquem3DModels] failed', { error: error?.message || String(error) });
+    logger.error('[listThreeDModels] failed', { error: error?.message || String(error) });
     return jsonError(res, status, status === 403 ? 'Forbidden' : 'Failed to list 3D models');
   }
 });
 
-export const getUniquem3DModel = onRequest({ region: REGION }, async (req, res) => {
+export const getThreeDModel = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
   try {
-    await ensureUniquemAccess(req);
-    const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
+    await ensureThreeDAccess(req);
+    const loaded = await loadActiveThreeDModel(req.body?.modelId);
     const versionSnap = await loaded.ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get();
-    const versions = versionSnap.docs.map(mapUniquem3DVersionDoc);
+    const versions = versionSnap.docs.map(mapThreeDVersionDoc);
     setCors(res);
     res.status(200).json({ ok: true, model: loaded.model, versions });
   } catch (error) {
     const status = Number(error?.status) || 500;
-    logger.error('[getUniquem3DModel] failed', { error: error?.message || String(error) });
+    logger.error('[getThreeDModel] failed', { error: error?.message || String(error) });
     return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to load 3D model');
   }
 });
 
-export const createUniquem3DModel = onRequest(
+export const createThreeDModel = onRequest(
   { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
   async (req, res) => {
     if (preflight(req, res)) return;
     if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
     try {
-      const user = await ensureUniquemAccess(req);
-      const prompt = asString(req.body?.prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS);
+      const user = await ensureThreeDAccess(req);
+      const prompt = asString(req.body?.prompt).slice(0, THREE_D_CREATOR_PROMPT_MAX_CHARS);
       if (!prompt) return jsonError(res, 400, 'Prompt is required.');
-      const image = normalizeUniquemCreatorImage(req.body?.image || null);
-      const generated = await callOpenAIUniquemScene({ prompt, image, previousScene: null });
-      const scene = normalizeUniquemScene(generated.scene);
+      const image = normalizeThreeDCreatorImage(req.body?.image || null);
+      const generated = await callOpenAIThreeDScene({ prompt, image, previousScene: null });
+      const scene = normalizeThreeDScene(generated.scene);
       const now = admin.firestore.FieldValue.serverTimestamp();
       const modelId = randomUUID();
       const versionId = randomUUID();
-      const ref = db.collection(UNIQUEM_3D_MODEL_COLLECTION).doc(modelId);
+      const ref = db.collection(THREE_D_MODEL_COLLECTION).doc(modelId);
       await ref.set({
         modelId,
         title: scene.title,
@@ -462,7 +462,7 @@ export const createUniquem3DModel = onRequest(
         versionCount: 1,
       });
       await ref.collection('versions').doc(versionId).set(
-        buildUniquemVersionDoc({
+        buildThreeDVersionDoc({
           versionId,
           scene,
           prompt,
@@ -474,29 +474,29 @@ export const createUniquem3DModel = onRequest(
 
       const [saved, versionSnap] = await Promise.all([ref.get(), ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get()]);
       setCors(res);
-      res.status(200).json({ ok: true, model: mapUniquem3DModelDoc(saved), versions: versionSnap.docs.map(mapUniquem3DVersionDoc) });
+      res.status(200).json({ ok: true, model: mapThreeDModelDoc(saved), versions: versionSnap.docs.map(mapThreeDVersionDoc) });
     } catch (error) {
       const status = Number(error?.status) || 500;
-      logger.error('[createUniquem3DModel] failed', { error: error?.message || String(error) });
+      logger.error('[createThreeDModel] failed', { error: error?.message || String(error) });
       return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to create 3D model');
     }
   }
 );
 
-export const reviseUniquem3DModel = onRequest(
+export const reviseThreeDModel = onRequest(
   { region: REGION, timeoutSeconds: 120, memory: '1GiB', secrets: [OPENAI_API_KEY] },
   async (req, res) => {
     if (preflight(req, res)) return;
     if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
     try {
-      const user = await ensureUniquemAccess(req);
-      const prompt = asString(req.body?.prompt).slice(0, UNIQUEM_CREATOR_PROMPT_MAX_CHARS);
+      const user = await ensureThreeDAccess(req);
+      const prompt = asString(req.body?.prompt).slice(0, THREE_D_CREATOR_PROMPT_MAX_CHARS);
       if (!prompt) return jsonError(res, 400, 'Prompt is required.');
-      const image = normalizeUniquemCreatorImage(req.body?.image || null);
-      const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
-      const generated = await callOpenAIUniquemScene({ prompt, image, previousScene: loaded.model.scene });
-      const scene = normalizeUniquemScene(generated.scene);
+      const image = normalizeThreeDCreatorImage(req.body?.image || null);
+      const loaded = await loadActiveThreeDModel(req.body?.modelId);
+      const generated = await callOpenAIThreeDScene({ prompt, image, previousScene: loaded.model.scene });
+      const scene = normalizeThreeDScene(generated.scene);
       const versionId = randomUUID();
       await loaded.ref.set(
         {
@@ -512,7 +512,7 @@ export const reviseUniquem3DModel = onRequest(
         { merge: true }
       );
       await loaded.ref.collection('versions').doc(versionId).set(
-        buildUniquemVersionDoc({
+        buildThreeDVersionDoc({
           versionId,
           scene,
           prompt,
@@ -524,28 +524,28 @@ export const reviseUniquem3DModel = onRequest(
 
       const [saved, versionSnap] = await Promise.all([loaded.ref.get(), loaded.ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get()]);
       setCors(res);
-      res.status(200).json({ ok: true, model: mapUniquem3DModelDoc(saved), versions: versionSnap.docs.map(mapUniquem3DVersionDoc) });
+      res.status(200).json({ ok: true, model: mapThreeDModelDoc(saved), versions: versionSnap.docs.map(mapThreeDVersionDoc) });
     } catch (error) {
       const status = Number(error?.status) || 500;
-      logger.error('[reviseUniquem3DModel] failed', { error: error?.message || String(error) });
+      logger.error('[reviseThreeDModel] failed', { error: error?.message || String(error) });
       return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to revise 3D model');
     }
   }
 );
 
-export const restoreUniquem3DModelVersion = onRequest({ region: REGION }, async (req, res) => {
+export const restoreThreeDModelVersion = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
   try {
-    const user = await ensureUniquemAccess(req);
-    const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
+    const user = await ensureThreeDAccess(req);
+    const loaded = await loadActiveThreeDModel(req.body?.modelId);
     const sourceVersionId = normalizeDocId(req.body?.versionId);
     if (!sourceVersionId) return jsonError(res, 400, 'versionId is required');
     const sourceSnap = await loaded.ref.collection('versions').doc(sourceVersionId).get();
     if (!sourceSnap.exists) return jsonError(res, 404, 'Version not found');
-    const sourceVersion = mapUniquem3DVersionDoc(sourceSnap);
-    const scene = normalizeUniquemScene(sourceVersion.scene);
+    const sourceVersion = mapThreeDVersionDoc(sourceSnap);
+    const scene = normalizeThreeDScene(sourceVersion.scene);
     const versionId = randomUUID();
     await loaded.ref.set(
       {
@@ -561,7 +561,7 @@ export const restoreUniquem3DModelVersion = onRequest({ region: REGION }, async 
       { merge: true }
     );
     await loaded.ref.collection('versions').doc(versionId).set(
-      buildUniquemVersionDoc({
+      buildThreeDVersionDoc({
         versionId,
         scene,
         prompt: `Restored version ${sourceVersionId}`,
@@ -573,21 +573,21 @@ export const restoreUniquem3DModelVersion = onRequest({ region: REGION }, async 
 
     const [saved, versionSnap] = await Promise.all([loaded.ref.get(), loaded.ref.collection('versions').orderBy('createdAt', 'desc').limit(20).get()]);
     setCors(res);
-    res.status(200).json({ ok: true, model: mapUniquem3DModelDoc(saved), versions: versionSnap.docs.map(mapUniquem3DVersionDoc) });
+    res.status(200).json({ ok: true, model: mapThreeDModelDoc(saved), versions: versionSnap.docs.map(mapThreeDVersionDoc) });
   } catch (error) {
     const status = Number(error?.status) || 500;
-    logger.error('[restoreUniquem3DModelVersion] failed', { error: error?.message || String(error) });
+    logger.error('[restoreThreeDModelVersion] failed', { error: error?.message || String(error) });
     return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to restore 3D model version');
   }
 });
 
-export const archiveUniquem3DModel = onRequest({ region: REGION }, async (req, res) => {
+export const archiveThreeDModel = onRequest({ region: REGION }, async (req, res) => {
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
 
   try {
-    const user = await ensureUniquemAccess(req);
-    const loaded = await loadActiveUniquem3DModel(req.body?.modelId);
+    const user = await ensureThreeDAccess(req);
+    const loaded = await loadActiveThreeDModel(req.body?.modelId);
     await loaded.ref.set(
       {
         status: 'archived',
@@ -601,9 +601,9 @@ export const archiveUniquem3DModel = onRequest({ region: REGION }, async (req, r
     res.status(200).json({ ok: true, modelId: loaded.model.modelId });
   } catch (error) {
     const status = Number(error?.status) || 500;
-    logger.error('[archiveUniquem3DModel] failed', { error: error?.message || String(error) });
+    logger.error('[archiveThreeDModel] failed', { error: error?.message || String(error) });
     return jsonError(res, status, status === 403 ? 'Forbidden' : asString(error?.message || String(error)) || 'Failed to archive 3D model');
   }
 });
 
-export const __testables = { normalizeUniquemScene, normalizeUniquemSceneObject, isUniquemCreatorImageContentType, normalizeUniquemCreatorImage, normalizeUniquemModelStatus, mapUniquem3DModelDoc, mapUniquem3DVersionDoc, filterActiveUniquem3DModels, buildUniquemVersionDoc };
+export const __testables = { normalizeThreeDScene, normalizeThreeDSceneObject, isThreeDCreatorImageContentType, normalizeThreeDCreatorImage, normalizeThreeDModelStatus, mapThreeDModelDoc, mapThreeDVersionDoc, filterActiveThreeDModels, buildThreeDVersionDoc };

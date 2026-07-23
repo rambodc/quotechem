@@ -4,9 +4,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 let mockAuthUser = null;
 let mockProfile = { role: 'user', firstName: '', lastName: '', enabledMiniApps: null };
 
-const mockUniquemScene = {
+const mockThreeDScene = {
   title: 'Saved Stage Product',
-  summary: 'Saved model from the shared Uniquem library.',
+  summary: 'Saved model from the shared 3D library.',
   cameraHint: { distance: 22, target: [0, 2, 0] },
   objects: [
     {
@@ -23,11 +23,11 @@ const mockUniquemScene = {
   ],
 };
 
-const mockUniquemModel = {
+const mockThreeDModel = {
   modelId: 'model-1',
   title: 'Saved Stage Product',
-  summary: 'Saved model from the shared Uniquem library.',
-  scene: mockUniquemScene,
+  summary: 'Saved model from the shared 3D library.',
+  scene: mockThreeDScene,
   status: 'active',
   createdBy: 'user-1',
   createdByEmail: 'user@example.com',
@@ -39,10 +39,10 @@ const mockUniquemModel = {
   versionCount: 2,
 };
 
-const mockUniquemVersions = [
+const mockThreeDVersions = [
   {
     versionId: 'version-2',
-    scene: mockUniquemScene,
+    scene: mockThreeDScene,
     prompt: 'Add LED pillars.',
     model: 'test-model',
     source: 'ai-edit',
@@ -52,7 +52,7 @@ const mockUniquemVersions = [
   },
   {
     versionId: 'version-1',
-    scene: mockUniquemScene,
+    scene: mockThreeDScene,
     prompt: 'Create a saved stage product.',
     model: 'test-model',
     source: 'ai-generate',
@@ -385,56 +385,56 @@ beforeEach(() => {
     if (path === 'listUniquemAttachments') {
       return Promise.resolve({ items: mockUniquemOperations.attachments, attachmentsByEntity: mockUniquemOperations.attachmentsByEntity });
     }
-    if (path === 'listUniquem3DModels') {
-      return Promise.resolve({ items: [mockUniquemModel] });
+    if (path === 'listThreeDModels') {
+      return Promise.resolve({ items: [mockThreeDModel] });
     }
-    if (path === 'getUniquem3DModel') {
-      return Promise.resolve({ model: mockUniquemModel, versions: mockUniquemVersions });
+    if (path === 'getThreeDModel') {
+      return Promise.resolve({ model: mockThreeDModel, versions: mockThreeDVersions });
     }
-    if (path === 'createUniquem3DModel') {
+    if (path === 'createThreeDModel') {
       return Promise.resolve({
         model: {
-          ...mockUniquemModel,
+          ...mockThreeDModel,
           modelId: 'model-new',
           title: 'Generated Stage Entrance',
           summary: 'A new saved stage entrance.',
           scene: {
-            ...mockUniquemScene,
+            ...mockThreeDScene,
             title: 'Generated Stage Entrance',
             summary: 'A new saved stage entrance.',
           },
           versionCount: 1,
         },
-        versions: [{ ...mockUniquemVersions[1], versionId: 'version-new', prompt: body?.prompt || '' }],
+        versions: [{ ...mockThreeDVersions[1], versionId: 'version-new', prompt: body?.prompt || '' }],
       });
     }
-    if (path === 'reviseUniquem3DModel') {
+    if (path === 'reviseThreeDModel') {
       return Promise.resolve({
         model: {
-          ...mockUniquemModel,
+          ...mockThreeDModel,
           title: 'Edited Stage Product',
           summary: 'Edited saved model from AI.',
           scene: {
-            ...mockUniquemScene,
+            ...mockThreeDScene,
             title: 'Edited Stage Product',
             summary: 'Edited saved model from AI.',
           },
           latestPrompt: body?.prompt || '',
           versionCount: 3,
         },
-        versions: [{ ...mockUniquemVersions[0], versionId: 'version-3', prompt: body?.prompt || '' }, ...mockUniquemVersions],
+        versions: [{ ...mockThreeDVersions[0], versionId: 'version-3', prompt: body?.prompt || '' }, ...mockThreeDVersions],
       });
     }
-    if (path === 'restoreUniquem3DModelVersion') {
+    if (path === 'restoreThreeDModelVersion') {
       return Promise.resolve({
-        model: mockUniquemModel,
-        versions: [{ ...mockUniquemVersions[0], versionId: 'version-restore', source: 'restore', prompt: 'Restored version version-1' }, ...mockUniquemVersions],
+        model: mockThreeDModel,
+        versions: [{ ...mockThreeDVersions[0], versionId: 'version-restore', source: 'restore', prompt: 'Restored version version-1' }, ...mockThreeDVersions],
       });
     }
-    if (path === 'archiveUniquem3DModel') {
+    if (path === 'archiveThreeDModel') {
       return Promise.resolve({ ok: true, modelId: body?.modelId });
     }
-    if (path === 'generateUniquem3DScene') {
+    if (path === 'generateThreeDScene') {
       return Promise.resolve({
         ok: true,
         model: 'test-model',
@@ -489,6 +489,7 @@ describe('mini-app portal routing', () => {
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/dashboard');
+    expect(screen.getByRole('link', { name: /^3D$/i }).getAttribute('href')).toBe('/apps/3d/viewer');
     expect(screen.getByRole('link', { name: /User Access/i }).getAttribute('href')).toBe('/apps/user-access');
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
@@ -512,24 +513,31 @@ describe('mini-app portal routing', () => {
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
   });
 
-  test('basic users with Uniquem enabled see it and can open the 3D page', async () => {
+  test('basic users receive Uniquem and 3D access independently', async () => {
     renderAt('/portal', 'user', ['uniquem']);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Uniquem/i }).getAttribute('href')).toBe('/apps/uniquem/dashboard');
+    expect(screen.queryByRole('link', { name: /^3D$/i })).not.toBeTruthy();
     expect(screen.getByRole('link', { name: /^Account$/i }).getAttribute('href')).toBe('/apps/account');
 
     cleanup();
-    renderAt('/apps/uniquem/3d', 'user', ['uniquem']);
+    renderAt('/portal', 'user', ['three-d']);
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /^3D$/i }).getAttribute('href')).toBe('/apps/3d/viewer');
+    expect(screen.queryByRole('link', { name: /Uniquem/i })).not.toBeTruthy();
+
+    cleanup();
+    renderAt('/apps/3d/viewer', 'user', ['three-d']);
     expect(await screen.findByRole('heading', { name: '3D Warehouse' })).toBeTruthy();
-    expect(screen.getByTestId('uniquem-warehouse-canvas')).toBeTruthy();
+    expect(screen.getByTestId('three-d-warehouse-canvas')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Auto/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Reset/i })).toBeTruthy();
 
     cleanup();
-    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+    renderAt('/apps/3d/creator', 'user', ['three-d']);
     expect(await screen.findByRole('heading', { name: '3D Creator' })).toBeTruthy();
-    expect(screen.getByTestId('uniquem-creator-canvas')).toBeTruthy();
+    expect(screen.getByTestId('three-d-creator-canvas')).toBeTruthy();
   });
 
   test('Uniquem operations pages render real inventory system views and base route opens dashboard', async () => {
@@ -596,9 +604,9 @@ describe('mini-app portal routing', () => {
     expect(screen.getByText('draft')).toBeTruthy();
   });
 
-  test('Uniquem 3D Creator creates a saved model with prompt and optional image', async () => {
+  test('3D Creator creates a saved model with prompt and optional image', async () => {
     const { postJson } = require('./lib/api');
-    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+    renderAt('/apps/3d/creator', 'user', ['three-d']);
 
     expect(await screen.findByRole('heading', { name: '3D Creator' })).toBeTruthy();
     expect(await screen.findByText('Saved Stage Product')).toBeTruthy();
@@ -610,7 +618,7 @@ describe('mini-app portal routing', () => {
 
     await waitFor(() =>
       expect(postJson).toHaveBeenCalledWith(
-        'createUniquem3DModel',
+        'createThreeDModel',
         expect.objectContaining({
           prompt: 'Create a festival stage gate with LED pillars.',
           image: expect.objectContaining({ name: 'stage-reference.webp', contentType: 'image/webp' }),
@@ -623,55 +631,55 @@ describe('mini-app portal routing', () => {
     expect(screen.getByText(/A new saved stage entrance/i)).toBeTruthy();
   });
 
-  test('Uniquem 3D Creator keeps a created model visible when refresh fails after save', async () => {
+  test('3D Creator keeps a created model visible when refresh fails after save', async () => {
     const { postJson } = require('./lib/api');
     let listCalls = 0;
     postJson.mockImplementation((path, body) => {
-      if (path === 'listUniquem3DModels') {
+      if (path === 'listThreeDModels') {
         listCalls += 1;
         if (listCalls === 1) return Promise.resolve({ items: [] });
         return Promise.reject(new Error('Could not load saved products.'));
       }
-      if (path === 'createUniquem3DModel') {
+      if (path === 'createThreeDModel') {
         return Promise.resolve({
           model: {
-            ...mockUniquemModel,
+            ...mockThreeDModel,
             modelId: 'model-new',
             title: 'Generated Stage Entrance',
             summary: 'A new saved stage entrance.',
             scene: {
-              ...mockUniquemScene,
+              ...mockThreeDScene,
               title: 'Generated Stage Entrance',
               summary: 'A new saved stage entrance.',
             },
             latestPrompt: body?.prompt || '',
             versionCount: 1,
           },
-          versions: [{ ...mockUniquemVersions[1], versionId: 'version-new', prompt: body?.prompt || '' }],
+          versions: [{ ...mockThreeDVersions[1], versionId: 'version-new', prompt: body?.prompt || '' }],
         });
       }
       return Promise.resolve({});
     });
 
-    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+    renderAt('/apps/3d/creator', 'user', ['three-d']);
 
     expect(await screen.findByText(/No saved models yet/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Create a saved stage model.' } });
     fireEvent.click(screen.getByRole('button', { name: /Create Saved Model/i }));
 
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('createUniquem3DModel', expect.objectContaining({ prompt: 'Create a saved stage model.' }), { authed: true }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('createThreeDModel', expect.objectContaining({ prompt: 'Create a saved stage model.' }), { authed: true }));
     expect(await screen.findByRole('button', { name: /Generated Stage Entrance/i })).toBeTruthy();
     expect(screen.getAllByText('Generated Stage Entrance').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Failed to save 3D model/i)).not.toBeTruthy();
   });
 
-  test('Uniquem 3D Creator can select, edit, restore, and archive saved models', async () => {
+  test('3D Creator can select, edit, restore, and archive saved models', async () => {
     const { postJson } = require('./lib/api');
-    renderAt('/apps/uniquem/3d-creator', 'user', ['uniquem']);
+    renderAt('/apps/3d/creator', 'user', ['three-d']);
 
     expect(await screen.findByText('Saved Stage Product')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Saved Stage Product/i }));
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('getUniquem3DModel', { modelId: 'model-1' }, { authed: true }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('getThreeDModel', { modelId: 'model-1' }, { authed: true }));
     expect(await screen.findByText(/Editing saved model/i)).toBeTruthy();
     expect(screen.getByText(/Add LED pillars/i)).toBeTruthy();
 
@@ -679,7 +687,7 @@ describe('mini-app portal routing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Edit And Save/i }));
     await waitFor(() =>
       expect(postJson).toHaveBeenCalledWith(
-        'reviseUniquem3DModel',
+        'reviseThreeDModel',
         expect.objectContaining({ modelId: 'model-1', prompt: 'Make the LED wall wider and add side speakers.' }),
         { authed: true }
       )
@@ -688,11 +696,11 @@ describe('mini-app portal routing', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /Restore/i })[0]);
     await waitFor(() =>
-      expect(postJson).toHaveBeenCalledWith('restoreUniquem3DModelVersion', expect.objectContaining({ modelId: 'model-1' }), { authed: true })
+      expect(postJson).toHaveBeenCalledWith('restoreThreeDModelVersion', expect.objectContaining({ modelId: 'model-1' }), { authed: true })
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Archive Model/i }));
-    await waitFor(() => expect(postJson).toHaveBeenCalledWith('archiveUniquem3DModel', { modelId: 'model-1' }, { authed: true }));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('archiveThreeDModel', { modelId: 'model-1' }, { authed: true }));
   });
 
 
@@ -712,7 +720,7 @@ describe('mini-app portal routing', () => {
   });
 
   test('basic users are redirected away from disabled mini apps', async () => {
-    renderAt('/apps/uniquem/3d', 'user', []);
+    renderAt('/apps/3d/viewer', 'user', []);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: '3D Warehouse' })).not.toBeTruthy();
@@ -802,6 +810,7 @@ describe('mini-app portal routing', () => {
     expect(screen.queryByLabelText(/Temporary password/i)).not.toBeTruthy();
     expect(screen.queryByRole('button', { name: /Quotes/i })).not.toBeTruthy();
     expect(screen.getByRole('button', { name: /Uniquem/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^3D$/i })).toBeTruthy();
     const sendButtons = screen.getAllByRole('button', { name: /^Send invite$/i });
     fireEvent.click(sendButtons[sendButtons.length - 1]);
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('adminInviteUser', expect.objectContaining({ email: 'new@example.com' }), { authed: true }));

@@ -14,6 +14,7 @@ import PortalLayout from './layout/PortalLayout';
 import AppLauncher from './apps/launcher';
 import { canAccessMiniApp, getMiniApp } from './apps/registry/miniApps';
 import Uniquem from './apps/uniquem';
+import ThreeD from './apps/three-d';
 import UserAccess from './admin/UserAccess';
 
 export const UserContext = createContext(null);
@@ -255,18 +256,26 @@ function App() {
             }
           />
           <Route
-            path="/apps/uniquem/3d"
+            path="/apps/3d"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="3d">
-                <Uniquem page="3d" />
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="three-d" appPath="overview">
+                <Navigate to="/apps/3d/viewer" replace />
               </MiniAppRoute>
             }
           />
           <Route
-            path="/apps/uniquem/3d-creator"
+            path="/apps/3d/viewer"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="3d-creator">
-                <Uniquem page="3d-creator" />
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="three-d" appPath="viewer">
+                <ThreeD page="viewer" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/3d/creator"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="three-d" appPath="creator">
+                <ThreeD page="creator" />
               </MiniAppRoute>
             }
           />

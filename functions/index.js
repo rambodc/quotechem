@@ -33,11 +33,11 @@ export {
   listUniquemAttachments,
 } from './apps/uniquem/attachments.js';
 export {
-  generateUniquem3DScene,
-  listUniquem3DModels,
-  getUniquem3DModel,
-  createUniquem3DModel,
-  reviseUniquem3DModel,
-  restoreUniquem3DModelVersion,
-  archiveUniquem3DModel,
-} from './apps/uniquem/three-d.js';
+  generateThreeDScene,
+  listThreeDModels,
+  getThreeDModel,
+  createThreeDModel,
+  reviseThreeDModel,
+  restoreThreeDModelVersion,
+  archiveThreeDModel,
+} from './apps/three-d/models.js';

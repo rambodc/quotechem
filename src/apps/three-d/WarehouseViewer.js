@@ -411,7 +411,7 @@ function buildWarehouseScene(scene) {
   addTruck(root);
   addConcertStage(root, 31, 0);
 
-  const title = makeLabel('Uniquem Warehouse', 360, 96, '#ffffff', '#0f2a56');
+  const title = makeLabel('QuoteChem Warehouse', 360, 96, '#ffffff', '#0f2a56');
   title.position.set(0, 4.2, -9.82);
   root.add(title);
 
@@ -441,7 +441,7 @@ function disposeObject(object) {
   });
 }
 
-export default function Warehouse3D() {
+export default function WarehouseViewer() {
   const stageRef = useRef(null);
   const rendererRef = useRef(null);
   const cameraRef = useRef(null);
@@ -575,11 +575,11 @@ export default function Warehouse3D() {
   }, []);
 
   return (
-    <section className="uniquem-warehouse-page" aria-labelledby="uniquem-warehouse-title">
+    <section className="three-d-warehouse-page" aria-labelledby="three-d-warehouse-title">
       <div className="warehouse-toolbar">
         <div>
-          <p>Uniquem</p>
-          <h1 id="uniquem-warehouse-title">3D Warehouse</h1>
+          <p>3D</p>
+          <h1 id="three-d-warehouse-title">3D Warehouse</h1>
         </div>
         <div className="warehouse-actions">
           <button type="button" onClick={() => setAutoRotate((value) => !value)} aria-pressed={autoRotate}>
@@ -594,7 +594,7 @@ export default function Warehouse3D() {
       </div>
 
       <div className="warehouse-stage-wrap">
-        <div ref={stageRef} className="warehouse-stage" data-testid="uniquem-warehouse-canvas">
+        <div ref={stageRef} className="warehouse-stage" data-testid="three-d-warehouse-canvas">
           {unsupported ? (
             <div className="warehouse-fallback">
               <strong>3D warehouse viewer</strong>

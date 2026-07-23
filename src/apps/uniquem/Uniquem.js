@@ -9,8 +9,6 @@ import ProductsPage from './ProductsPage';
 import ReceivingPage from './ReceivingPage';
 import ShippingPage from './ShippingPage';
 import ProductionPage from './ProductionPage';
-import Warehouse3D from './Warehouse3D';
-import Uniquem3DCreator from './Uniquem3DCreator';
 import { byId, EMPTY_DATA } from './UniquemShared';
 import './Uniquem.css';
 
@@ -50,7 +48,7 @@ export default function Uniquem({ page }) {
     catch (err) { setError(err?.message || 'Failed to load Uniquem operations.'); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { if (page !== '3d' && page !== '3d-creator') load(); }, [page, load]);
+  useEffect(() => { load(); }, [load]);
   const lookups = useMemo(() => ({ products: byId(data.products, 'productId'), warehouses: byId(data.warehouses, 'warehouseId'), batches: byId(data.batches, 'batchId') }), [data]);
   const mutate = async (endpoint, payload) => {
     setError(''); setStatus('');
@@ -72,7 +70,6 @@ export default function Uniquem({ page }) {
     } catch (err) { setError(err?.message || 'Attachment upload failed.'); return null; }
   };
   const removeAttachment = async (attachmentId) => mutate('archiveUniquemAttachment', { attachmentId });
-  if (page === '3d') return <Warehouse3D />; if (page === '3d-creator') return <Uniquem3DCreator />;
   const normalized = PAGE_META[page] ? page : 'dashboard';
   const common = { data, lookups, mutate, uploadAttachment, removeAttachment };
   const content = {
