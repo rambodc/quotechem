@@ -4,7 +4,7 @@
   align-content: start;
 }
 
-.uniquem-page-head p
+.uniquem-page-head p {
   margin: 0 0 4px;
   color: #64748b;
   font-size: 0.82rem;
@@ -13,7 +13,7 @@
   letter-spacing: 0.08em;
 }
 
-.uniquem-page-head h1,
+.uniquem-page-head h1 {
   margin: 0;
   color: #0f172a;
   font-size: 2rem;
