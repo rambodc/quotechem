@@ -4,18 +4,14 @@ export const MINI_APPS = [
   {
     id: 'uniquem',
     label: 'Uniquem',
-    description: 'Manage products, package inventory, receiving, shipping, and production.',
+    description: 'Import and review QuickBooks Desktop items.',
     icon: FiPackage,
     adminOnly: false,
     defaultVisibleForRoles: ['admin'],
     defaultPath: '/apps/uniquem/dashboard',
     navItems: [
       { path: '/apps/uniquem/dashboard', label: 'Dashboard' },
-      { path: '/apps/uniquem/products', label: 'Products' },
-      { path: '/apps/uniquem/inventory', label: 'Inventory' },
-      { path: '/apps/uniquem/receiving', label: 'Receiving' },
-      { path: '/apps/uniquem/shipping', label: 'Shipping' },
-      { path: '/apps/uniquem/production', label: 'Production' },
+      { path: '/apps/uniquem/items', label: 'Items' },
     ],
   },
   {

@@ -216,42 +216,10 @@ function App() {
             }
           />
           <Route
-            path="/apps/uniquem/products"
+            path="/apps/uniquem/items"
             element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="products">
-                <Uniquem page="products" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/uniquem/inventory"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="inventory">
-                <Uniquem page="inventory" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/uniquem/receiving"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="receiving">
-                <Uniquem page="receiving" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/uniquem/production"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="production">
-                <Uniquem page="production" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/uniquem/shipping"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="shipping">
-                <Uniquem page="shipping" />
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="items">
+                <Uniquem page="items" />
               </MiniAppRoute>
             }
           />

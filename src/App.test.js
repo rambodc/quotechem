@@ -62,155 +62,19 @@ const mockThreeDVersions = [
   },
 ];
 
-const mockUniquemOperations = {
-  products: [
-    {
-      productId: 'product-1',
-      name: 'Clay Shield',
-      description: 'Amine clay control additive.',
-      packageType: 'Bag',
-      packageAmount: 20,
-      measurementUnit: 'kg',
-      packagesPerPallet: 20,
-      status: 'active',
-    },
-    {
-      productId: 'product-2',
-      name: 'Main Hole Blend',
-      description: 'Finished blend product.',
-      packageType: 'Tote',
-      packageAmount: 1000,
-      measurementUnit: 'L',
-      packagesPerPallet: null,
-      status: 'active',
-    },
+const mockUniquemItems = {
+  fields: [
+    { header: 'Active Status', key: 'activeStatus', type: 'string' },
+    { header: 'Type', key: 'type', type: 'string' },
+    { header: 'Item', key: 'item', type: 'string' },
+    { header: 'Description', key: 'description', type: 'string' },
+    { header: 'Quantity On Hand', key: 'quantityOnHand', type: 'number' },
+    { header: 'U/M', key: 'unitOfMeasure', type: 'string' },
+    { header: 'Cost', key: 'cost', type: 'number' },
+    { header: 'Price', key: 'price', type: 'number' },
   ],
-  warehouses: [
-    {
-      warehouseId: 'warehouse-1',
-      name: 'Lloydminster',
-      code: 'LLD',
-      locations: ['Main', 'Blend Bay'],
-      status: 'active',
-    },
-  ],
-  lots: [
-    {
-      lotId: 'lot-1',
-      productId: 'product-1',
-      lotNumber: 'CLAY-001',
-      supplier: 'Supplier Co',
-      supplierLot: 'SUP-1',
-      receivedAt: '2026-06-15',
-      expiryDate: '2026-07-01',
-      status: 'active',
-    },
-  ],
-  movements: [
-    {
-      movementId: 'movement-1',
-      type: 'receipt',
-      productId: 'product-1',
-      lotId: 'lot-1',
-      warehouseId: 'warehouse-1',
-      location: 'Main',
-      quantity: 250,
-      unit: 'L',
-      createdAt: '2026-06-15T12:00:00.000Z',
-    },
-  ],
-  recipes: [
-    {
-      recipeId: 'recipe-1',
-      name: 'Main Hole Blend Recipe',
-      outputProductId: 'product-2',
-      outputQuantity: 100,
-      outputUnit: 'L',
-      inputs: [{ productId: 'product-1', quantity: 25, unit: 'L' }],
-      status: 'active',
-    },
-  ],
-  blendJobs: [
-    {
-      jobId: 'job-1',
-      name: 'Blend Job 1',
-      outputProductId: 'product-2',
-      outputQuantity: 100,
-      outputUnit: 'L',
-      warehouseId: 'warehouse-1',
-      location: 'Blend Bay',
-      inputs: [{ productId: 'product-1', lotId: 'lot-1', warehouseId: 'warehouse-1', location: 'Main', quantity: 25, unit: 'L' }],
-      status: 'planned',
-    },
-  ],
-  prices: [
-    {
-      priceId: 'price-1',
-      productId: 'product-1',
-      price: 12.5,
-      currency: 'CAD',
-      unit: 'L',
-      effectiveDate: '2026-06-15',
-      status: 'active',
-    },
-  ],
-  balances: [
-    {
-      productId: 'product-1',
-      lotId: 'lot-1',
-      warehouseId: 'warehouse-1',
-      location: 'Main',
-      quantity: 250,
-      unit: 'L',
-    },
-  ],
-  batches: [{ batchId: 'batch-1', productId: 'product-1', warehouseId: 'warehouse-1', location: 'Main', lotNumber: 'CLAY-001', packageQuantity: 12.5, sourceType: 'receipt', sourceId: 'receipt-1' }],
-  ledger: [{ ledgerId: 'ledger-1', type: 'receiving', batchId: 'batch-1', productId: 'product-1', warehouseId: 'warehouse-1', location: 'Main', packageQuantity: 12.5, referenceId: 'receipt-1', createdAt: '2026-06-15T12:00:00.000Z' }],
-  receipts: [{ receiptId: 'receipt-1', batchId: 'batch-1', productId: 'product-1', warehouseId: 'warehouse-1', location: 'Main', lotNumber: 'CLAY-001', packageQuantity: 12.5, supplier: 'Supplier Co', receivedDate: '2026-06-15', status: 'posted' }],
-  shipments: [{ shipmentId: 'shipment-1', customer: 'Field Customer', destination: 'Rig 12', shippingDate: '2026-06-16', referenceNumber: 'SHIP-1', status: 'draft', lines: [{ batchId: 'batch-1', packageQuantity: 1 }] }],
-  productionRuns: [{ runId: 'run-1', recipeId: 'recipe-1', outputPackages: 1, warehouseId: 'warehouse-1', location: 'Blend Bay', status: 'draft', allocations: [{ batchId: 'batch-1', packageQuantity: 1.25 }] }],
-  attachments: [
-    {
-      attachmentId: 'attachment-1',
-      entityType: 'product',
-      entityId: 'product-1',
-      kind: 'sds',
-      name: 'Clay Shield SDS.pdf',
-      fileName: 'Clay Shield SDS.pdf',
-      contentType: 'application/pdf',
-      size: 1200,
-      path: 'uniquem/product/product-1/attachment-1-Clay-Shield-SDS.pdf',
-      url: 'https://example.com/clay-shield-sds.pdf',
-      status: 'active',
-      uploadedAt: '2026-06-15T12:00:00.000Z',
-    },
-  ],
-  attachmentsByEntity: {
-    'product:product-1': [
-      {
-        attachmentId: 'attachment-1',
-        entityType: 'product',
-        entityId: 'product-1',
-        kind: 'sds',
-        name: 'Clay Shield SDS.pdf',
-        fileName: 'Clay Shield SDS.pdf',
-        contentType: 'application/pdf',
-        size: 1200,
-        path: 'uniquem/product/product-1/attachment-1-Clay-Shield-SDS.pdf',
-        url: 'https://example.com/clay-shield-sds.pdf',
-        status: 'active',
-        uploadedAt: '2026-06-15T12:00:00.000Z',
-      },
-    ],
-  },
-  dashboard: {
-    productCount: 2,
-    lotCount: 1,
-    onHandPositions: 1,
-    openBlendJobs: 1,
-    lowStock: [],
-    expiringLots: [],
-  },
+  items: [{ productId: 'item-1', activeStatus: 'Active', type: 'Inventory Assembly', item: 'ApHrox', description: 'ApHrox (1000L/Tote)', quantityOnHand: 0, unitOfMeasure: 'litre (l)', cost: 0, price: 3.5 }],
+  imports: [],
 };
 
 jest.mock('./firebase', () => ({
@@ -357,34 +221,7 @@ beforeEach(() => {
       });
     }
     if (path === 'acceptInvite') return Promise.resolve({ email: 'invited@example.com', customToken: 'custom-token' });
-    if (path === 'listUniquemWorkspace') {
-      return Promise.resolve(mockUniquemOperations);
-    }
-    if (
-      [
-        'saveUniquemProduct',
-        'saveUniquemWarehouse', 'deleteUniquemWarehouse', 'adjustUniquemInventory', 'createUniquemReceipt',
-        'saveUniquemShipment', 'deleteUniquemShipment', 'completeUniquemShipment',
-        'saveUniquemRecipe', 'deleteUniquemRecipe', 'saveUniquemProductionRun', 'deleteUniquemProductionRun', 'completeUniquemProductionRun', 'deleteUniquemProduct',
-        'saveUniquemAttachment',
-        'archiveUniquemAttachment',
-      ].includes(path)
-    ) {
-      return Promise.resolve(mockUniquemOperations);
-    }
-    if (path === 'createUniquemAttachmentUpload') {
-      return Promise.resolve({
-        attachmentId: 'attachment-new',
-        path: `uniquem/${body?.entityType}/${body?.entityId}/attachment-new-${body?.fileName || 'file'}`,
-        entityType: body?.entityType,
-        entityId: body?.entityId,
-        fileName: body?.fileName,
-        contentType: body?.contentType,
-      });
-    }
-    if (path === 'listUniquemAttachments') {
-      return Promise.resolve({ items: mockUniquemOperations.attachments, attachmentsByEntity: mockUniquemOperations.attachmentsByEntity });
-    }
+    if (path === 'listUniquemItems') return Promise.resolve(mockUniquemItems);
     if (path === 'listThreeDModels') {
       return Promise.resolve({ items: [mockThreeDModel] });
     }
@@ -540,14 +377,10 @@ describe('mini-app portal routing', () => {
     expect(screen.getByTestId('three-d-creator-canvas')).toBeTruthy();
   });
 
-  test('Uniquem operations pages render real inventory system views and base route opens dashboard', async () => {
+  test('Uniquem only exposes blank Dashboard and QuickBooks Items routes', async () => {
     const cases = [
       ['/apps/uniquem/dashboard', 'Dashboard'],
-      ['/apps/uniquem/products', 'Products'],
-      ['/apps/uniquem/inventory', 'Inventory'],
-      ['/apps/uniquem/receiving', 'Receiving'],
-      ['/apps/uniquem/shipping', 'Shipping'],
-      ['/apps/uniquem/production', 'Production'],
+      ['/apps/uniquem/items', 'Items'],
     ];
 
     for (const [path, title] of cases) {
@@ -559,49 +392,15 @@ describe('mini-app portal routing', () => {
     renderAt('/apps/uniquem', 'admin');
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy();
     expect(window.location.pathname).toBe('/apps/uniquem/dashboard');
+    expect(screen.getByLabelText('Blank dashboard')).toBeTruthy();
   });
 
-  test('Uniquem products use list, view, create, and edit drawers', async () => {
-    renderAt('/apps/uniquem/products', 'admin');
-    expect(await screen.findByText('20 kg per bag • 20 bags per pallet • 400 kg per pallet')).toBeTruthy();
-    expect(screen.queryByText('Clay Shield SDS.pdf')).not.toBeTruthy();
-
-    fireEvent.click(screen.getByText('Clay Shield'));
-    expect(await screen.findByRole('complementary', { name: 'View product' })).toBeTruthy();
-    expect(screen.getByText('Clay Shield SDS.pdf')).toBeTruthy();
-    expect(screen.queryByLabelText('Add SDS')).not.toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'View product' })).not.toBeTruthy());
-    fireEvent.click(screen.getByText('Clay Shield').closest('article').querySelector('button'));
-    expect(await screen.findByRole('complementary', { name: 'Edit product' })).toBeTruthy();
-    expect(screen.getByText('Add SDS')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Edit product' })).not.toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /Create Product/i }));
-    expect(await screen.findByRole('complementary', { name: 'Create product' })).toBeTruthy();
-    expect(screen.getByText('SDS')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Create product' }));
-    expect(screen.getByText('Product name is required.')).toBeTruthy();
-    expect(screen.getByText('Enter an amount greater than zero.')).toBeTruthy();
-  });
-
-  test('Uniquem inventory and production pages show ledger-backed data', async () => {
-    renderAt('/apps/uniquem/inventory', 'admin');
-    await screen.findByRole('heading', { name: 'Inventory' });
-    await waitFor(() => expect(screen.getAllByText('Clay Shield').length).toBeGreaterThan(0));
-    expect(screen.getAllByText('CLAY-001').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/12.5 packages/).length).toBeGreaterThan(0);
-
-    cleanup();
-    renderAt('/apps/uniquem/receiving', 'admin');
-    expect(await screen.findByText('Supplier Co')).toBeTruthy();
-
-    cleanup();
-    renderAt('/apps/uniquem/production', 'admin');
-    expect((await screen.findAllByText('Main Hole Blend Recipe')).length).toBeGreaterThan(0);
-    expect(screen.getByText('draft')).toBeTruthy();
+  test('Uniquem Items is read-only and displays imported QuickBooks fields', async () => {
+    renderAt('/apps/uniquem/items', 'admin');
+    expect(await screen.findByText('ApHrox')).toBeTruthy();
+    expect(screen.getAllByText('Inventory Assembly').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Upload QuickBooks CSV/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Create/i })).not.toBeTruthy();
   });
 
   test('3D Creator creates a saved model with prompt and optional image', async () => {
