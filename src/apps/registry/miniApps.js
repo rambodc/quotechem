@@ -1,4 +1,4 @@
-import { FiBox, FiDollarSign, FiPackage, FiShield, FiUser } from 'react-icons/fi';
+import { FiBox, FiPackage, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
   {
@@ -16,21 +16,6 @@ export const MINI_APPS = [
       { path: '/apps/uniquem/receiving', label: 'Receiving' },
       { path: '/apps/uniquem/shipping', label: 'Shipping' },
       { path: '/apps/uniquem/production', label: 'Production' },
-    ],
-  },
-  {
-    id: 'accounting',
-    label: 'Accounting',
-    description: 'Create test customers and products for QuickBooks Desktop IIF export.',
-    icon: FiDollarSign,
-    adminOnly: false,
-    defaultVisibleForRoles: ['admin'],
-    defaultPath: '/apps/accounting/dashboard',
-    navItems: [
-      { path: '/apps/accounting/dashboard', label: 'Dashboard' },
-      { path: '/apps/accounting/customers', label: 'Customers' },
-      { path: '/apps/accounting/products', label: 'Products' },
-      { path: '/apps/accounting/export', label: 'Export' },
     ],
   },
   {

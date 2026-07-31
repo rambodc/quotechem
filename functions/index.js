@@ -41,15 +41,3 @@ export {
   restoreThreeDModelVersion,
   archiveThreeDModel,
 } from './apps/three-d/models.js';
-export {
-  listAccountingWorkspace,
-  saveAccountingSettings,
-  saveAccountingCustomer,
-  archiveAccountingCustomer,
-  saveAccountingProduct,
-  archiveAccountingProduct,
-  createAccountingSamples,
-  exportAccountingCustomersIif,
-  exportAccountingProductsIif,
-  updateAccountingExportStatus,
-} from './apps/accounting/accounting.js';

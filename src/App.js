@@ -16,7 +16,6 @@ import { canAccessMiniApp, getMiniApp } from './apps/registry/miniApps';
 import Uniquem from './apps/uniquem';
 import ThreeD from './apps/three-d';
 import UserAccess from './admin/UserAccess';
-import Accounting from './apps/accounting';
 
 export const UserContext = createContext(null);
 
@@ -256,26 +255,6 @@ function App() {
               </MiniAppRoute>
             }
           />
-          <Route
-            path="/apps/accounting"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="accounting" appPath="overview">
-                <Navigate to="/apps/accounting/dashboard" replace />
-              </MiniAppRoute>
-            }
-          />
-          {['dashboard', 'customers', 'products', 'export'].map((page) => (
-            <Route
-              key={page}
-              path={`/apps/accounting/${page}`}
-              element={
-                <MiniAppRoute user={contextValue} checking={checkingAuth} appId="accounting" appPath={page}>
-                  <Accounting page={page} />
-                </MiniAppRoute>
-              }
-            />
-          ))}
-
           <Route
             path="/apps/3d"
             element={
