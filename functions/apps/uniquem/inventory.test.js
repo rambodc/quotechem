@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inferPackaging, calculateInventoryProduct, autoPlaceProducts, rowsOverlap, buildInventory, deterministicColor, __testables } from './inventory.js';
+import { inferPackaging, calculateInventoryProduct, autoPlaceProducts, rowsOverlap, buildInventory, deterministicColor, isLegacyTexture, __testables } from './inventory.js';
 
 const item = (overrides = {}) => ({ productId: 'p1', item: 'EpSealon', description: 'EpSealon (48 x 11.3 kg bag)/Pallet', activeStatus: 'Active', quantityOnHand: 770, unitOfMeasure: 'each (ea)', ...overrides });
+
+test('legacy cleanup recognizes every texture without the square-side v2 format', () => {
+  assert.equal(isLegacyTexture({}), true);
+  assert.equal(isLegacyTexture({ textureFormat: 'three-panel-v1' }), true);
+  assert.equal(isLegacyTexture({ textureFormat: 'square-side-v2' }), false);
+});
 
 test('packaging parser handles QuickBooks tote, bag, and pail descriptions', () => {
   assert.deepEqual(inferPackaging(item({ unitOfMeasure: 'litre (l)', quantityOnHand: 92000 })).capacity, 1000);

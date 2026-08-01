@@ -9,17 +9,17 @@ function material(color, options = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: options.roughness ?? 0.68, metalness: options.metalness ?? 0.04, transparent: options.opacity < 1, opacity: options.opacity ?? 1 });
 }
 
-function atlasMaterials(url, fallbackColor) {
+export const TEXTURED_BOX_FACE_INDEXES = [0, 1, 4, 5];
+
+function sideTextureMaterials(url, fallbackColor) {
   const faces = Array.from({ length: 6 }, () => material(fallbackColor));
   if (!url) return faces;
   new THREE.TextureLoader().load(url, (source) => {
     source.colorSpace = THREE.SRGBColorSpace;
-    // BoxGeometry groups are +X, -X, +Y, -Y, +Z, -Z. Atlas panels are front, side, top.
-    [1, 1, 2, 2, 0, 0].forEach((panel, index) => {
-      const map = source.clone(); map.repeat.set(1 / 3, 1); map.offset.set(panel / 3, 0); map.needsUpdate = true;
-      faces[index].map = map; faces[index].color.set('#ffffff'); faces[index].needsUpdate = true;
+    // BoxGeometry groups are +X, -X, +Y, -Y, +Z, -Z. Only the four vertical faces use the photo.
+    TEXTURED_BOX_FACE_INDEXES.forEach((index) => {
+      faces[index].map = source; faces[index].color.set('#ffffff'); faces[index].needsUpdate = true;
     });
-    source.dispose();
   }, undefined, () => {});
   return faces;
 }
@@ -31,7 +31,7 @@ export function isTapGesture(start, end) {
 
 function addLoads(group, product) {
   const tote = product.packaging.representation === 'tote';
-  const loadMaterial = !tote && product.approvedTexture?.url ? atlasMaterials(product.approvedTexture.url, product.color) : material(product.color);
+  const loadMaterial = !tote && product.approvedTexture?.url ? sideTextureMaterials(product.approvedTexture.url, product.color) : material(product.color);
   const loads = new THREE.InstancedMesh(sharedBox, loadMaterial, product.loadCount);
   const pallets = tote ? null : new THREE.InstancedMesh(sharedBox, material('#8b5a2b'), product.loadCount);
   const cages = tote ? new THREE.InstancedMesh(sharedBox, new THREE.MeshBasicMaterial({ color: '#dbeafe', wireframe: true }), product.loadCount) : null;
@@ -74,8 +74,9 @@ function addSelectionVisual(engine, product, group) {
 }
 
 function dispose(root) {
+  const disposedMaps = new Set();
   root.traverse((object) => {
-    if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach((entry) => { entry.map?.dispose(); entry.dispose(); });
+    if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach((entry) => { if (entry.map && !disposedMaps.has(entry.map)) { disposedMaps.add(entry.map); entry.map.dispose(); } entry.dispose(); });
     if (object.userData.texture) object.userData.texture.dispose();
     if (object.geometry && object.geometry !== sharedBox) object.geometry.dispose();
   });

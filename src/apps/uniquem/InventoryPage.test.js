@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import InventoryPage from './InventoryPage';
-import { isTapGesture } from './InventoryScene';
+import { isTapGesture, TEXTURED_BOX_FACE_INDEXES } from './InventoryScene';
 import { postJson } from '../../lib/api';
 
 jest.mock('../../lib/api', () => ({ endpointBase: jest.fn(() => 'https://api.example.test'), postJson: jest.fn() }));
@@ -56,6 +56,12 @@ test('touch and mouse selection distinguish taps from orbit gestures', () => {
   expect(isTapGesture({ x: 10, y: 10, time: 0 }, { x: 10, y: 10, time: 900 })).toBe(false);
 });
 
+test('single square texture maps only to four vertical BoxGeometry faces', () => {
+  expect(TEXTURED_BOX_FACE_INDEXES).toEqual([0, 1, 4, 5]);
+  expect(TEXTURED_BOX_FACE_INDEXES).not.toContain(2);
+  expect(TEXTURED_BOX_FACE_INDEXES).not.toContain(3);
+});
+
 test('keeps reset camera while removing redundant focus and resume controls', async () => {
   render(<InventoryPage />); await screen.findByText('3D view unavailable');
   fireEvent.click(screen.getAllByRole('button', { name: /EpSealon · 17 loads/i })[0]);
@@ -67,19 +73,30 @@ test('keeps reset camera while removing redundant focus and resume controls', as
 test('validates pallet references and previews a generated draft before approval', async () => {
   postJson.mockImplementation((path) => {
     if (path === 'getUniquemInventory') return Promise.resolve(response);
-    if (path === 'uploadUniquemPalletTextureSources') return Promise.resolve({ texture: { textureId: 'texture-1', productId: 'ep', status: 'Draft' } });
-    if (path === 'generateUniquemPalletTexture') return Promise.resolve({ texture: { textureId: 'texture-1', productId: 'ep', status: 'Draft', generatedToken: 'token-1' } });
+    if (path === 'uploadUniquemPalletTextureSources') return Promise.resolve({ texture: { textureId: 'texture-1', productId: 'ep', textureFormat: 'square-side-v2', status: 'Draft' } });
+    if (path === 'generateUniquemPalletTexture') return Promise.resolve({ texture: { textureId: 'texture-1', productId: 'ep', textureFormat: 'square-side-v2', status: 'Draft', generatedToken: 'token-1' } });
     if (path === 'approveUniquemPalletTexture') return Promise.resolve({ approved: true });
     return Promise.resolve(response);
   });
   render(<InventoryPage />); await screen.findByText('3D view unavailable');
   fireEvent.click(screen.getByRole('button', { name: 'Customize products' }));
   fireEvent.click(screen.getAllByRole('button', { name: /EpSealon · 17 loads/i })[0]);
-  expect(screen.getByAltText(/Example front, side, and top pallet texture atlas/i)).toBeTruthy();
+  expect(screen.getByAltText(/Example square staggered bag-side texture/i)).toBeTruthy();
   const file = new File(['image'], 'pallet.webp', { type: 'image/webp' });
   fireEvent.change(screen.getByLabelText('Pallet reference photos'), { target: { files: [file] } });
   fireEvent.click(screen.getByRole('button', { name: 'Generate texture draft' }));
-  expect(await screen.findByAltText('Generated pallet texture draft')).toBeTruthy();
+  expect(await screen.findByAltText('Generated square staggered bag-side texture draft')).toBeTruthy();
+  expect(screen.getByLabelText(/Rotating preview with the side texture on four faces/i)).toBeTruthy();
+  expect(document.querySelectorAll('[data-face]').length).toBe(6);
   fireEvent.click(screen.getByRole('button', { name: 'Approve and apply' }));
   await waitFor(() => expect(postJson).toHaveBeenCalledWith('approveUniquemPalletTexture', { productId: 'ep', textureId: 'texture-1', revision: 'revision-1' }, { authed: true }));
+});
+
+test('requires exactly one pallet reference photo', async () => {
+  render(<InventoryPage />); await screen.findByText('3D view unavailable');
+  fireEvent.click(screen.getByRole('button', { name: 'Customize products' }));
+  fireEvent.click(screen.getAllByRole('button', { name: /EpSealon · 17 loads/i })[0]);
+  const first = new File(['one'], 'one.webp', { type: 'image/webp' }); const second = new File(['two'], 'two.webp', { type: 'image/webp' });
+  fireEvent.change(screen.getByLabelText('Pallet reference photos'), { target: { files: [first, second] } });
+  expect(screen.getByRole('alert').textContent).toContain('Choose exactly one reference image.');
 });

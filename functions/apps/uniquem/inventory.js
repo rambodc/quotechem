@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { admin, db } from '../../core/firebase.js';
+import { admin, db, storage } from '../../core/firebase.js';
 import { miniAppHandler } from '../../core/http.js';
 import { catalogRevision } from './items.js';
 
@@ -7,10 +7,12 @@ const ITEMS = 'uniquemItems';
 const LAYOUTS = 'uniquemInventoryLayouts';
 const TEXTURES = 'uniquemInventoryTextures';
 const CURRENT_LAYOUT = 'current';
+const TEXTURE_FORMAT = 'square-side-v2';
 const ROW_GAP = 1.4;
 const MAX_LOADS = 2500;
 const COLORS = ['#0f766e', '#2563eb', '#7c3aed', '#c2410c', '#be123c', '#4d7c0f', '#0369a1', '#a16207'];
 const handler = (work) => miniAppHandler('uniquem', work);
+export const isLegacyTexture = (value = {}) => value.textureFormat !== TEXTURE_FORMAT;
 
 function invalid(message, status = 400) {
   throw Object.assign(new Error(message), { status });
@@ -193,17 +195,35 @@ async function addTextureMetadata(result) {
   const byId = new Map();
   for (const doc of docs) {
     if (!doc.exists) continue; const data = doc.data() || {};
-    if (data.status !== 'Approved' || !data.generatedPath || !data.generatedToken) continue;
-    byId.set(doc.id, { textureId: doc.id, generatedToken: data.generatedToken, status: data.status });
+    if (data.textureFormat !== TEXTURE_FORMAT || data.status !== 'Approved' || !data.generatedPath || !data.generatedToken) continue;
+    byId.set(doc.id, { textureId: doc.id, textureFormat: data.textureFormat, generatedToken: data.generatedToken, status: data.status });
   }
   const draftsByProduct = new Map();
   for (const doc of draftsSnap.docs) {
-    const data = doc.data() || {}; if (data.generationStatus !== 'Generated' || !data.generatedToken) continue;
-    const candidate = { textureId: doc.id, productId: data.productId, status: data.status, generationStatus: data.generationStatus, generatedToken: data.generatedToken, updatedMillis: data.updatedAt?.toMillis?.() || 0 };
+    const data = doc.data() || {}; if (data.textureFormat !== TEXTURE_FORMAT || data.generationStatus !== 'Generated' || !data.generatedToken) continue;
+    const candidate = { textureId: doc.id, productId: data.productId, textureFormat: data.textureFormat, status: data.status, generationStatus: data.generationStatus, generatedToken: data.generatedToken, updatedMillis: data.updatedAt?.toMillis?.() || 0 };
     if (!draftsByProduct.has(data.productId) || draftsByProduct.get(data.productId).updatedMillis < candidate.updatedMillis) draftsByProduct.set(data.productId, candidate);
   }
   const decorate = (item) => ({ ...item, approvedTexture: byId.get(item.approvedTextureId) || null, draftTexture: draftsByProduct.get(item.productId) || null });
   return { ...result, products: result.products.map(decorate), hiddenProducts: result.hiddenProducts.map(decorate) };
+}
+
+async function cleanupLegacyTextures(user) {
+  const layoutRef = db.collection(LAYOUTS).doc(CURRENT_LAYOUT); const layoutSnap = await layoutRef.get(); const layout = layoutSnap.exists ? layoutSnap.data() : {};
+  if (layout.textureCleanupVersion === TEXTURE_FORMAT) return false;
+  const textureSnap = await db.collection(TEXTURES).get(); const legacy = textureSnap.docs.filter((doc) => isLegacyTexture(doc.data())); const legacyIds = new Set(legacy.map((doc) => doc.id));
+  if (legacyIds.size) {
+    await db.runTransaction(async (tx) => {
+      const currentSnap = await tx.get(layoutRef); const current = currentSnap.exists ? currentSnap.data() : {}; const products = { ...(current.products || {}) }; let changed = false;
+      for (const [productId, setting] of Object.entries(products)) if (legacyIds.has(setting?.approvedTextureId)) { products[productId] = { ...setting, approvedTextureId: null }; changed = true; }
+      if (changed) tx.set(layoutRef, { ...current, products, layoutRevision: randomUUID(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid, updatedByEmail: user.email || '' }, { merge: false });
+    });
+    const bucket = storage.bucket();
+    await Promise.all(legacy.flatMap((doc) => { const data = doc.data() || {}; return [...(data.sourcePaths || []), data.generatedPath].filter(Boolean).map((path) => bucket.file(path).delete({ ignoreNotFound: true })); }));
+    for (let index = 0; index < legacy.length; index += 400) { const batch = db.batch(); legacy.slice(index, index + 400).forEach((doc) => batch.delete(doc.ref)); await batch.commit(); }
+  }
+  await layoutRef.set({ textureCleanupVersion: TEXTURE_FORMAT, textureCleanupAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return legacyIds.size > 0;
 }
 
 async function ensureAutomaticPlacements(user) {
@@ -221,6 +241,7 @@ async function ensureAutomaticPlacements(user) {
 }
 
 export const getUniquemInventory = handler(async (req, user) => {
+  await cleanupLegacyTextures(user);
   await ensureAutomaticPlacements(user);
   const loaded = await loadInventory();
   return addTextureMetadata({ products: loaded.products, hiddenProducts: loaded.hiddenProducts, floor: loaded.floor, revision: loaded.revision, updatedAt: loaded.layout.updatedAt?.toDate?.().toISOString() || null, updatedByEmail: loaded.layout.updatedByEmail || '' });
@@ -250,4 +271,4 @@ export const saveUniquemInventoryLayout = handler(async (req, user) => {
   return addTextureMetadata({ products: loaded.products, hiddenProducts: loaded.hiddenProducts, floor: loaded.floor, revision: loaded.revision, updatedAt: loaded.layout.updatedAt?.toDate?.().toISOString() || null, updatedByEmail: loaded.layout.updatedByEmail || user.email || '' });
 });
 
-export const __testables = { safeSetting, revision, rotatedFootprint, defaultSavedSetting };
+export const __testables = { safeSetting, revision, rotatedFootprint, defaultSavedSetting, cleanupLegacyTextures };
