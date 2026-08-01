@@ -50,7 +50,7 @@ test('compact warehouse placement, colors, and collision checks are deterministi
   assert.ok(Number.isFinite(placed[0].position.x));
   assert.notDeepEqual(placed[1].position, placed[0].position);
   assert.equal(rowsOverlap({ ...placed[0], position: { x: 0, z: 0 } }, { ...placed[1], position: { x: 0, z: 0 } }), true);
-  assert.deepEqual(__testables.safeSetting({ position: { x: 2, z: 3 }, rotation: 90, color: '#abcdef', visible: true }, 'p1'), { color: '#abcdef', visible: true, packaging: null });
+  assert.deepEqual(__testables.safeSetting({ position: { x: 2, z: 3 }, rotation: 90, color: '#abcdef', visible: true }, 'p1'), { color: '#abcdef', visible: true, packaging: null, approvedTextureId: null });
   assert.throws(() => __testables.safeSetting({ color: 'red' }, 'p1'));
 });
 
@@ -72,5 +72,5 @@ test('inventory revision changes for item imports and shared layout saves', () =
 
 test('automatic placements are persistable and preserve stable row metadata', () => {
   const product = buildInventory([item()], {}).products[0];
-  assert.deepEqual(__testables.defaultSavedSetting(product), { color: product.color, visible: true, packaging: null });
+  assert.deepEqual(__testables.defaultSavedSetting(product), { color: product.color, visible: true, packaging: null, approvedTextureId: null });
 });

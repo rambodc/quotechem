@@ -1,0 +1,47 @@
+.inventory-texture-editor {
+  display: grid;
+  gap: 9px;
+  margin-top: 5px;
+  padding-top: 14px;
+  border-top: 1px solid #dce3ec;
+}
+
+.inventory-texture-editor > strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #183047;
+}
+
+.inventory-texture-editor p,
+.inventory-texture-note {
+  margin: 0;
+  color: #64748b;
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.inventory-texture-sample,
+.inventory-texture-preview img,
+.inventory-approved-texture img {
+  display: block;
+  width: 100%;
+  border: 1px solid #dce3ec;
+  border-radius: 9px;
+  background: #e5e7eb;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.inventory-texture-sample { max-height: 150px; object-position: center; }
+.inventory-texture-upload input { padding: 7px; background: #f8fafc; }
+.inventory-texture-preview,
+.inventory-approved-texture { display: grid; gap: 8px; }
+.inventory-texture-preview > div { display: flex; gap: 7px; }
+.inventory-texture-preview button { flex: 1; }
+.inventory-approved-texture > span { color: #0f766e; font-size: .78rem; font-weight: 800; }
+
+@media (max-width: 620px) {
+  .inventory-page .inventory-canvas,
+  .inventory-page .inventory-loading { height: 360px; }
+}

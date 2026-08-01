@@ -55,3 +55,31 @@ test('touch and mouse selection distinguish taps from orbit gestures', () => {
   expect(isTapGesture({ x: 10, y: 10, time: 0 }, { x: 35, y: 10, time: 300 })).toBe(false);
   expect(isTapGesture({ x: 10, y: 10, time: 0 }, { x: 10, y: 10, time: 900 })).toBe(false);
 });
+
+test('keeps reset camera while removing redundant focus and resume controls', async () => {
+  render(<InventoryPage />); await screen.findByText('3D view unavailable');
+  fireEvent.click(screen.getAllByRole('button', { name: /EpSealon · 17 loads/i })[0]);
+  expect(screen.getByRole('button', { name: 'Reset camera' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Focus selected' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Resume orbit' })).toBeNull();
+});
+
+test('validates pallet references and previews a generated draft before approval', async () => {
+  postJson.mockImplementation((path) => {
+    if (path === 'getUniquemInventory') return Promise.resolve(response);
+    if (path === 'uploadUniquemPalletTextureSources') return Promise.resolve({ texture: { textureId: 'texture-1', status: 'Draft' } });
+    if (path === 'generateUniquemPalletTexture') return Promise.resolve({ texture: { textureId: 'texture-1', status: 'Draft', generatedUrl: 'https://example.test/atlas.webp' } });
+    if (path === 'approveUniquemPalletTexture') return Promise.resolve({ approved: true });
+    return Promise.resolve(response);
+  });
+  render(<InventoryPage />); await screen.findByText('3D view unavailable');
+  fireEvent.click(screen.getByRole('button', { name: 'Customize products' }));
+  fireEvent.click(screen.getAllByRole('button', { name: /EpSealon · 17 loads/i })[0]);
+  expect(screen.getByAltText(/Example front, side, and top pallet texture atlas/i)).toBeTruthy();
+  const file = new File(['image'], 'pallet.webp', { type: 'image/webp' });
+  fireEvent.change(screen.getByLabelText('Pallet reference photos'), { target: { files: [file] } });
+  fireEvent.click(screen.getByRole('button', { name: 'Generate texture draft' }));
+  expect(await screen.findByAltText('Generated pallet texture draft')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Approve and apply' }));
+  await waitFor(() => expect(postJson).toHaveBeenCalledWith('approveUniquemPalletTexture', { productId: 'ep', textureId: 'texture-1', revision: 'revision-1' }, { authed: true }));
+});

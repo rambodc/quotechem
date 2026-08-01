@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { admin, db } from '../../core/firebase.js';
+import { admin, db, storage } from '../../core/firebase.js';
 import { miniAppHandler } from '../../core/http.js';
 import { catalogRevision } from './items.js';
 
 const ITEMS = 'uniquemItems';
 const LAYOUTS = 'uniquemInventoryLayouts';
+const TEXTURES = 'uniquemInventoryTextures';
 const CURRENT_LAYOUT = 'current';
 const ROW_GAP = 1.4;
 const MAX_LOADS = 2500;
@@ -82,6 +83,7 @@ export function calculateInventoryProduct(item, setting = {}) {
     unitOfMeasure: item.unitOfMeasure || null,
     visible: true,
     color: setting.color || deterministicColor(item.productId),
+    approvedTextureId: setting.approvedTextureId || null,
     position: null,
     rotation: 0,
     packaging,
@@ -128,7 +130,7 @@ export function autoPlaceProducts(products = []) {
   return placed.map((product) => ({ ...product, position: { x: product.position.x - centreX, z: product.position.z - centreZ } }));
 }
 
-function safeSetting(value = {}, productId) {
+function safeSetting(value = {}, productId, current = {}) {
   const color = String(value.color || '');
   if (!/^#[0-9a-f]{6}$/i.test(color)) invalid(`Invalid color for ${productId}.`);
   const packaging = value.packaging && typeof value.packaging === 'object' ? value.packaging : null;
@@ -144,10 +146,12 @@ function safeSetting(value = {}, productId) {
       ...(packaging.representation === 'tote' ? { capacityPerTote: packaging.capacityPerTote } : { unitsPerPallet: packaging.unitsPerPallet }),
     };
   }
-  return { color: color.toLowerCase(), visible: value.visible !== false, packaging: normalizedPackaging };
+  const approvedTextureId = value.approvedTextureId == null ? null : String(value.approvedTextureId);
+  if (approvedTextureId !== (current.approvedTextureId || null)) invalid(`Texture assignments for ${productId} must be changed through texture approval.`, 409);
+  return { color: color.toLowerCase(), visible: value.visible !== false, packaging: normalizedPackaging, approvedTextureId };
 }
 
-function revision(items, layout = {}) {
+export function revision(items, layout = {}) {
   return createHash('sha256').update(JSON.stringify({ catalog: catalogRevision(items), layoutRevision: layout.layoutRevision || '' })).digest('hex');
 }
 
@@ -176,7 +180,22 @@ async function loadInventory(tx = null) {
 }
 
 function defaultSavedSetting(product) {
-  return { color: product.color, visible: true, packaging: null };
+  return { color: product.color, visible: true, packaging: null, approvedTextureId: null };
+}
+
+async function addTextureMetadata(result) {
+  const all = [...result.products, ...result.hiddenProducts];
+  const ids = [...new Set(all.map((item) => item.approvedTextureId).filter(Boolean))];
+  const docs = await Promise.all(ids.map((id) => db.collection(TEXTURES).doc(id).get()));
+  const bucketName = storage.bucket().name; const byId = new Map();
+  for (const doc of docs) {
+    if (!doc.exists) continue; const data = doc.data() || {};
+    if (data.status !== 'Approved' || !data.generatedPath || !data.generatedToken) continue;
+    const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName)}/o/${encodeURIComponent(data.generatedPath)}?alt=media&token=${encodeURIComponent(data.generatedToken)}`;
+    byId.set(doc.id, { textureId: doc.id, url, status: data.status });
+  }
+  const decorate = (item) => ({ ...item, approvedTexture: byId.get(item.approvedTextureId) || null });
+  return { ...result, products: result.products.map(decorate), hiddenProducts: result.hiddenProducts.map(decorate) };
 }
 
 async function ensureAutomaticPlacements(user) {
@@ -196,7 +215,7 @@ async function ensureAutomaticPlacements(user) {
 export const getUniquemInventory = handler(async (req, user) => {
   await ensureAutomaticPlacements(user);
   const loaded = await loadInventory();
-  return { products: loaded.products, hiddenProducts: loaded.hiddenProducts, floor: loaded.floor, revision: loaded.revision, updatedAt: loaded.layout.updatedAt?.toDate?.().toISOString() || null, updatedByEmail: loaded.layout.updatedByEmail || '' };
+  return addTextureMetadata({ products: loaded.products, hiddenProducts: loaded.hiddenProducts, floor: loaded.floor, revision: loaded.revision, updatedAt: loaded.layout.updatedAt?.toDate?.().toISOString() || null, updatedByEmail: loaded.layout.updatedByEmail || '' });
 });
 
 export const saveUniquemInventoryLayout = handler(async (req, user) => {
@@ -210,7 +229,7 @@ export const saveUniquemInventoryLayout = handler(async (req, user) => {
     const retained = { ...(loaded.layout.products || {}) };
     for (const [productId, value] of Object.entries(incoming)) {
       if (!itemsById.has(productId)) invalid(`Unknown inventory item ${productId}.`, 409);
-      retained[productId] = safeSetting(value, productId);
+      retained[productId] = safeSetting(value, productId, retained[productId] || {});
     }
     const calculated = buildInventory(loaded.items, { products: retained }).products;
     for (let left = 0; left < calculated.length; left += 1) for (let right = left + 1; right < calculated.length; right += 1) {
@@ -220,7 +239,7 @@ export const saveUniquemInventoryLayout = handler(async (req, user) => {
     tx.set(loaded.layoutRef, { products: retained, layoutRevision, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid, updatedByEmail: user.email || '' }, { merge: false });
   });
   const loaded = await loadInventory();
-  return { products: loaded.products, hiddenProducts: loaded.hiddenProducts, floor: loaded.floor, revision: loaded.revision, updatedAt: loaded.layout.updatedAt?.toDate?.().toISOString() || null, updatedByEmail: loaded.layout.updatedByEmail || user.email || '' };
+  return addTextureMetadata({ products: loaded.products, hiddenProducts: loaded.hiddenProducts, floor: loaded.floor, revision: loaded.revision, updatedAt: loaded.layout.updatedAt?.toDate?.().toISOString() || null, updatedByEmail: loaded.layout.updatedByEmail || user.email || '' });
 });
 
 export const __testables = { safeSetting, revision, rotatedFootprint, defaultSavedSetting };

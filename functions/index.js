@@ -17,6 +17,13 @@ export {
 } from './apps/uniquem/items.js';
 export { getUniquemInventory, saveUniquemInventoryLayout } from './apps/uniquem/inventory.js';
 export {
+  uploadUniquemPalletTextureSources,
+  generateUniquemPalletTexture,
+  approveUniquemPalletTexture,
+  removeUniquemPalletTexture,
+  discardUniquemPalletTextureDraft,
+} from './apps/uniquem/textures.js';
+export {
   generateThreeDScene,
   listThreeDModels,
   getThreeDModel,
