@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { admin, db, storage } from '../../core/firebase.js';
+import { admin, db } from '../../core/firebase.js';
 import { miniAppHandler } from '../../core/http.js';
 import { catalogRevision } from './items.js';
 
@@ -186,15 +186,23 @@ function defaultSavedSetting(product) {
 async function addTextureMetadata(result) {
   const all = [...result.products, ...result.hiddenProducts];
   const ids = [...new Set(all.map((item) => item.approvedTextureId).filter(Boolean))];
-  const docs = await Promise.all(ids.map((id) => db.collection(TEXTURES).doc(id).get()));
-  const bucketName = storage.bucket().name; const byId = new Map();
+  const [docs, draftsSnap] = await Promise.all([
+    Promise.all(ids.map((id) => db.collection(TEXTURES).doc(id).get())),
+    db.collection(TEXTURES).where('status', '==', 'Draft').limit(200).get(),
+  ]);
+  const byId = new Map();
   for (const doc of docs) {
     if (!doc.exists) continue; const data = doc.data() || {};
     if (data.status !== 'Approved' || !data.generatedPath || !data.generatedToken) continue;
-    const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName)}/o/${encodeURIComponent(data.generatedPath)}?alt=media&token=${encodeURIComponent(data.generatedToken)}`;
-    byId.set(doc.id, { textureId: doc.id, url, status: data.status });
+    byId.set(doc.id, { textureId: doc.id, generatedToken: data.generatedToken, status: data.status });
   }
-  const decorate = (item) => ({ ...item, approvedTexture: byId.get(item.approvedTextureId) || null });
+  const draftsByProduct = new Map();
+  for (const doc of draftsSnap.docs) {
+    const data = doc.data() || {}; if (data.generationStatus !== 'Generated' || !data.generatedToken) continue;
+    const candidate = { textureId: doc.id, productId: data.productId, status: data.status, generationStatus: data.generationStatus, generatedToken: data.generatedToken, updatedMillis: data.updatedAt?.toMillis?.() || 0 };
+    if (!draftsByProduct.has(data.productId) || draftsByProduct.get(data.productId).updatedMillis < candidate.updatedMillis) draftsByProduct.set(data.productId, candidate);
+  }
+  const decorate = (item) => ({ ...item, approvedTexture: byId.get(item.approvedTextureId) || null, draftTexture: draftsByProduct.get(item.productId) || null });
   return { ...result, products: result.products.map(decorate), hiddenProducts: result.hiddenProducts.map(decorate) };
 }
 

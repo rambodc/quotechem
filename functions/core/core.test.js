@@ -27,11 +27,11 @@ function responseStub() {
   };
 }
 
-test('shared CORS helper exposes POST and preflight headers', () => {
+test('shared CORS helper exposes GET, POST, and preflight headers', () => {
   const response = responseStub();
   setCors(response);
   assert.equal(response.headers['Access-Control-Allow-Origin'], '*');
-  assert.equal(response.headers['Access-Control-Allow-Methods'], 'POST, OPTIONS');
+  assert.equal(response.headers['Access-Control-Allow-Methods'], 'GET, POST, OPTIONS');
 });
 
 test('shared preflight helper returns an empty 204 response', () => {

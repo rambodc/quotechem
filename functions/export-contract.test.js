@@ -19,6 +19,7 @@ const EXPECTED_EXPORTS = [
   'generateUniquemPalletTexture',
   'getThreeDModel',
   'getUniquemInventory',
+  'getUniquemPalletTexture',
   'listThreeDModels',
   'listUniquemItems',
   'previewInvite',

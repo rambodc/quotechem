@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { defineSecret } from 'firebase-functions/params';
+import { onRequest } from 'firebase-functions/v2/https';
 import { admin, db, storage } from '../../core/firebase.js';
-import { miniAppHandler } from '../../core/http.js';
+import { miniAppHandler, REGION, setCors } from '../../core/http.js';
 
 const ITEMS = 'uniquemItems';
 const TEXTURES = 'uniquemInventoryTextures';
@@ -65,13 +66,28 @@ async function existingItem(productId) {
 
 async function textureResult(doc) {
   const value = doc.data() || {};
-  const bucket = storage.bucket();
   return {
     textureId: doc.id, productId: value.productId, status: value.status || 'Draft', generationStatus: value.generationStatus || 'Uploaded',
     sourceCount: value.sourcePaths?.length || 0, createdAt: value.createdAt?.toDate?.().toISOString() || null,
-    generatedUrl: value.generatedPath && value.generatedToken ? downloadUrl(bucket.name, value.generatedPath, value.generatedToken) : null,
+    generatedToken: value.generatedPath && value.generatedToken ? value.generatedToken : null,
   };
 }
+
+export const getUniquemPalletTexture = onRequest({ region: REGION }, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'GET') return res.status(405).send('Method not allowed');
+  const textureId = clean(req.query?.textureId); const token = clean(req.query?.token);
+  if (!textureId || !token) return res.status(404).send('Texture not found');
+  const snap = await db.collection(TEXTURES).doc(textureId).get(); const value = snap.data() || {};
+  if (!snap.exists || !value.generatedPath || value.generatedToken !== token || !['Draft', 'Approved'].includes(value.status)) return res.status(404).send('Texture not found');
+  try {
+    const [bytes] = await storage.bucket().file(value.generatedPath).download();
+    return res.set('Content-Type', 'image/webp').set('Cache-Control', value.status === 'Approved' ? 'public, max-age=86400, immutable' : 'private, no-store').status(200).send(bytes);
+  } catch {
+    return res.status(404).send('Texture not found');
+  }
+});
 
 export const uploadUniquemPalletTextureSources = handler(async (req, user) => {
   const productId = clean(req.body?.productId);

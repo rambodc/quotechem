@@ -4,7 +4,7 @@ import InventoryPage from './InventoryPage';
 import { isTapGesture } from './InventoryScene';
 import { postJson } from '../../lib/api';
 
-jest.mock('../../lib/api', () => ({ postJson: jest.fn() }));
+jest.mock('../../lib/api', () => ({ endpointBase: jest.fn(() => 'https://api.example.test'), postJson: jest.fn() }));
 jest.mock('three/examples/jsm/controls/OrbitControls', () => ({ OrbitControls: jest.fn() }));
 
 const epsealon = { productId: 'ep', item: 'EpSealon', description: 'EpSealon (48 x 11.3 kg bag)/Pallet', quantityOnHand: 770, unitOfMeasure: 'each (ea)', visible: true, color: '#2563eb', position: { x: 0, z: 0 }, rotation: 0, packaging: { representation: 'pallet', capacity: 48, packageLabel: 'bags', resolved: true, source: 'description', inferred: true }, loadCount: 17, stackCount: 6, stackLimit: 3, columns: 3, rows: 2, partial: true, finalLoadQuantity: 2, finalLoadPercent: 4.2, footprint: { width: 4.05, depth: 2.7 } };
@@ -67,8 +67,8 @@ test('keeps reset camera while removing redundant focus and resume controls', as
 test('validates pallet references and previews a generated draft before approval', async () => {
   postJson.mockImplementation((path) => {
     if (path === 'getUniquemInventory') return Promise.resolve(response);
-    if (path === 'uploadUniquemPalletTextureSources') return Promise.resolve({ texture: { textureId: 'texture-1', status: 'Draft' } });
-    if (path === 'generateUniquemPalletTexture') return Promise.resolve({ texture: { textureId: 'texture-1', status: 'Draft', generatedUrl: 'https://example.test/atlas.webp' } });
+    if (path === 'uploadUniquemPalletTextureSources') return Promise.resolve({ texture: { textureId: 'texture-1', productId: 'ep', status: 'Draft' } });
+    if (path === 'generateUniquemPalletTexture') return Promise.resolve({ texture: { textureId: 'texture-1', productId: 'ep', status: 'Draft', generatedToken: 'token-1' } });
     if (path === 'approveUniquemPalletTexture') return Promise.resolve({ approved: true });
     return Promise.resolve(response);
   });

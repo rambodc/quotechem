@@ -18,6 +18,7 @@ export {
 export { getUniquemInventory, saveUniquemInventoryLayout } from './apps/uniquem/inventory.js';
 export {
   uploadUniquemPalletTextureSources,
+  getUniquemPalletTexture,
   generateUniquemPalletTexture,
   approveUniquemPalletTexture,
   removeUniquemPalletTexture,
