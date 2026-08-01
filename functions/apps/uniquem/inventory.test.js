@@ -12,14 +12,19 @@ test('packaging parser handles QuickBooks tote, bag, and pail descriptions', () 
   assert.equal(inferPackaging(item({ description: 'Unknown powder', unitOfMeasure: 'kilogram (kg)' })).resolved, false);
 });
 
-test('load calculation produces partial pallets and triple-stacked totes', () => {
+test('load calculation produces compact triple-stacked pallets and totes', () => {
   const pallet = calculateInventoryProduct(item());
   assert.equal(pallet.loadCount, 17);
+  assert.equal(pallet.stackCount, 6);
+  assert.equal(pallet.stackLimit, 3);
+  assert.deepEqual({ columns: pallet.columns, rows: pallet.rows }, { columns: 3, rows: 2 });
   assert.equal(pallet.finalLoadQuantity, 2);
   assert.equal(pallet.finalLoadPercent, 4.2);
   const tote = calculateInventoryProduct(item({ item: 'Choline Chloride', quantityOnHand: 92000, unitOfMeasure: 'litre (l)' }));
   assert.equal(tote.loadCount, 92);
-  assert.equal(tote.columns, 31);
+  assert.equal(tote.stackCount, 31);
+  assert.equal(tote.columns, 6);
+  assert.equal(tote.rows, 6);
   assert.equal(tote.stackLimit, 3);
 });
 
@@ -38,24 +43,24 @@ test('inactive and zero-stock products remain hidden', () => {
   assert.match(calculateInventoryProduct(item(), { visible: false }).hiddenReason, /Hidden from 3D/);
 });
 
-test('layout placement, rotation, colors, and collision checks are deterministic', () => {
+test('compact warehouse placement, colors, and collision checks are deterministic', () => {
   assert.equal(deterministicColor('stable-id'), deterministicColor('stable-id'));
   const base = calculateInventoryProduct(item({ quantityOnHand: 48 }));
   const placed = autoPlaceProducts([{ ...base }, { ...base, productId: 'p2', item: 'Second' }]);
-  assert.deepEqual(placed[0].position, { x: 0, z: 0 });
+  assert.ok(Number.isFinite(placed[0].position.x));
   assert.notDeepEqual(placed[1].position, placed[0].position);
   assert.equal(rowsOverlap({ ...placed[0], position: { x: 0, z: 0 } }, { ...placed[1], position: { x: 0, z: 0 } }), true);
-  assert.doesNotThrow(() => __testables.safeSetting({ position: { x: 2, z: 3 }, rotation: 90, color: '#abcdef', visible: true }, 'p1'));
-  assert.throws(() => __testables.safeSetting({ position: { x: 2.5, z: 3 }, rotation: 45, color: 'red' }, 'p1'));
+  assert.deepEqual(__testables.safeSetting({ position: { x: 2, z: 3 }, rotation: 90, color: '#abcdef', visible: true }, 'p1'), { color: '#abcdef', visible: true, packaging: null });
+  assert.throws(() => __testables.safeSetting({ color: 'red' }, 'p1'));
 });
 
-test('saved rows stay stable as quantities change and the floor expands', () => {
+test('automatic blocks respond to quantities while customization stays stable', () => {
   const layout = { products: { p1: { position: { x: 7, z: 9 }, rotation: 90, color: '#112233', visible: true, packaging: null } } };
   const first = buildInventory([item({ quantityOnHand: 48 })], layout);
   const changed = buildInventory([item({ quantityOnHand: 480 })], layout);
-  assert.deepEqual(changed.products[0].position, first.products[0].position);
   assert.equal(changed.products[0].color, '#112233');
-  assert.ok(changed.floor.depth >= first.floor.depth);
+  assert.ok(changed.products[0].footprint.width >= first.products[0].footprint.width);
+  assert.equal(changed.products[0].rotation, 0);
 });
 
 test('inventory revision changes for item imports and shared layout saves', () => {
@@ -67,5 +72,5 @@ test('inventory revision changes for item imports and shared layout saves', () =
 
 test('automatic placements are persistable and preserve stable row metadata', () => {
   const product = buildInventory([item()], {}).products[0];
-  assert.deepEqual(__testables.defaultSavedSetting(product), { position: product.position, rotation: 0, color: product.color, visible: true, packaging: null });
+  assert.deepEqual(__testables.defaultSavedSetting(product), { color: product.color, visible: true, packaging: null });
 });

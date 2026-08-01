@@ -1,44 +1,49 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 const sharedBox = new THREE.BoxGeometry(1, 1, 1);
+const TAP_DISTANCE = 8;
 
-function material(color, opacity = 1) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.04, transparent: opacity < 1, opacity });
+function material(color, options = {}) {
+  return new THREE.MeshStandardMaterial({ color, roughness: options.roughness ?? 0.68, metalness: options.metalness ?? 0.04, transparent: options.opacity < 1, opacity: options.opacity ?? 1 });
+}
+
+export function isTapGesture(start, end) {
+  if (!start || !end) return false;
+  return Math.hypot(end.x - start.x, end.y - start.y) <= TAP_DISTANCE && end.time - start.time < 700;
 }
 
 function addLoads(group, product) {
   const tote = product.packaging.representation === 'tote';
-  const centreOffset = ((product.columns - 1) * 1.35) / 2;
-  const loadMesh = new THREE.InstancedMesh(sharedBox, material(product.color), product.loadCount);
-  const palletMesh = tote ? null : new THREE.InstancedMesh(sharedBox, material('#8b5a2b'), product.loadCount);
-  const cageMesh = tote ? new THREE.InstancedMesh(sharedBox, new THREE.MeshBasicMaterial({ color: '#dbeafe', wireframe: true }), product.loadCount) : null;
+  const loads = new THREE.InstancedMesh(sharedBox, material(product.color), product.loadCount);
+  const pallets = tote ? null : new THREE.InstancedMesh(sharedBox, material('#8b5a2b'), product.loadCount);
+  const cages = tote ? new THREE.InstancedMesh(sharedBox, new THREE.MeshBasicMaterial({ color: '#dbeafe', wireframe: true }), product.loadCount) : null;
   const transform = new THREE.Object3D();
+  const xOffset = ((product.columns - 1) * 1.35) / 2;
+  const zOffset = ((product.rows - 1) * 1.35) / 2;
   for (let index = 0; index < product.loadCount; index += 1) {
-    const column = tote ? Math.floor(index / 3) : index;
-    const level = tote ? index % 3 : 0;
-    if (palletMesh) {
-      transform.position.set(column * 1.35 - centreOffset, 0.1, 0); transform.scale.set(1.15, 0.2, 1.05); transform.updateMatrix(); palletMesh.setMatrixAt(index, transform.matrix);
-    }
-    transform.position.set(column * 1.35 - centreOffset, tote ? 0.6 + level * 1.2 : 0.72, 0);
-    transform.scale.set(tote ? 1.05 : 1, tote ? 1.08 : 1.12, tote ? 1.05 : 0.9); transform.updateMatrix(); loadMesh.setMatrixAt(index, transform.matrix);
-    if (cageMesh) { transform.scale.multiplyScalar(1.01); transform.updateMatrix(); cageMesh.setMatrixAt(index, transform.matrix); }
+    const stack = Math.floor(index / 3); const level = index % 3;
+    const column = stack % product.columns; const row = Math.floor(stack / product.columns);
+    const x = column * 1.35 - xOffset; const z = row * 1.35 - zOffset;
+    if (pallets) { transform.position.set(x, 0.1 + level * 1.25, z); transform.scale.set(1.15, 0.18, 1.05); transform.updateMatrix(); pallets.setMatrixAt(index, transform.matrix); }
+    transform.position.set(x, (tote ? 0.58 : 0.7) + level * 1.25, z); transform.scale.set(tote ? 1.05 : 1, tote ? 1.05 : 1.08, tote ? 1.05 : 0.9); transform.updateMatrix(); loads.setMatrixAt(index, transform.matrix);
+    if (cages) { transform.scale.multiplyScalar(1.012); transform.updateMatrix(); cages.setMatrixAt(index, transform.matrix); }
   }
-  loadMesh.castShadow = true; loadMesh.receiveShadow = true; group.add(loadMesh);
-  if (palletMesh) { palletMesh.castShadow = true; palletMesh.receiveShadow = true; group.add(palletMesh); }
-  if (cageMesh) group.add(cageMesh);
+  loads.castShadow = true; loads.receiveShadow = true; group.add(loads);
+  if (pallets) { pallets.castShadow = true; pallets.receiveShadow = true; group.add(pallets); }
+  if (cages) group.add(cages);
 }
 
-function makeLabel(text, color) {
-  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 86;
+function makeLabel(text, color, detailed = false) {
+  const canvas = document.createElement('canvas'); canvas.width = detailed ? 768 : 512; canvas.height = detailed ? 126 : 92;
   const context = canvas.getContext('2d');
-  context.fillStyle = 'rgba(255,255,255,.94)'; context.fillRect(0, 0, 512, 86);
-  context.strokeStyle = color; context.lineWidth = 5; context.strokeRect(3, 3, 506, 80);
-  context.fillStyle = '#172033'; context.font = '700 22px Arial'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(text.slice(0, 52), 256, 43);
+  context.fillStyle = 'rgba(255,255,255,.96)'; context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = color; context.lineWidth = detailed ? 8 : 5; context.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+  context.fillStyle = '#102033'; context.font = detailed ? '800 30px Arial' : '800 25px Arial'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(text.slice(0, detailed ? 76 : 40), canvas.width / 2, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
-  sprite.scale.set(6, 1, 1); sprite.userData.texture = texture; return sprite;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+  sprite.renderOrder = detailed ? 20 : 10; sprite.userData.texture = texture; sprite.userData.detailed = detailed; return sprite;
 }
 
 function dispose(root) {
@@ -49,55 +54,99 @@ function dispose(root) {
   });
 }
 
-export default function InventoryScene({ products, floor, editing, selectedId, onSelect, onMove, resetSignal }) {
-  const hostRef = useRef(null);
-  const [unsupported, setUnsupported] = useState(false);
-  const callbacks = useRef({ onSelect, onMove });
-  callbacks.current = { onSelect, onMove };
+export default function InventoryScene({ products, floor, selectedId, onSelect, focusSignal, resumeSignal, resetSignal, onOrbitChange }) {
+  const hostRef = useRef(null); const engineRef = useRef(null); const callbacksRef = useRef({ onSelect, onOrbitChange });
+  const firstLayoutRef = useRef(true); const productsRef = useRef(products); const floorRef = useRef(floor); const [unsupported, setUnsupported] = useState(false);
+  callbacksRef.current = { onSelect, onOrbitChange };
+  productsRef.current = products; floorRef.current = floor;
+
+  const animateToProduct = useCallback((productId, startOrbit = true) => {
+    const engine = engineRef.current; const group = engine?.groups.get(productId); if (!engine || !group) return;
+    const bounds = new THREE.Box3().setFromObject(group); const centre = bounds.getCenter(new THREE.Vector3()); const size = bounds.getSize(new THREE.Vector3());
+    const direction = engine.camera.position.clone().sub(engine.controls.target).normalize();
+    if (!Number.isFinite(direction.x) || direction.lengthSq() < 0.5) direction.set(1, .65, 1).normalize();
+    const fitHeight = Math.max(size.y * 1.8, size.z * 1.25, 3.5); const fitWidth = Math.max(size.x * 1.2, 3.5);
+    const verticalDistance = fitHeight / (2 * Math.tan(THREE.MathUtils.degToRad(engine.camera.fov / 2)));
+    const horizontalDistance = fitWidth / (2 * Math.tan(THREE.MathUtils.degToRad(engine.camera.fov / 2)) * Math.max(engine.camera.aspect, .45));
+    const distance = Math.max(4, verticalDistance, horizontalDistance);
+    engine.controls.autoRotate = false; engine.focus = { startedAt: performance.now(), duration: 700, fromPosition: engine.camera.position.clone(), toPosition: centre.clone().add(direction.multiplyScalar(distance)), fromTarget: engine.controls.target.clone(), toTarget: centre, startOrbit };
+    callbacksRef.current.onOrbitChange?.(false);
+  }, []);
 
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return undefined;
+    const host = hostRef.current; if (!host) return undefined;
     if (process.env.NODE_ENV === 'test') { setUnsupported(true); return undefined; }
-    let gl;
-    try { const probe = document.createElement('canvas'); gl = probe.getContext('webgl2') || probe.getContext('webgl'); } catch { gl = null; }
+    let gl; try { const probe = document.createElement('canvas'); gl = probe.getContext('webgl2') || probe.getContext('webgl'); } catch { gl = null; }
     if (!gl) { setUnsupported(true); return undefined; }
-
-    const scene = new THREE.Scene(); scene.background = new THREE.Color('#e8f0f7'); scene.fog = new THREE.Fog('#e8f0f7', 50, 220);
-    const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 400);
-    const distance = Math.max(24, Math.min(110, floor.depth * 0.62)); camera.position.set(distance * 0.75, distance * 0.7, distance);
-    const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.shadowMap.enabled = true; renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%'; renderer.domElement.style.display = 'block'; host.appendChild(renderer.domElement);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x64748b, 1.8));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(20, 35, 18); sun.castShadow = true; scene.add(sun);
-    const grid = new THREE.GridHelper(Math.max(floor.width, floor.depth), Math.max(floor.width, floor.depth), '#8aa0b6', '#cbd5e1'); scene.add(grid);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(floor.width, floor.depth), material('#eef4f8'));
-    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; ground.receiveShadow = true; scene.add(ground);
-    const root = new THREE.Group(); root.position.z = -floor.depth / 2 + 3; scene.add(root);
-    const selectable = [];
-    products.forEach((product) => {
-      const group = new THREE.Group(); group.userData.productId = product.productId; group.position.set(product.position.x, 0, product.position.z); group.rotation.y = -THREE.MathUtils.degToRad(product.rotation);
-      addLoads(group, product);
-      const hit = new THREE.Mesh(sharedBox, material(selectedId === product.productId ? '#facc15' : '#fff', selectedId === product.productId ? 0.18 : 0.001));
-      hit.scale.set(product.footprint.width, 3.7, product.footprint.depth); hit.position.set(0, 1.6, 0); hit.userData.productId = product.productId; group.add(hit); selectable.push(hit);
-      if (selectedId === product.productId) { const partial = product.partial ? ` · partial ${product.finalLoadQuantity} ${product.packaging.packageLabel}` : ''; const label = makeLabel(`${product.item} · ${product.loadCount} loads${partial}`, product.color); label.position.set(0, 4.2, 0); group.add(label); }
-      root.add(group);
-    });
-
-    const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.48; controls.target.set(0, 1, Math.min(floor.depth / 3, 24)); controls.update();
-    const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); let dragging = null; const point = new THREE.Vector3();
-    const pointerAt = (event) => { const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); };
-    const down = (event) => { pointerAt(event); const hit = raycaster.intersectObjects(selectable, false)[0]; if (!hit) return; const id = hit.object.userData.productId; callbacks.current.onSelect(id); if (editing) { dragging = root.children.find((entry) => entry.userData.productId === id); controls.enabled = false; renderer.domElement.setPointerCapture?.(event.pointerId); } };
-    const move = (event) => { if (!dragging) return; pointerAt(event); if (raycaster.ray.intersectPlane(plane, point)) { dragging.position.x = Math.round(point.x); dragging.position.z = Math.round(point.z - root.position.z); } };
-    const up = () => { if (!dragging) return; callbacks.current.onMove(dragging.userData.productId, { x: dragging.position.x, z: dragging.position.z }); dragging = null; controls.enabled = true; };
-    renderer.domElement.addEventListener('pointerdown', down); renderer.domElement.addEventListener('pointermove', move); renderer.domElement.addEventListener('pointerup', up);
+    const scene = new THREE.Scene(); scene.background = new THREE.Color('#f4f8fb');
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.08, 500); camera.position.set(24, 20, 28);
+    const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.shadowMap.enabled = true; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:none'; host.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9fb0c2, 2)); const sun = new THREE.DirectionalLight(0xffffff, 2.35); sun.position.set(24, 38, 20); sun.castShadow = true; scene.add(sun);
+    const root = new THREE.Group(); scene.add(root);
+    const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = .08; controls.minDistance = 2; controls.maxDistance = 320; controls.maxPolarAngle = Math.PI * .49; controls.autoRotateSpeed = .65; controls.target.set(0, 1.5, 0); controls.update();
+    const engine = { scene, camera, renderer, controls, root, groups: new Map(), labels: new Map(), hitboxes: [], selectedLabel: null, focus: null, ground: null, grid: null, frame: 0 };
+    engineRef.current = engine;
+    controls.addEventListener('start', () => { engine.focus = null; if (controls.autoRotate) { controls.autoRotate = false; callbacksRef.current.onOrbitChange?.(false); } });
+    const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); let pointerStart = null;
+    const raycast = (event) => { const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); return raycaster.intersectObjects(engine.hitboxes, false)[0]; };
+    const down = (event) => { pointerStart = { x: event.clientX, y: event.clientY, time: performance.now() }; };
+    const up = (event) => { const end = { x: event.clientX, y: event.clientY, time: performance.now() }; if (!isTapGesture(pointerStart, end)) return; const hit = raycast(event); if (hit) callbacksRef.current.onSelect(hit.object.userData.productId); };
+    renderer.domElement.addEventListener('pointerdown', down); renderer.domElement.addEventListener('pointerup', up);
     const resize = () => { const rect = host.getBoundingClientRect(); renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false); camera.aspect = Math.max(1, rect.width) / Math.max(1, rect.height); camera.updateProjectionMatrix(); };
     resize(); const observer = window.ResizeObserver ? new ResizeObserver(resize) : null; observer?.observe(host); if (!observer) window.addEventListener('resize', resize);
-    let frame; const animate = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(animate); }; animate();
-    return () => { cancelAnimationFrame(frame); observer?.disconnect(); window.removeEventListener('resize', resize); renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointermove', move); renderer.domElement.removeEventListener('pointerup', up); controls.dispose(); dispose(root); grid.geometry.dispose(); grid.material.dispose(); ground.geometry.dispose(); ground.material.dispose(); renderer.dispose(); if (renderer.domElement.parentNode === host) host.removeChild(renderer.domElement); };
-  }, [products, floor, editing, selectedId, resetSignal]);
+    const labelBoxes = [];
+    const updateLabels = () => {
+      labelBoxes.length = 0;
+      const entries = [...engine.labels.entries()].map(([id, label]) => ({ id, label, distance: camera.position.distanceTo(label.getWorldPosition(new THREE.Vector3())) })).sort((a, b) => (a.id === engine.selectedId ? -1 : b.id === engine.selectedId ? 1 : a.distance - b.distance));
+      for (const entry of entries) {
+        const selected = entry.id === engine.selectedId; const point = entry.label.getWorldPosition(new THREE.Vector3()).project(camera);
+        if (selected && engine.selectedLabel) { entry.label.visible = false; continue; }
+        const visible = selected || (entry.distance < 72 && point.z > -1 && point.z < 1);
+        const width = selected ? .34 : Math.min(.22, .1 + 18 / Math.max(entry.distance, 18)); const box = { left: point.x - width / 2, right: point.x + width / 2, top: point.y + .035, bottom: point.y - .035 };
+        const collision = !selected && labelBoxes.some((other) => box.left < other.right && box.right > other.left && box.bottom < other.top && box.top > other.bottom);
+        entry.label.visible = visible && !collision; if (entry.label.visible) labelBoxes.push(box);
+        const scale = Math.max(2.9, Math.min(7, entry.distance * .065)); entry.label.scale.set(scale, scale * .18, 1);
+      }
+      if (engine.selectedLabel) { const distance = camera.position.distanceTo(engine.selectedLabel.getWorldPosition(new THREE.Vector3())); const scale = Math.max(5.5, Math.min(10, distance * .09)); engine.selectedLabel.scale.set(scale, scale * .165, 1); }
+    };
+    const render = (time) => {
+      if (engine.focus) { const elapsed = Math.min(1, (time - engine.focus.startedAt) / engine.focus.duration); const eased = 1 - ((1 - elapsed) ** 3); camera.position.lerpVectors(engine.focus.fromPosition, engine.focus.toPosition, eased); controls.target.lerpVectors(engine.focus.fromTarget, engine.focus.toTarget, eased); if (elapsed === 1) { controls.autoRotate = engine.focus.startOrbit; callbacksRef.current.onOrbitChange?.(controls.autoRotate); engine.focus = null; } }
+      controls.update(); updateLabels(); renderer.render(scene, camera); engine.frame = requestAnimationFrame(render);
+    }; engine.frame = requestAnimationFrame(render);
+    return () => { cancelAnimationFrame(engine.frame); observer?.disconnect(); window.removeEventListener('resize', resize); renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up); controls.dispose(); dispose(root); engine.ground?.geometry.dispose(); engine.ground?.material.dispose(); engine.grid?.geometry.dispose(); engine.grid?.material.dispose(); renderer.dispose(); if (renderer.domElement.parentNode === host) host.removeChild(renderer.domElement); engineRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    const engine = engineRef.current; if (!engine) return;
+    dispose(engine.root); engine.root.clear(); engine.groups.clear(); engine.labels.clear(); engine.hitboxes = []; engine.selectedLabel = null;
+    products.forEach((product) => {
+      const group = new THREE.Group(); group.userData.productId = product.productId; group.position.set(product.position.x, 0, product.position.z); addLoads(group, product);
+      const hit = new THREE.Mesh(sharedBox, new THREE.MeshBasicMaterial({ color: '#facc15', transparent: true, opacity: .001, depthWrite: false })); hit.position.y = 1.9; hit.scale.set(product.footprint.width, 4, product.footprint.depth); hit.userData.productId = product.productId; group.add(hit); engine.hitboxes.push(hit);
+      const label = makeLabel(product.item, product.color); label.position.set(0, 4.65, 0); group.add(label); engine.labels.set(product.productId, label); engine.groups.set(product.productId, group); engine.root.add(group);
+    });
+    const selectedProduct = products.find((product) => product.productId === engine.selectedId); const selectedGroup = engine.groups.get(engine.selectedId);
+    if (selectedProduct && selectedGroup) { const partial = selectedProduct.partial ? ` · partial ${selectedProduct.finalLoadQuantity} ${selectedProduct.packaging.packageLabel}` : ''; const detail = makeLabel(`${selectedProduct.item} · ${selectedProduct.quantityOnHand} ${selectedProduct.unitOfMeasure || ''} · ${selectedProduct.loadCount} loads${partial}`, selectedProduct.color, true); detail.position.set(0, 5.35, 0); selectedGroup.add(detail); engine.selectedLabel = detail; }
+    if (engine.ground) { engine.scene.remove(engine.ground); engine.ground.geometry.dispose(); engine.ground.material.dispose(); }
+    if (engine.grid) { engine.scene.remove(engine.grid); engine.grid.geometry.dispose(); engine.grid.material.dispose(); }
+    engine.ground = new THREE.Mesh(new THREE.PlaneGeometry(floor.width, floor.depth), material('#f7fafc')); engine.ground.rotation.x = -Math.PI / 2; engine.ground.position.y = -.03; engine.ground.receiveShadow = true; engine.scene.add(engine.ground);
+    const gridSize = Math.max(floor.width, floor.depth); engine.grid = new THREE.GridHelper(gridSize, Math.min(80, Math.ceil(gridSize / 2)), '#c5d1dc', '#e2e8f0'); engine.grid.position.y = -.015; engine.scene.add(engine.grid);
+    if (firstLayoutRef.current) { const distance = Math.max(22, Math.min(150, Math.max(floor.width, floor.depth) * .8)); engine.camera.position.set(distance * .65, distance * .62, distance); engine.controls.target.set(0, 1.5, 0); engine.controls.update(); firstLayoutRef.current = false; }
+  }, [products, floor]);
+
+  useEffect(() => {
+    const engine = engineRef.current; if (!engine) return; engine.selectedId = selectedId;
+    if (engine.selectedLabel) { engine.selectedLabel.parent?.remove(engine.selectedLabel); engine.selectedLabel.material.dispose(); engine.selectedLabel.userData.texture?.dispose(); engine.selectedLabel = null; }
+    if (!selectedId) return;
+    const product = productsRef.current.find((item) => item.productId === selectedId); const group = engine.groups.get(selectedId); if (!product || !group) return;
+    const partial = product.partial ? ` · partial ${product.finalLoadQuantity} ${product.packaging.packageLabel}` : '';
+    const label = makeLabel(`${product.item} · ${product.quantityOnHand} ${product.unitOfMeasure || ''} · ${product.loadCount} loads${partial}`, product.color, true); label.position.set(0, 5.35, 0); group.add(label); engine.selectedLabel = label;
+    animateToProduct(selectedId, true);
+  }, [selectedId, focusSignal, animateToProduct]);
+
+  useEffect(() => { if (selectedId && resumeSignal) animateToProduct(selectedId, true); }, [resumeSignal, selectedId, animateToProduct]);
+  useEffect(() => { const engine = engineRef.current; if (!engine || !resetSignal) return; const currentFloor = floorRef.current; const distance = Math.max(22, Math.min(150, Math.max(currentFloor.width, currentFloor.depth) * .8)); engine.controls.autoRotate = false; engine.focus = { startedAt: performance.now(), duration: 700, fromPosition: engine.camera.position.clone(), toPosition: new THREE.Vector3(distance * .65, distance * .62, distance), fromTarget: engine.controls.target.clone(), toTarget: new THREE.Vector3(0, 1.5, 0), startOrbit: false }; callbacksRef.current.onOrbitChange?.(false); }, [resetSignal]);
 
   return <div ref={hostRef} className="inventory-canvas" data-testid="uniquem-inventory-canvas">
-    {unsupported ? <div className="inventory-webgl-fallback"><strong>3D view unavailable</strong><span>Use the accessible product list below.</span><div>{products.map((product) => <button className="secondary" type="button" key={product.productId} onClick={() => onSelect(product.productId)}>{product.item} · {product.loadCount} loads</button>)}</div></div> : null}
+    {unsupported ? <div className="inventory-webgl-fallback"><strong>3D view unavailable</strong><span>Use the accessible product list.</span><div>{products.map((product) => <button className="secondary" type="button" key={product.productId} onClick={() => onSelect(product.productId)}>{product.item} · {product.loadCount} loads</button>)}</div></div> : null}
   </div>;
 }

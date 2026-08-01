@@ -6,7 +6,6 @@ import { catalogRevision } from './items.js';
 const ITEMS = 'uniquemItems';
 const LAYOUTS = 'uniquemInventoryLayouts';
 const CURRENT_LAYOUT = 'current';
-const GRID_STEP = 1;
 const ROW_GAP = 1.4;
 const MAX_LOADS = 2500;
 const COLORS = ['#0f766e', '#2563eb', '#7c3aed', '#c2410c', '#be123c', '#4d7c0f', '#0369a1', '#a16207'];
@@ -70,7 +69,10 @@ export function calculateInventoryProduct(item, setting = {}) {
   const remainder = packaging.resolved ? item.quantityOnHand % packaging.capacity : null;
   const finalLoadQuantity = packaging.resolved ? (remainder || packaging.capacity) : item.quantityOnHand;
   const partial = packaging.resolved && remainder > 0;
-  const columns = packaging.representation === 'tote' ? Math.ceil(loadCount / 3) : loadCount;
+  const stackLimit = 3;
+  const stackCount = Math.ceil(loadCount / stackLimit);
+  const columns = Math.max(1, Math.ceil(Math.sqrt(stackCount)));
+  const rows = Math.max(1, Math.ceil(stackCount / columns));
   return {
     productId: item.productId,
     item: item.item,
@@ -80,16 +82,18 @@ export function calculateInventoryProduct(item, setting = {}) {
     unitOfMeasure: item.unitOfMeasure || null,
     visible: true,
     color: setting.color || deterministicColor(item.productId),
-    position: setting.position || null,
-    rotation: setting.rotation || 0,
+    position: null,
+    rotation: 0,
     packaging,
     loadCount,
     columns,
-    stackLimit: packaging.representation === 'tote' ? 3 : 1,
+    rows,
+    stackCount,
+    stackLimit,
     partial,
     finalLoadQuantity,
     finalLoadPercent: packaging.resolved ? Math.round((finalLoadQuantity / packaging.capacity) * 1000) / 10 : null,
-    footprint: { width: Math.max(1.2, columns * 1.35), depth: 1.35 },
+    footprint: { width: Math.max(1.2, columns * 1.35), depth: Math.max(1.2, rows * 1.35) },
   };
 }
 
@@ -104,26 +108,27 @@ export function rowsOverlap(left, right) {
 }
 
 export function autoPlaceProducts(products = []) {
-  const placed = products.filter((product) => product.position).map((product) => ({ ...product }));
-  let z = placed.reduce((max, product) => Math.max(max, product.position.z + rotatedFootprint(product).depth / 2 + ROW_GAP), 0);
-  for (const product of products.filter((item) => !item.position)) {
-    let candidate;
-    do {
-      candidate = { ...product, position: { x: 0, z: Math.round(z / GRID_STEP) * GRID_STEP } };
-      z += product.footprint.depth + ROW_GAP;
-    } while (placed.some((existing) => rowsOverlap(candidate, existing)));
-    placed.push(candidate);
-  }
-  const byId = new Map(placed.map((product) => [product.productId, product]));
-  return products.map((product) => byId.get(product.productId));
+  if (!products.length) return [];
+  const totalArea = products.reduce((sum, product) => sum + (product.footprint.width + ROW_GAP) * (product.footprint.depth + ROW_GAP), 0);
+  const widest = products.reduce((max, product) => Math.max(max, product.footprint.width), 0);
+  const targetWidth = Math.max(widest, 24, Math.ceil(Math.sqrt(totalArea) * 1.35));
+  let cursorX = 0; let cursorZ = 0; let shelfDepth = 0;
+  const placed = products.map((product) => {
+    if (cursorX > 0 && cursorX + product.footprint.width > targetWidth) { cursorX = 0; cursorZ += shelfDepth + ROW_GAP; shelfDepth = 0; }
+    const next = { ...product, position: { x: cursorX + product.footprint.width / 2, z: cursorZ + product.footprint.depth / 2 }, rotation: 0 };
+    cursorX += product.footprint.width + ROW_GAP;
+    shelfDepth = Math.max(shelfDepth, product.footprint.depth);
+    return next;
+  });
+  const minX = Math.min(...placed.map((product) => product.position.x - product.footprint.width / 2));
+  const maxX = Math.max(...placed.map((product) => product.position.x + product.footprint.width / 2));
+  const minZ = Math.min(...placed.map((product) => product.position.z - product.footprint.depth / 2));
+  const maxZ = Math.max(...placed.map((product) => product.position.z + product.footprint.depth / 2));
+  const centreX = (minX + maxX) / 2; const centreZ = (minZ + maxZ) / 2;
+  return placed.map((product) => ({ ...product, position: { x: product.position.x - centreX, z: product.position.z - centreZ } }));
 }
 
 function safeSetting(value = {}, productId) {
-  const position = value.position || {};
-  if (!finite(position.x) || !finite(position.z) || Math.abs(position.x) > 10000 || Math.abs(position.z) > 10000) invalid(`Invalid position for ${productId}.`);
-  if (position.x % GRID_STEP !== 0 || position.z % GRID_STEP !== 0) invalid(`Position for ${productId} must snap to the warehouse grid.`);
-  const rotation = Number(value.rotation || 0);
-  if (![0, 90, 180, 270].includes(rotation)) invalid(`Rotation for ${productId} must be 0, 90, 180, or 270 degrees.`);
   const color = String(value.color || '');
   if (!/^#[0-9a-f]{6}$/i.test(color)) invalid(`Invalid color for ${productId}.`);
   const packaging = value.packaging && typeof value.packaging === 'object' ? value.packaging : null;
@@ -139,7 +144,7 @@ function safeSetting(value = {}, productId) {
       ...(packaging.representation === 'tote' ? { capacityPerTote: packaging.capacityPerTote } : { unitsPerPallet: packaging.unitsPerPallet }),
     };
   }
-  return { position: { x: position.x, z: position.z }, rotation, color: color.toLowerCase(), visible: value.visible !== false, packaging: normalizedPackaging };
+  return { color: color.toLowerCase(), visible: value.visible !== false, packaging: normalizedPackaging };
 }
 
 function revision(items, layout = {}) {
@@ -171,7 +176,7 @@ async function loadInventory(tx = null) {
 }
 
 function defaultSavedSetting(product) {
-  return { position: product.position, rotation: product.rotation, color: product.color, visible: true, packaging: null };
+  return { color: product.color, visible: true, packaging: null };
 }
 
 async function ensureAutomaticPlacements(user) {

@@ -78,7 +78,7 @@ const mockUniquemItems = {
 };
 
 const mockUniquemInventory = {
-  products: [{ productId: 'inventory-1', item: 'EpSealon', quantityOnHand: 770, unitOfMeasure: 'each (ea)', visible: true, color: '#2563eb', position: { x: 0, z: 0 }, rotation: 0, packaging: { representation: 'pallet', capacity: 48, packageLabel: 'bags', resolved: true, source: 'description' }, loadCount: 17, columns: 17, stackLimit: 1, partial: true, finalLoadQuantity: 2, finalLoadPercent: 4.2, footprint: { width: 22.95, depth: 1.35 } }],
+  products: [{ productId: 'inventory-1', item: 'EpSealon', quantityOnHand: 770, unitOfMeasure: 'each (ea)', visible: true, color: '#2563eb', position: { x: 0, z: 0 }, rotation: 0, packaging: { representation: 'pallet', capacity: 48, packageLabel: 'bags', resolved: true, source: 'description' }, loadCount: 17, stackCount: 6, columns: 3, rows: 2, stackLimit: 3, partial: true, finalLoadQuantity: 2, finalLoadPercent: 4.2, footprint: { width: 4.05, depth: 2.7 } }],
   hiddenProducts: [], floor: { width: 35, depth: 20 }, revision: 'inventory-revision',
 };
 
