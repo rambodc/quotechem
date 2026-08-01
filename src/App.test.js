@@ -77,6 +77,11 @@ const mockUniquemItems = {
   imports: [],
 };
 
+const mockUniquemInventory = {
+  products: [{ productId: 'inventory-1', item: 'EpSealon', quantityOnHand: 770, unitOfMeasure: 'each (ea)', visible: true, color: '#2563eb', position: { x: 0, z: 0 }, rotation: 0, packaging: { representation: 'pallet', capacity: 48, packageLabel: 'bags', resolved: true, source: 'description' }, loadCount: 17, columns: 17, stackLimit: 1, partial: true, finalLoadQuantity: 2, finalLoadPercent: 4.2, footprint: { width: 22.95, depth: 1.35 } }],
+  hiddenProducts: [], floor: { width: 35, depth: 20 }, revision: 'inventory-revision',
+};
+
 jest.mock('./firebase', () => ({
   auth: {},
   db: {},
@@ -222,6 +227,8 @@ beforeEach(() => {
     }
     if (path === 'acceptInvite') return Promise.resolve({ email: 'invited@example.com', customToken: 'custom-token' });
     if (path === 'listUniquemItems') return Promise.resolve(mockUniquemItems);
+    if (path === 'getUniquemInventory') return Promise.resolve(mockUniquemInventory);
+    if (path === 'saveUniquemInventoryLayout') return Promise.resolve(mockUniquemInventory);
     if (path === 'listThreeDModels') {
       return Promise.resolve({ items: [mockThreeDModel] });
     }
@@ -377,10 +384,11 @@ describe('mini-app portal routing', () => {
     expect(screen.getByTestId('three-d-creator-canvas')).toBeTruthy();
   });
 
-  test('Uniquem only exposes blank Dashboard and QuickBooks Items routes', async () => {
+  test('Uniquem exposes Dashboard, QuickBooks Items, and 3D Inventory routes', async () => {
     const cases = [
       ['/apps/uniquem/dashboard', 'Dashboard'],
       ['/apps/uniquem/items', 'Items'],
+      ['/apps/uniquem/inventory', '3D Inventory'],
     ];
 
     for (const [path, title] of cases) {

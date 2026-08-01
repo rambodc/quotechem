@@ -15,6 +15,7 @@ const EXPECTED_EXPORTS = [
   'createThreeDModel',
   'generateThreeDScene',
   'getThreeDModel',
+  'getUniquemInventory',
   'listThreeDModels',
   'listUniquemItems',
   'previewInvite',
@@ -22,6 +23,7 @@ const EXPECTED_EXPORTS = [
   'restoreThreeDModelVersion',
   'reviseThreeDModel',
   'runStartupDiagnostics',
+  'saveUniquemInventoryLayout',
 ];
 
 test('deployment entry point exposes the exact production Function contract', () => {

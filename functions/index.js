@@ -15,6 +15,7 @@ export {
   previewUniquemItemImport,
   applyUniquemItemImport,
 } from './apps/uniquem/items.js';
+export { getUniquemInventory, saveUniquemInventoryLayout } from './apps/uniquem/inventory.js';
 export {
   generateThreeDScene,
   listThreeDModels,

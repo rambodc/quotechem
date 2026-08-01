@@ -12,6 +12,7 @@ export const MINI_APPS = [
     navItems: [
       { path: '/apps/uniquem/dashboard', label: 'Dashboard' },
       { path: '/apps/uniquem/items', label: 'Items' },
+      { path: '/apps/uniquem/inventory', label: 'Inventory' },
     ],
   },
   {
