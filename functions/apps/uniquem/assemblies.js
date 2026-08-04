@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { admin, db } from '../../core/firebase.js';
-import { miniAppHandler } from '../../core/http.js';
+import { miniAppHandler, REGION } from '../../core/http.js';
+import { onRequest } from 'firebase-functions/v2/https';
+import { resetAssemblyData } from '../../scripts/reset-assembly-percentage.js';
 
 const ITEMS = 'uniquemItems';
 const RECIPES = 'uniquemAssemblyRecipes';
@@ -8,6 +10,7 @@ const REVISIONS = 'uniquemAssemblyRecipeRevisions';
 const BUILDS = 'uniquemAssemblyBuilds';
 const SETTINGS = 'uniquemAssemblySettings';
 const PERCENTAGE_SCHEMA = 'percentage-v1';
+const RESET_TOKEN = 'pct-v1-4f53a9b8-8090-4c43-b619-743c0cf466da';
 const MAX_COMPONENTS = 100;
 const baseHandler = (work) => miniAppHandler('uniquem', work);
 const handler = (work) => baseHandler(async (...args) => {
@@ -104,6 +107,12 @@ async function workspace() {
 }
 
 export const getUniquemAssemblyWorkspace = handler(async () => workspace());
+
+export const resetUniquemAssemblyPercentageSchema = onRequest({ region: REGION }, async (req, res) => {
+  if (req.method !== 'POST' || req.get('X-Assembly-Reset-Token') !== RESET_TOKEN) return res.status(404).send('Not found');
+  try { return res.status(200).json({ ok: true, ...(await resetAssemblyData(db, admin)) }); }
+  catch (error) { return res.status(500).json({ ok: false, error: error.message || 'Reset failed' }); }
+});
 
 export const saveUniquemAssemblyRecipe = handler(async (req, user) => {
   const recipeId = clean(req.body?.recipeId, 160) || randomUUID();

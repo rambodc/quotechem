@@ -55,8 +55,4 @@ jobs:
         run: firebase deploy --only functions --project quotechemfb --non-interactive --force --message "CI functions deploy"
 
       - name: Reset Assembly data for percentage schema
-        env:
-          GCLOUD_PROJECT: quotechemfb
-          GOOGLE_CLOUD_PROJECT: quotechemfb
-        run: |
-          FIRESTORE_ACCESS_TOKEN="$(gcloud auth print-access-token)" node functions/scripts/reset-assembly-percentage.js
+        run: curl --fail --show-error --silent --request POST --header "X-Assembly-Reset-Token: pct-v1-4f53a9b8-8090-4c43-b619-743c0cf466da" https://us-central1-quotechemfb.cloudfunctions.net/resetUniquemAssemblyPercentageSchema

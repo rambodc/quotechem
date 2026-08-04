@@ -28,6 +28,7 @@ const EXPECTED_EXPORTS = [
   'previewInvite',
   'previewUniquemItemImport',
   'removeUniquemPalletTexture',
+  'resetUniquemAssemblyPercentageSchema',
   'restoreThreeDModelVersion',
   'reverseUniquemAssemblyBuild',
   'reviseThreeDModel',
