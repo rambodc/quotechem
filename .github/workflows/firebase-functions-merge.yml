@@ -53,3 +53,9 @@ jobs:
 
       - name: Deploy Functions
         run: firebase deploy --only functions --project quotechemfb --non-interactive --force --message "CI functions deploy"
+
+      - name: Reset Assembly data for percentage schema
+        env:
+          GCLOUD_PROJECT: quotechemfb
+          GOOGLE_CLOUD_PROJECT: quotechemfb
+        run: node functions/scripts/reset-assembly-percentage.js

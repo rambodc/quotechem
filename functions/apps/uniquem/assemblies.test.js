@@ -1,27 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMovements, normalizeComponents, scaledComponents, __testables } from './assemblies.js';
+import { buildMovements, calculatedComponents, isCompletePercentage, normalizeComponents, percentageTotal, __testables } from './assemblies.js';
 
-test('recipe components are positive, unique, and cannot contain the output item', () => {
-  assert.deepEqual(normalizeComponents([{ productId: 'a', quantity: 300 }, { productId: 'b', quantity: 300 }], 'finished'), [{ productId: 'a', quantity: 300 }, { productId: 'b', quantity: 300 }]);
-  assert.throws(() => normalizeComponents([{ productId: 'finished', quantity: 1 }], 'finished'), /cannot also be a component/);
-  assert.throws(() => normalizeComponents([{ productId: 'a', quantity: 1 }, { productId: 'a', quantity: 2 }], 'finished'), /only once/);
-  assert.throws(() => normalizeComponents([{ productId: 'a', quantity: 0 }], 'finished'), /greater than zero/);
+test('recipe percentages are positive, capped, unique, and cannot contain the output item', () => {
+  assert.deepEqual(normalizeComponents([{ productId: 'a', percentage: 10.5 }, { productId: 'b', percentage: 89.5 }], 'finished'), [{ productId: 'a', percentage: 10.5 }, { productId: 'b', percentage: 89.5 }]);
+  assert.throws(() => normalizeComponents([{ productId: 'finished', percentage: 1 }], 'finished'), /cannot also be a component/);
+  assert.throws(() => normalizeComponents([{ productId: 'a', percentage: 1 }, { productId: 'a', percentage: 2 }], 'finished'), /only once/);
+  assert.throws(() => normalizeComponents([{ productId: 'a', percentage: 0 }], 'finished'), /greater than zero/);
+  assert.throws(() => normalizeComponents([{ productId: 'a', percentage: 100.1 }], 'finished'), /cannot exceed 100/);
 });
 
-test('a 600 litre component recipe may create 1000 litres without mass-balance validation', () => {
-  const recipe = { outputQuantity: 1000, components: [{ productId: 'a', quantity: 300 }, { productId: 'b', quantity: 300 }] };
-  assert.deepEqual(scaledComponents(recipe, 1000), recipe.components);
-  assert.deepEqual(buildMovements('finished', 1000, recipe.components), [
-    { productId: 'a', quantity: -300, role: 'component' },
-    { productId: 'b', quantity: -300, role: 'component' },
+test('a 10 and 90 percent recipe consumes 100 and 900 from a 1000 unit build', () => {
+  const components = calculatedComponents([{ productId: 'a', percentage: 10 }, { productId: 'b', percentage: 90 }], 1000);
+  assert.deepEqual(components, [{ productId: 'a', percentage: 10, quantity: 100 }, { productId: 'b', percentage: 90, quantity: 900 }]);
+  assert.deepEqual(buildMovements('finished', 1000, components), [
+    { productId: 'a', quantity: -100, role: 'component' },
+    { productId: 'b', quantity: -900, role: 'component' },
     { productId: 'finished', quantity: 1000, role: 'output' },
   ]);
 });
 
-test('expected component quantities scale with requested output', () => {
-  const scaled = scaledComponents({ outputQuantity: 1000, components: [{ productId: 'a', quantity: 300 }] }, 2500);
-  assert.equal(scaled[0].quantity, 750);
+test('percentage totals outside 100 remain valid but are detectable for warnings', () => {
+  assert.equal(percentageTotal([{ percentage: 30 }, { percentage: 30 }]), 60);
+  assert.equal(isCompletePercentage(60), false);
+  assert.equal(isCompletePercentage(100.00000001), true);
 });
 
 test('build dates and quantities reject malformed values', () => {

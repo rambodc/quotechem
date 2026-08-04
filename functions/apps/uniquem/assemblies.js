@@ -6,8 +6,15 @@ const ITEMS = 'uniquemItems';
 const RECIPES = 'uniquemAssemblyRecipes';
 const REVISIONS = 'uniquemAssemblyRecipeRevisions';
 const BUILDS = 'uniquemAssemblyBuilds';
+const SETTINGS = 'uniquemAssemblySettings';
+const PERCENTAGE_SCHEMA = 'percentage-v1';
 const MAX_COMPONENTS = 100;
-const handler = (work) => miniAppHandler('uniquem', work);
+const baseHandler = (work) => miniAppHandler('uniquem', work);
+const handler = (work) => baseHandler(async (...args) => {
+  const ready = await db.collection(SETTINGS).doc('schema').get();
+  if (ready.data()?.version !== PERCENTAGE_SCHEMA) invalid('Assembly is being upgraded to percentage recipes. Try again shortly.', 503);
+  return work(...args);
+});
 
 function invalid(message, status = 400) { throw Object.assign(new Error(message), { status }); }
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
@@ -45,14 +52,23 @@ export function normalizeComponents(components, outputProductId) {
     if (productId === outputProductId) invalid('The finished item cannot also be a component.');
     if (seen.has(productId)) invalid('Each component item may appear only once.');
     seen.add(productId);
-    return { productId, quantity: quantity(component?.quantity, `Component ${index + 1} quantity`) };
+    const percentage = quantity(component?.percentage, `Component ${index + 1} percentage`);
+    if (percentage > 100) invalid(`Component ${index + 1} percentage cannot exceed 100%.`);
+    return { productId, percentage };
   });
 }
 
-export function scaledComponents(recipe, outputQuantity) {
-  const actualOutput = quantity(outputQuantity, 'Output quantity');
-  const factor = actualOutput / quantity(recipe.outputQuantity, 'Recipe output quantity');
-  return recipe.components.map((component) => ({ productId: component.productId, quantity: component.quantity * factor }));
+export function percentageTotal(components = []) {
+  return components.reduce((total, component) => total + component.percentage, 0);
+}
+
+export function isCompletePercentage(total) {
+  return Math.abs(total - 100) < 0.0001;
+}
+
+export function calculatedComponents(components, outputQuantity) {
+  const output = quantity(outputQuantity, 'Output quantity');
+  return components.map((component) => ({ ...component, quantity: output * component.percentage / 100 }));
 }
 
 export function buildMovements(outputProductId, outputQuantity, components) {
@@ -65,13 +81,12 @@ function recipePayload(body, itemsById) {
   if (!name) invalid('Recipe name is required.');
   const output = itemsById.get(outputProductId);
   if (!output || output.activeStatus !== 'Active') invalid('Select an active finished item.', 409);
-  const outputQuantity = quantity(body?.outputQuantity, 'Standard output quantity');
   const components = normalizeComponents(body?.components, outputProductId);
   for (const component of components) {
     const item = itemsById.get(component.productId);
     if (!item || item.activeStatus !== 'Active') invalid('Every component must be an active catalog item.', 409);
   }
-  return { name, outputProductId, outputItem: output.item, outputUnitOfMeasure: output.unitOfMeasure, outputQuantity, components: components.map((component) => ({ ...component, item: itemsById.get(component.productId).item, unitOfMeasure: itemsById.get(component.productId).unitOfMeasure })) };
+  return { name, outputProductId, outputItem: output.item, outputUnitOfMeasure: output.unitOfMeasure, percentageTotal: percentageTotal(components), components: components.map((component) => ({ ...component, item: itemsById.get(component.productId).item, unitOfMeasure: itemsById.get(component.productId).unitOfMeasure })) };
 }
 
 async function itemSnapshot(tx = null) {
@@ -135,18 +150,18 @@ export const postUniquemAssemblyBuild = handler(async (req, user) => {
     if (recipe.status !== 'Active' || recipe.revision !== recipeRevision) invalid('This recipe changed. Reload it before posting.', 409);
     const itemsById = new Map(itemsSnap.docs.map((doc) => [doc.id, itemView(doc)]));
     const outputQuantity = quantity(req.body?.outputQuantity, 'Output quantity');
-    const components = normalizeComponents(req.body?.components, recipe.outputProductId);
+    const percentages = normalizeComponents(req.body?.components, recipe.outputProductId);
+    const components = calculatedComponents(percentages, outputQuantity);
     const referenced = [recipe.outputProductId, ...components.map((item) => item.productId)];
     for (const productId of referenced) if (!itemsById.has(productId)) invalid('A selected assembly item no longer exists.', 409);
-    const expected = scaledComponents(recipe, outputQuantity);
-    const expectedById = new Map(expected.map((item) => [item.productId, item.quantity]));
+    const recipeById = new Map(recipe.components.map((item) => [item.productId, item.percentage]));
     const movements = buildMovements(recipe.outputProductId, outputQuantity, components);
     const shortages = movements.filter((move) => move.quantity < 0 && itemsById.get(move.productId).availableQuantity + move.quantity < 0).map((move) => ({ productId: move.productId, item: itemsById.get(move.productId).item, available: itemsById.get(move.productId).availableQuantity, required: -move.quantity, projected: itemsById.get(move.productId).availableQuantity + move.quantity }));
     if (shortages.length && req.body?.acknowledgeShortage !== true) invalid(`Insufficient inventory for ${shortages.map((item) => item.item).join(', ')}. Confirm the shortage to post.`, 409);
     const now = admin.firestore.FieldValue.serverTimestamp();
     for (const move of movements) tx.update(db.collection(ITEMS).doc(move.productId), { assemblyAdjustment: admin.firestore.FieldValue.increment(move.quantity), assemblyUpdatedAt: now, assemblyUpdatedBy: user.uid });
-    const componentSnapshots = components.map((component) => ({ ...component, item: itemsById.get(component.productId).item, unitOfMeasure: itemsById.get(component.productId).unitOfMeasure, expectedQuantity: expectedById.get(component.productId) || 0, variance: component.quantity - (expectedById.get(component.productId) || 0) }));
-    tx.create(db.collection(BUILDS).doc(buildId), { buildId, kind: 'build', status: 'Posted', recipeId, recipeRevision, recipeSnapshot: recipe, buildDate: isoDate(req.body?.buildDate), reference: clean(req.body?.reference, 160), notes: clean(req.body?.notes, 2000), outputProductId: recipe.outputProductId, outputItem: itemsById.get(recipe.outputProductId).item, outputUnitOfMeasure: itemsById.get(recipe.outputProductId).unitOfMeasure, expectedOutputQuantity: recipe.outputQuantity, outputQuantity, components: componentSnapshots, movements, shortages, postedAt: now, postedBy: user.uid, postedByEmail: user.email || '' });
+    const componentSnapshots = components.map((component) => ({ ...component, item: itemsById.get(component.productId).item, unitOfMeasure: itemsById.get(component.productId).unitOfMeasure, recipePercentage: recipeById.get(component.productId) || 0, percentageVariance: component.percentage - (recipeById.get(component.productId) || 0) }));
+    tx.create(db.collection(BUILDS).doc(buildId), { buildId, kind: 'build', status: 'Posted', recipeId, recipeRevision, recipeSnapshot: recipe, buildDate: isoDate(req.body?.buildDate), reference: clean(req.body?.reference, 160), notes: clean(req.body?.notes, 2000), outputProductId: recipe.outputProductId, outputItem: itemsById.get(recipe.outputProductId).item, outputUnitOfMeasure: itemsById.get(recipe.outputProductId).unitOfMeasure, outputQuantity, percentageTotal: percentageTotal(components), components: componentSnapshots, movements, shortages, postedAt: now, postedBy: user.uid, postedByEmail: user.email || '' });
   });
   return workspace();
 });
