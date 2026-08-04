@@ -22,7 +22,6 @@ export {
   archiveUniquemAssemblyRecipe,
   postUniquemAssemblyBuild,
   reverseUniquemAssemblyBuild,
-  resetUniquemAssemblyPercentageSchema,
 } from './apps/uniquem/assemblies.js';
 export {
   uploadUniquemPalletTextureSources,

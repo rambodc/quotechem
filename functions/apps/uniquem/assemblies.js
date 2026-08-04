@@ -1,23 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { admin, db } from '../../core/firebase.js';
-import { miniAppHandler, REGION } from '../../core/http.js';
-import { onRequest } from 'firebase-functions/v2/https';
-import { resetAssemblyData } from '../../scripts/reset-assembly-percentage.js';
+import { miniAppHandler } from '../../core/http.js';
 
 const ITEMS = 'uniquemItems';
 const RECIPES = 'uniquemAssemblyRecipes';
 const REVISIONS = 'uniquemAssemblyRecipeRevisions';
 const BUILDS = 'uniquemAssemblyBuilds';
-const SETTINGS = 'uniquemAssemblySettings';
-const PERCENTAGE_SCHEMA = 'percentage-v1';
-const RESET_TOKEN = 'pct-v1-4f53a9b8-8090-4c43-b619-743c0cf466da';
 const MAX_COMPONENTS = 100;
-const baseHandler = (work) => miniAppHandler('uniquem', work);
-const handler = (work) => baseHandler(async (...args) => {
-  const ready = await db.collection(SETTINGS).doc('schema').get();
-  if (ready.data()?.version !== PERCENTAGE_SCHEMA) invalid('Assembly is being upgraded to percentage recipes. Try again shortly.', 503);
-  return work(...args);
-});
+const handler = (work) => miniAppHandler('uniquem', work);
 
 function invalid(message, status = 400) { throw Object.assign(new Error(message), { status }); }
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
@@ -107,12 +97,6 @@ async function workspace() {
 }
 
 export const getUniquemAssemblyWorkspace = handler(async () => workspace());
-
-export const resetUniquemAssemblyPercentageSchema = onRequest({ region: REGION }, async (req, res) => {
-  if (req.method !== 'POST' || req.get('X-Assembly-Reset-Token') !== RESET_TOKEN) return res.status(404).send('Not found');
-  try { return res.status(200).json({ ok: true, ...(await resetAssemblyData(db, admin)) }); }
-  catch (error) { return res.status(500).json({ ok: false, error: error.message || 'Reset failed' }); }
-});
 
 export const saveUniquemAssemblyRecipe = handler(async (req, user) => {
   const recipeId = clean(req.body?.recipeId, 160) || randomUUID();
