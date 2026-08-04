@@ -20,7 +20,8 @@ function invalid(message, status = 400) {
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 const normalizedUnit = (value) => String(value || '').trim().toLocaleLowerCase('en-CA');
-const positiveQuantity = (item) => finite(item?.quantityOnHand) && item.quantityOnHand > 0;
+export const effectiveQuantity = (item = {}) => (finite(item.quantityOnHand) ? item.quantityOnHand : 0) + (finite(item.assemblyAdjustment) ? item.assemblyAdjustment : 0);
+const positiveQuantity = (item) => effectiveQuantity(item) > 0;
 
 export function deterministicColor(productId = '') {
   let hash = 0;
@@ -29,7 +30,7 @@ export function deterministicColor(productId = '') {
 }
 
 export function inferPackaging(item = {}, override = null) {
-  const quantity = positiveQuantity(item) ? item.quantityOnHand : 0;
+  const quantity = positiveQuantity(item) ? effectiveQuantity(item) : 0;
   const unit = normalizedUnit(item.unitOfMeasure);
   const description = String(item.description || '');
   const configured = override && typeof override === 'object' ? override : {};
@@ -58,6 +59,7 @@ export function inferPackaging(item = {}, override = null) {
 }
 
 export function calculateInventoryProduct(item, setting = {}) {
+  const availableQuantity = effectiveQuantity(item);
   const visibleByStock = item.activeStatus === 'Active' && positiveQuantity(item);
   if (!visibleByStock) {
     return { productId: item.productId, item: item.item, visible: false, hiddenReason: item.activeStatus !== 'Active' ? 'Not-active in QuickBooks' : 'Quantity On Hand is zero or blank' };
@@ -67,10 +69,10 @@ export function calculateInventoryProduct(item, setting = {}) {
     return { ...restorable, visible: false, canShow: true, hiddenReason: 'Hidden from 3D by a user' };
   }
   const packaging = inferPackaging(item, setting.packaging);
-  const loadCount = packaging.resolved ? Math.ceil(item.quantityOnHand / packaging.capacity) : 1;
+  const loadCount = packaging.resolved ? Math.ceil(availableQuantity / packaging.capacity) : 1;
   if (loadCount > MAX_LOADS) invalid(`${item.item} would create more than ${MAX_LOADS} loads. Configure a larger package capacity.`);
-  const remainder = packaging.resolved ? item.quantityOnHand % packaging.capacity : null;
-  const finalLoadQuantity = packaging.resolved ? (remainder || packaging.capacity) : item.quantityOnHand;
+  const remainder = packaging.resolved ? availableQuantity % packaging.capacity : null;
+  const finalLoadQuantity = packaging.resolved ? (remainder || packaging.capacity) : availableQuantity;
   const partial = packaging.resolved && remainder > 0;
   const stackLimit = 3;
   const stackCount = Math.ceil(loadCount / stackLimit);
@@ -81,7 +83,9 @@ export function calculateInventoryProduct(item, setting = {}) {
     item: item.item,
     description: item.description || null,
     type: item.type || null,
-    quantityOnHand: item.quantityOnHand,
+    quickBooksQuantity: finite(item.quantityOnHand) ? item.quantityOnHand : 0,
+    assemblyAdjustment: finite(item.assemblyAdjustment) ? item.assemblyAdjustment : 0,
+    quantityOnHand: availableQuantity,
     unitOfMeasure: item.unitOfMeasure || null,
     visible: true,
     color: setting.color || deterministicColor(item.productId),

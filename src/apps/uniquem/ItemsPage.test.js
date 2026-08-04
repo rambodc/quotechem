@@ -75,6 +75,7 @@ test('review submits selected rows, rename mappings, and explicit missing deacti
     expect.objectContaining({
       fileName: 'items.csv',
       catalogRevision: 'revision-1',
+      reconciliationMode: 'reset',
       decisions: expect.objectContaining({
         selectedRowIndexes: expect.arrayContaining([0, 1]),
         renameMappings: [{ rowIndex: 0, productId: 'existing-1' }],

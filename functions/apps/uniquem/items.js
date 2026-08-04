@@ -7,6 +7,7 @@ import { asString, toIso } from '../../core/values.js';
 
 const ITEMS = 'uniquemItems';
 const IMPORTS = 'uniquemItemImports';
+const RECONCILIATIONS = 'uniquemAssemblyReconciliations';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_ROWS = 400;
 
@@ -148,7 +149,7 @@ export function itemChanges(current, incoming) {
 }
 
 export function catalogRevision(items = []) {
-  const state = items.map((item) => ({ productId: item.productId, normalizedItem: item.normalizedItem, updatedAt: toIso(item.updatedAt) || item.updatedAt || '' })).sort((a, b) => a.productId.localeCompare(b.productId));
+  const state = items.map((item) => ({ productId: item.productId, normalizedItem: item.normalizedItem, updatedAt: toIso(item.updatedAt) || item.updatedAt || '', assemblyAdjustment: Number.isFinite(item.assemblyAdjustment) ? item.assemblyAdjustment : 0, assemblyUpdatedAt: toIso(item.assemblyUpdatedAt) || item.assemblyUpdatedAt || '' })).sort((a, b) => a.productId.localeCompare(b.productId));
   return createHash('sha256').update(JSON.stringify(state)).digest('hex');
 }
 
@@ -244,18 +245,28 @@ export const applyUniquemItemImport = handler(async (req, user) => {
   const expectedRevision = clean(req.body?.catalogRevision, 128);
   if (!expectedRevision) invalid('Preview this CSV again before importing.');
   const importId = randomUUID();
+  const reconciliationMode = clean(req.body?.reconciliationMode, 20);
+  if (!['reset', 'carry'].includes(reconciliationMode)) invalid('Choose whether this import resets or carries assembly adjustments.');
   let result;
   await db.runTransaction(async (tx) => {
     const currentSnap = await tx.get(db.collection(ITEMS).limit(1000));
     const currentItems = currentSnap.docs.map(mapDoc);
     if (catalogRevision(currentItems) !== expectedRevision) invalid('Items changed after this preview. Upload the CSV again to refresh the review.', 409);
     const plan = resolveApplyPlan(rows, currentItems, req.body?.decisions || {});
+    const currentByName = new Map(currentItems.map((item) => [item.normalizedItem || normalizeItemName(item.item), item]));
+    const renameTargets = new Map((req.body?.decisions?.renameMappings || []).map((entry) => [Number(entry.rowIndex), clean(entry.productId, 160)]));
+    const reconciledById = new Map();
+    for (const row of rows) {
+      const mappedId = renameTargets.get(row.rowIndex);
+      const target = mappedId ? currentItems.find((item) => item.productId === mappedId) : currentByName.get(row.item.normalizedItem);
+      if (target) reconciledById.set(target.productId, target);
+    }
     const timestamp = admin.firestore.FieldValue.serverTimestamp();
     let created = 0; let updated = 0; let unchanged = 0;
     for (const action of plan.actions) {
       if (action.kind === 'create') {
         const productId = randomUUID();
-        tx.create(db.collection(ITEMS).doc(productId), { productId, ...itemFields(action.row.item), normalizedItem: action.row.item.normalizedItem, sourceSystem: 'quickbooks-desktop', createdAt: timestamp, createdBy: user.uid, updatedAt: timestamp, updatedBy: user.uid, lastImportId: importId });
+        tx.create(db.collection(ITEMS).doc(productId), { productId, ...itemFields(action.row.item), normalizedItem: action.row.item.normalizedItem, assemblyAdjustment: 0, sourceSystem: 'quickbooks-desktop', createdAt: timestamp, createdBy: user.uid, updatedAt: timestamp, updatedBy: user.uid, lastImportId: importId });
         created += 1;
       } else if (!action.changes.length) {
         unchanged += 1;
@@ -267,6 +278,15 @@ export const applyUniquemItemImport = handler(async (req, user) => {
         updated += 1;
       }
     }
+    let reconciledItems = 0; let reconciledAdjustment = 0;
+    if (reconciliationMode === 'reset') {
+      for (const item of reconciledById.values()) {
+        const adjustment = Number.isFinite(item.assemblyAdjustment) ? item.assemblyAdjustment : 0;
+        if (!adjustment) continue;
+        tx.update(db.collection(ITEMS).doc(item.productId), { assemblyAdjustment: 0, assemblyReconciledAt: timestamp, assemblyReconciledBy: user.uid, assemblyReconciledImportId: importId, updatedAt: timestamp, updatedBy: user.uid });
+        reconciledItems += 1; reconciledAdjustment += adjustment;
+      }
+    }
     let markedInactive = 0;
     for (const item of plan.deactivations) {
       if (item.activeStatus !== 'Not-active') {
@@ -274,8 +294,9 @@ export const applyUniquemItemImport = handler(async (req, user) => {
         markedInactive += 1;
       }
     }
-    const summary = { importId, fileName: payload.fileName, fileSize: payload.fileSize, totalRows: rows.length, selectedRows: plan.actions.length, created, updated, unchanged, markedInactive, skipped: rows.length - plan.actions.length, status: 'completed', createdAt: timestamp, createdBy: user.uid, createdByEmail: user.email || '' };
+    const summary = { importId, fileName: payload.fileName, fileSize: payload.fileSize, totalRows: rows.length, selectedRows: plan.actions.length, created, updated, unchanged, markedInactive, skipped: rows.length - plan.actions.length, reconciliationMode, reconciledItems, reconciledAdjustment, status: 'completed', createdAt: timestamp, createdBy: user.uid, createdByEmail: user.email || '' };
     tx.create(db.collection(IMPORTS).doc(importId), summary);
+    tx.create(db.collection(RECONCILIATIONS).doc(importId), { importId, mode: reconciliationMode, reconciledItems, reconciledAdjustment, affectedItems: [...reconciledById.values()].map((item) => ({ productId: item.productId, item: item.item, priorAdjustment: Number.isFinite(item.assemblyAdjustment) ? item.assemblyAdjustment : 0 })), createdAt: timestamp, createdBy: user.uid, createdByEmail: user.email || '' });
     result = summary;
   });
   return { import: result, ...(await listItemsResult()) };

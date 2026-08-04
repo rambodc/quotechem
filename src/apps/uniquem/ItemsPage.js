@@ -46,6 +46,7 @@ function ReviewModal({ preview, contentBase64, onClose, onApplied }) {
   const [renameMappings, setRenameMappings] = useState({});
   const [duplicateChoices, setDuplicateChoices] = useState({});
   const [markInactive, setMarkInactive] = useState(new Set());
+  const [reconciliationMode, setReconciliationMode] = useState('reset');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -78,6 +79,7 @@ function ReviewModal({ preview, contentBase64, onClose, onApplied }) {
         fileName: preview.fileName,
         contentBase64,
         catalogRevision: preview.catalogRevision,
+        reconciliationMode,
         decisions: {
           selectedRowIndexes: [...selected],
           renameMappings: Object.entries(renameMappings).filter(([, productId]) => productId).map(([rowIndex, productId]) => ({ rowIndex: Number(rowIndex), productId })),
@@ -95,6 +97,7 @@ function ReviewModal({ preview, contentBase64, onClose, onApplied }) {
     <header><div><span>Import review</span><h2>{preview.fileName}</h2><p>{preview.totalRows} QuickBooks rows</p></div><button onClick={onClose} disabled={busy} aria-label="Close"><FiX /></button></header>
     {error ? <div className="uniquem-alert">{error}</div> : null}
     <nav className="uniquem-review-tabs" aria-label="Import categories">{CATEGORIES.map((category) => <button key={category} className={filter === category ? 'active' : ''} onClick={() => setFilter(category)}>{category === 'all' ? 'All' : statusLabel(category)} <strong>{category === 'all' ? preview.totalRows + preview.missing.length : preview.counts[category]}</strong></button>)}</nav>
+    <fieldset className="uniquem-reconciliation"><legend>Assembly inventory reconciliation</legend><label><input type="radio" name="reconciliation" value="reset" checked={reconciliationMode === 'reset'} onChange={() => setReconciliationMode('reset')} /><span><strong>Reset adjustments</strong><small>Use this QuickBooks file as the new inventory baseline.</small></span></label><label><input type="radio" name="reconciliation" value="carry" checked={reconciliationMode === 'carry'} onChange={() => setReconciliationMode('carry')} /><span><strong>Carry adjustments forward</strong><small>Keep Uniquem assembly movements on top of the new snapshot.</small></span></label></fieldset>
     <div className="uniquem-review-list">
       {visibleRows.map((row) => {
         const changes = changesFor(row);

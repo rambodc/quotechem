@@ -82,6 +82,12 @@ const mockUniquemInventory = {
   hiddenProducts: [], floor: { width: 35, depth: 20 }, revision: 'inventory-revision',
 };
 
+const mockUniquemAssembly = {
+  items: [{ productId: 'item-1', item: 'ApHrox', activeStatus: 'Active', type: 'Inventory Assembly', unitOfMeasure: 'litre (l)', quickBooksQuantity: 0, assemblyAdjustment: 0, availableQuantity: 0 }],
+  recipes: [],
+  builds: [],
+};
+
 jest.mock('./firebase', () => ({
   auth: {},
   db: {},
@@ -227,6 +233,7 @@ beforeEach(() => {
     }
     if (path === 'acceptInvite') return Promise.resolve({ email: 'invited@example.com', customToken: 'custom-token' });
     if (path === 'listUniquemItems') return Promise.resolve(mockUniquemItems);
+    if (path === 'getUniquemAssemblyWorkspace') return Promise.resolve(mockUniquemAssembly);
     if (path === 'getUniquemInventory') return Promise.resolve(mockUniquemInventory);
     if (path === 'saveUniquemInventoryLayout') return Promise.resolve(mockUniquemInventory);
     if (path === 'listThreeDModels') {
@@ -384,10 +391,11 @@ describe('mini-app portal routing', () => {
     expect(screen.getByTestId('three-d-creator-canvas')).toBeTruthy();
   });
 
-  test('Uniquem exposes Dashboard, QuickBooks Items, and 3D Inventory routes', async () => {
+  test('Uniquem exposes Dashboard, QuickBooks Items, Assembly, and 3D Inventory routes', async () => {
     const cases = [
       ['/apps/uniquem/dashboard', 'Dashboard'],
       ['/apps/uniquem/items', 'Items'],
+      ['/apps/uniquem/assembly', 'Assembly'],
       ['/apps/uniquem/inventory', '3D Inventory'],
     ];
 

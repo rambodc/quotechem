@@ -17,6 +17,13 @@ export {
 } from './apps/uniquem/items.js';
 export { getUniquemInventory, saveUniquemInventoryLayout } from './apps/uniquem/inventory.js';
 export {
+  getUniquemAssemblyWorkspace,
+  saveUniquemAssemblyRecipe,
+  archiveUniquemAssemblyRecipe,
+  postUniquemAssemblyBuild,
+  reverseUniquemAssemblyBuild,
+} from './apps/uniquem/assemblies.js';
+export {
   uploadUniquemPalletTextureSources,
   getUniquemPalletTexture,
   generateUniquemPalletTexture,

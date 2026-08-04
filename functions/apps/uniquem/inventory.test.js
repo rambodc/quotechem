@@ -1,8 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inferPackaging, calculateInventoryProduct, autoPlaceProducts, rowsOverlap, buildInventory, deterministicColor, isLegacyTexture, __testables } from './inventory.js';
+import { inferPackaging, calculateInventoryProduct, autoPlaceProducts, rowsOverlap, buildInventory, deterministicColor, effectiveQuantity, isLegacyTexture, __testables } from './inventory.js';
 
 const item = (overrides = {}) => ({ productId: 'p1', item: 'EpSealon', description: 'EpSealon (48 x 11.3 kg bag)/Pallet', activeStatus: 'Active', quantityOnHand: 770, unitOfMeasure: 'each (ea)', ...overrides });
+
+test('3D inventory uses the QuickBooks baseline plus assembly adjustment', () => {
+  const adjusted = item({ quantityOnHand: 1000, assemblyAdjustment: -250, unitOfMeasure: 'litre (l)' });
+  assert.equal(effectiveQuantity(adjusted), 750);
+  const product = calculateInventoryProduct(adjusted);
+  assert.equal(product.quickBooksQuantity, 1000);
+  assert.equal(product.assemblyAdjustment, -250);
+  assert.equal(product.quantityOnHand, 750);
+});
 
 test('legacy cleanup recognizes every texture without the square-side v2 format', () => {
   assert.equal(isLegacyTexture({}), true);

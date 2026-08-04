@@ -67,6 +67,7 @@ test('name normalization, diffs, and revision are stable', () => {
   const first = catalogRevision([{ productId: 'b', normalizedItem: 'b', updatedAt: '2026-01-01' }, { productId: 'a', normalizedItem: 'a', updatedAt: '2026-01-01' }]);
   const second = catalogRevision([{ productId: 'a', normalizedItem: 'a', updatedAt: '2026-01-01' }, { productId: 'b', normalizedItem: 'b', updatedAt: '2026-01-01' }]);
   assert.equal(first, second);
+  assert.notEqual(first, catalogRevision([{ productId: 'b', normalizedItem: 'b', updatedAt: '2026-01-01', assemblyAdjustment: 1 }, { productId: 'a', normalizedItem: 'a', updatedAt: '2026-01-01' }]));
 });
 
 test('apply plan keeps selections explicit and supports safe rename mappings', () => {

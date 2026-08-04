@@ -224,6 +224,14 @@ function App() {
             }
           />
           <Route
+            path="/apps/uniquem/assembly"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="assembly">
+                <Uniquem page="assembly" />
+              </MiniAppRoute>
+            }
+          />
+          <Route
             path="/apps/uniquem/inventory"
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="uniquem" appPath="inventory">
