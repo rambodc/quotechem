@@ -58,4 +58,5 @@ jobs:
         env:
           GCLOUD_PROJECT: quotechemfb
           GOOGLE_CLOUD_PROJECT: quotechemfb
-        run: node functions/scripts/reset-assembly-percentage.js
+        run: |
+          FIRESTORE_ACCESS_TOKEN="$(gcloud auth print-access-token)" node functions/scripts/reset-assembly-percentage.js
