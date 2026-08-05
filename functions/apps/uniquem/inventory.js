@@ -1,7 +1,7 @@
 import { db } from '../../core/firebase.js';
 import { miniAppHandler } from '../../core/http.js';
 
-const ITEMS = 'uniquemItems'; const ROW_GAP = 1.4; const MAX_LOADS = 2500; const handler = (work) => miniAppHandler('uniquem', async (...args) => { if (!(await db.collection('uniquemSchema').doc('manual-inventory-v1').get()).exists) invalid('Uniquem upgrade is in progress. Try again shortly.', 503); return work(...args); });
+const ITEMS = 'uniquemItems'; const ROW_GAP = 1.4; const MAX_LOADS = 2500; const handler = (work) => miniAppHandler('uniquem', work);
 function invalid(message, status = 400) { throw Object.assign(new Error(message), { status }); }
 export function primaryPackaging(item = {}) { const row = (item.packaging || []).find((value) => value.isPrimary); if (!row) return null; return { ...row, representation: row.type === 'tote' ? 'tote' : 'pallet', capacity: row.quantityPerPackage * row.packagesPerPallet, packageLabel: row.type === 'other' ? row.customLabel : row.type, resolved: true }; }
 export function deterministicColor(productId = '') { let hash = 0; for (const char of String(productId)) hash = ((hash * 31) + char.charCodeAt(0)) >>> 0; return ['#0f766e','#2563eb','#7c3aed','#c2410c','#be123c','#4d7c0f','#0369a1','#a16207'][hash % 8]; }

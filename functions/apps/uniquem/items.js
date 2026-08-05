@@ -7,7 +7,7 @@ const ADJUSTMENTS = 'uniquemStockAdjustments';
 const PAGE_SIZE = 50;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const handler = (work) => miniAppHandler('uniquem', async (...args) => { if (!(await db.collection('uniquemSchema').doc('manual-inventory-v1').get()).exists) invalid('Uniquem upgrade is in progress. Try again shortly.', 503); return work(...args); });
+const handler = (work) => miniAppHandler('uniquem', work);
 const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 export const normalizeItemName = (value) => clean(value, 160).normalize('NFKC').toLocaleLowerCase('en-CA');

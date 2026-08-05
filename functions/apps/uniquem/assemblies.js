@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { admin, db } from '../../core/firebase.js';
 import { miniAppHandler } from '../../core/http.js';
 
-const ITEMS = 'uniquemItems'; const BUILDS = 'uniquemAssemblyBuilds'; const PAGE_SIZE = 50; const TOLERANCE = 1e-6; const handler = (work) => miniAppHandler('uniquem', async (...args) => { if (!(await db.collection('uniquemSchema').doc('manual-inventory-v1').get()).exists) invalid('Uniquem upgrade is in progress. Try again shortly.', 503); return work(...args); });
+const ITEMS = 'uniquemItems'; const BUILDS = 'uniquemAssemblyBuilds'; const PAGE_SIZE = 50; const TOLERANCE = 1e-6; const handler = (work) => miniAppHandler('uniquem', work);
 const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max); const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 function invalid(message, status = 400) { throw Object.assign(new Error(message), { status }); }
 function iso(value) { return value?.toDate ? value.toDate().toISOString() : value || null; }

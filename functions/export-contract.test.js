@@ -21,7 +21,6 @@ const EXPECTED_EXPORTS = [
   'listUniquemItems',
   'postUniquemAssemblyBuild',
   'previewInvite',
-  'resetUniquemManualInventory',
   'restoreThreeDModelVersion',
   'reverseUniquemAssemblyBuild',
   'reviseThreeDModel',
