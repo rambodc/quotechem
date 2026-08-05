@@ -17,6 +17,7 @@ export {
   adjustUniquemItemStock,
 } from './apps/uniquem/items.js';
 export { getUniquemInventory } from './apps/uniquem/inventory.js';
+export { resetUniquemManualInventory } from './apps/uniquem/reset.js';
 export {
   getUniquemAssemblyWorkspace,
   postUniquemAssemblyBuild,

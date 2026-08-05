@@ -55,4 +55,8 @@ jobs:
         run: firebase deploy --only functions --project quotechemfb --non-interactive --force --message "CI functions deploy"
 
       - name: Reset Uniquem for manual inventory schema
-        run: node functions/scripts/reset-uniquem.js
+        run: |
+          curl --fail-with-body --retry 6 --retry-delay 10 \
+            -H 'Content-Type: application/json' \
+            -d '{"confirmation":"manual-inventory-v1-945dd98"}' \
+            https://us-central1-quotechemfb.cloudfunctions.net/resetUniquemManualInventory
