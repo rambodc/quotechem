@@ -1,178 +1,26 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FiChevronDown, FiChevronRight, FiRefreshCw, FiUpload, FiX } from 'react-icons/fi';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FiEdit2, FiImage, FiPackage, FiPlus, FiRefreshCw, FiSliders, FiTrash2, FiX } from 'react-icons/fi';
 import { postJson } from '../../lib/api';
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
-const CATEGORIES = ['all', 'new', 'changed', 'unchanged', 'conflict', 'missing'];
+const blank = () => ({ item:'', description:'', quantityOnHand:0, unitOfMeasure:'Each', active:true, color:'#0f766e', packaging:[], image:null });
+const label = (row) => row.type === 'other' ? row.customLabel : `${row.type.charAt(0).toUpperCase()}${row.type.slice(1)}`;
+function Thumb({ item, size=44 }) { return item?.image?.url ? <img className="item-thumb" style={{width:size,height:size}} src={item.image.url} alt="" /> : <span className="item-thumb placeholder" style={{width:size,height:size,background:item?.color||'#64748b'}}><FiPackage /></span>; }
+async function squareImage(file) { if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 8*1024*1024) throw new Error('Use a JPG, PNG, or WebP image up to 8 MB.'); const url=URL.createObjectURL(file); try { const image=await new Promise((resolve,reject)=>{const value=new Image();value.onload=()=>resolve(value);value.onerror=()=>reject(new Error('Could not read this image.'));value.src=url;}); const side=Math.min(image.naturalWidth,image.naturalHeight),size=Math.min(500,side); const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;canvas.getContext('2d').drawImage(image,(image.naturalWidth-side)/2,(image.naturalHeight-side)/2,side,side,0,0,size,size);return canvas.toDataURL('image/webp',.86); } finally { URL.revokeObjectURL(url); } }
 
-function readFileBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
-    reader.onerror = () => reject(new Error('Could not read the CSV file.'));
-    reader.readAsDataURL(file);
-  });
+function ItemEditor({ value, onClose, onSaved }) {
+  const [item,setItem]=useState(value?JSON.parse(JSON.stringify(value)):blank()); const [file,setFile]=useState(null); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+  const change=(key,next)=>setItem(current=>({...current,[key]:next})); const rowChange=(index,key,next)=>change('packaging',item.packaging.map((row,i)=>i===index?{...row,[key]:next}:key==='isPrimary'&&next?{...row,isPrimary:false}:row));
+  const add=()=>change('packaging',[...item.packaging,{packagingId:crypto.randomUUID(),type:'pail',customLabel:'',quantityPerPackage:1,packagesPerPallet:1,isPrimary:item.packaging.length===0}]);
+  const save=async(event)=>{event.preventDefault();setBusy(true);setError('');try{const result=await postJson('saveUniquemItem',{productId:value?.productId,item:item.item,description:item.description,quantityOnHand:Number(item.quantityOnHand),unitOfMeasure:item.unitOfMeasure,active:item.active,color:item.color,packaging:item.packaging.map(row=>({...row,quantityPerPackage:Number(row.quantityPerPackage),packagesPerPallet:Number(row.packagesPerPallet)}))},{authed:true});let saved=result.item;if(file){const dataUrl=await squareImage(file);const image=await postJson('uploadUniquemItemImage',{productId:saved.productId,contentType:'image/webp',dataUrl},{authed:true});saved={...saved,image:image.image};}onSaved(saved);}catch(reason){setError(reason.message||'Item could not be saved.');}finally{setBusy(false);}};
+  return <div className="uniquem-review-backdrop"><form className="item-editor" onSubmit={save}><header><div><small>{value?'Edit item':'New item'}</small><h2>{item.item||'Inventory item'}</h2></div><button type="button" className="secondary" onClick={onClose}><FiX /></button></header>{error?<div className="uniquem-alert">{error}</div>:null}<div className="item-editor-grid"><label>Item<input required maxLength="160" value={item.item} onChange={e=>change('item',e.target.value)} /></label><label>U/M<select value={item.unitOfMeasure} onChange={e=>change('unitOfMeasure',e.target.value)}><option>Each</option><option>Liters</option></select></label><label className="wide">Description<textarea value={item.description} onChange={e=>change('description',e.target.value)} /></label>{!value?<label>Opening Quantity On Hand<input type="number" min="0" step="any" required value={item.quantityOnHand} onChange={e=>change('quantityOnHand',e.target.value)} /></label>:null}<label>Inventory color<input type="color" value={item.color} onChange={e=>change('color',e.target.value)} /></label><label className="switch"><input type="checkbox" checked={item.active} onChange={e=>change('active',e.target.checked)} />Active item</label><label className="wide image-picker"><FiImage />Product image<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>setFile(e.target.files?.[0]||null)} /><small>{file?.name||'Square thumbnail, resized to 500px maximum'}</small></label></div><section className="packaging-editor"><header><div><h3>Packaging types</h3><p>One row must be primary for the 3D inventory.</p></div><button type="button" onClick={add}><FiPlus />Add packaging</button></header>{item.packaging.map((row,index)=><div className="packaging-row" key={row.packagingId||index}><select aria-label={`Packaging ${index+1} type`} value={row.type} onChange={e=>rowChange(index,'type',e.target.value)}><option value="tote">Tote</option><option value="drum">Drum</option><option value="pail">Pail</option><option value="other">Other</option></select>{row.type==='other'?<input aria-label={`Packaging ${index+1} custom label`} placeholder="Custom type" required value={row.customLabel} onChange={e=>rowChange(index,'customLabel',e.target.value)} />:null}<label>Per package<input type="number" min="0.0001" step="any" required value={row.quantityPerPackage} onChange={e=>rowChange(index,'quantityPerPackage',e.target.value)} /></label><label>Packages / pallet<input type="number" min="0.0001" step="any" required value={row.packagesPerPallet} onChange={e=>rowChange(index,'packagesPerPallet',e.target.value)} /></label><label className="primary"><input type="radio" name="primary" checked={row.isPrimary} onChange={()=>rowChange(index,'isPrimary',true)} />Primary 3D</label><button type="button" className="secondary icon" aria-label={`Remove packaging ${index+1}`} onClick={()=>change('packaging',item.packaging.filter((_,i)=>i!==index).map((x,i,all)=>({...x,isPrimary:x.isPrimary||(i===0&&!all.some(y=>y.isPrimary))})))}><FiTrash2 /></button></div>)}</section><footer><button type="button" className="secondary" onClick={onClose}>Cancel</button><button disabled={busy}>{busy?'Saving…':'Save item'}</button></footer></form></div>;
 }
 
-function displayValue(value) {
-  if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  return String(value);
-}
+function StockDialog({ item, onClose, onSaved }) { const [mode,setMode]=useState('add'),[amount,setAmount]=useState(''),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''); const submit=async(e)=>{e.preventDefault();setBusy(true);setError('');try{const result=await postJson('adjustUniquemItemStock',{productId:item.productId,mode,amount:Number(amount),reason},{authed:true});onSaved(result.item);}catch(x){setError(x.message||'Stock could not be adjusted.');}finally{setBusy(false);}}; return <div className="uniquem-review-backdrop"><form className="stock-dialog" onSubmit={submit}><header><div><small>Quantity On Hand</small><h2>{item.item}</h2><p>Current: {item.quantityOnHand} {item.unitOfMeasure}</p></div><button type="button" className="secondary" onClick={onClose}><FiX /></button></header>{error?<div className="uniquem-alert">{error}</div>:null}<label>Adjustment<select value={mode} onChange={e=>setMode(e.target.value)}><option value="add">Add stock</option><option value="remove">Remove stock</option><option value="set">Set counted quantity</option></select></label><label>{mode==='set'?'New quantity':'Amount'}<input type="number" min="0" step="any" required value={amount} onChange={e=>setAmount(e.target.value)} /></label><label>Reason<textarea required value={reason} onChange={e=>setReason(e.target.value)} /></label><footer><button type="button" className="secondary" onClick={onClose}>Cancel</button><button disabled={busy}>{busy?'Saving…':'Apply adjustment'}</button></footer></form></div>; }
 
-function statusLabel(category) {
-  return category === 'missing' ? 'Missing from file' : category.charAt(0).toUpperCase() + category.slice(1);
-}
+export default function ItemsPage(){const [items,setItems]=useState([]),[cursor,setCursor]=useState(null),[query,setQuery]=useState(''),[status,setStatus]=useState(''),[loading,setLoading]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState(null),[adjusting,setAdjusting]=useState(null);const sentinel=useRef(null);
+  const load=useCallback(async(reset=false)=>{if(loading)return;setLoading(true);setError('');try{const result=await postJson('listUniquemItems',{query,status,cursor:reset?'':cursor},{authed:true});setItems(current=>reset?result.items:[...current,...result.items.filter(x=>!current.some(y=>y.productId===x.productId))]);setCursor(result.nextCursor);}catch(x){setError(x.message||'Items could not be loaded.');}finally{setLoading(false);}},[query,status,cursor,loading]);
+  useEffect(()=>{setItems([]);setCursor(null);const timer=setTimeout(()=>{postJson('listUniquemItems',{query,status},{authed:true}).then(r=>{setItems(r.items||[]);setCursor(r.nextCursor||null);}).catch(x=>setError(x.message));},250);return()=>clearTimeout(timer);},[query,status]); useEffect(()=>{const node=sentinel.current;if(!node||typeof IntersectionObserver==='undefined')return undefined;const observer=new IntersectionObserver(entries=>{if(entries[0].isIntersecting&&cursor&&!loading)load(false);});observer.observe(node);return()=>observer.disconnect();},[cursor,loading,load]);
+  const replace=saved=>{setItems(current=>[...current.filter(x=>x.productId!==saved.productId),saved].sort((a,b)=>a.item.localeCompare(b.item)));setEditing(null);setAdjusting(null);};
+  return <div className="uniquem-items">{error?<div className="uniquem-alert">{error}</div>:null}<section className="uniquem-panel"><header><div><h2>Items</h2><p>Manual catalog and current inventory quantities.</p></div><div className="uniquem-actions"><button className="secondary" onClick={()=>{setItems([]);setCursor(null);load(true);}}><FiRefreshCw />Refresh</button><button onClick={()=>setEditing(false)}><FiPlus />New item</button></div></header><div className="uniquem-filters"><input aria-label="Search items" placeholder="Search item or description" value={query} onChange={e=>setQuery(e.target.value)} /><select aria-label="Filter by status" value={status} onChange={e=>setStatus(e.target.value)}><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div><div className="uniquem-table-wrap"><table><thead><tr><th>Item</th><th>Status</th><th>Description</th><th>Quantity On Hand</th><th>U/M</th><th>Packaging</th><th>Actions</th></tr></thead><tbody>{items.map(item=><tr key={item.productId}><td><div className="item-name"><Thumb item={item}/><strong>{item.item}</strong></div></td><td><span className={`uniquem-item-status ${item.active?'active':''}`}>{item.active?'Active':'Inactive'}</span></td><td>{item.description||'—'}</td><td>{item.quantityOnHand}</td><td>{item.unitOfMeasure}</td><td>{item.packaging?.length?item.packaging.map(row=>`${label(row)}: ${row.quantityPerPackage} × ${row.packagesPerPallet}/pallet`).join(', '):'—'}</td><td><div className="uniquem-actions"><button className="secondary icon" aria-label={`Adjust ${item.item} stock`} onClick={()=>setAdjusting(item)}><FiSliders /></button><button className="secondary icon" aria-label={`Edit ${item.item}`} onClick={()=>setEditing(item)}><FiEdit2 /></button></div></td></tr>)}</tbody></table>{!items.length&&!loading?<p className="uniquem-empty">No items found. Create the first item to begin.</p>:null}<div ref={sentinel} className="load-sentinel">{loading?'Loading…':cursor?'Scroll for more':''}</div></div></section>{editing!==null?<ItemEditor value={editing||null} onClose={()=>setEditing(null)} onSaved={replace}/>:null}{adjusting?<StockDialog item={adjusting} onClose={()=>setAdjusting(null)} onSaved={replace}/>:null}</div>}
 
-function DetailDrawer({ item, fields, onClose }) {
-  useEffect(() => {
-    const close = (event) => event.key === 'Escape' && onClose();
-    document.addEventListener('keydown', close);
-    return () => document.removeEventListener('keydown', close);
-  }, [onClose]);
-  return <div className="uniquem-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <aside className="uniquem-drawer" aria-label="Item details">
-      <header><div><span>QuickBooks Item</span><h2>{item.item}</h2></div><button onClick={onClose} aria-label="Close"><FiX /></button></header>
-      <dl>{fields.map((field) => <div key={field.key}><dt>{field.header}</dt><dd>{displayValue(item[field.key])}</dd></div>)}</dl>
-      <p className="uniquem-snapshot-note">Quantity On Hand is an imported QuickBooks snapshot. It does not create Uniquem inventory.</p>
-    </aside>
-  </div>;
-}
-
-function ReviewModal({ preview, contentBase64, onClose, onApplied }) {
-  const [selected, setSelected] = useState(() => new Set(preview.rows.filter((row) => row.selected).map((row) => row.rowIndex)));
-  const [expanded, setExpanded] = useState(new Set());
-  const [filter, setFilter] = useState('all');
-  const [renameMappings, setRenameMappings] = useState({});
-  const [duplicateChoices, setDuplicateChoices] = useState({});
-  const [markInactive, setMarkInactive] = useState(new Set());
-  const [reconciliationMode, setReconciliationMode] = useState('reset');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const visibleRows = filter === 'all' ? preview.rows : preview.rows.filter((row) => row.category === filter);
-  const availableRenameTargets = preview.missing;
-  const mappedTargetIds = new Set(Object.values(renameMappings).filter(Boolean));
-  const visibleMissing = preview.missing.filter((item) => !mappedTargetIds.has(item.productId));
-  const toggleSelected = (rowIndex) => setSelected((current) => { const next = new Set(current); next.has(rowIndex) ? next.delete(rowIndex) : next.add(rowIndex); return next; });
-  const toggleExpanded = (rowIndex) => setExpanded((current) => { const next = new Set(current); next.has(rowIndex) ? next.delete(rowIndex) : next.add(rowIndex); return next; });
-  const chooseDuplicate = (row) => {
-    setDuplicateChoices((current) => ({ ...current, [row.item.normalizedItem]: row.rowIndex }));
-    setSelected((current) => { const next = new Set(current); for (const index of row.duplicateRows || []) next.delete(index); next.add(row.rowIndex); return next; });
-  };
-  const mapRename = (rowIndex, productId) => {
-    setRenameMappings((current) => ({ ...current, [rowIndex]: productId }));
-    if (productId) {
-      setSelected((current) => new Set(current).add(rowIndex));
-      setMarkInactive((current) => { const next = new Set(current); next.delete(productId); return next; });
-    }
-  };
-  const changesFor = (row) => {
-    const mapped = preview.existingItems.find((item) => item.productId === renameMappings[row.rowIndex]);
-    if (!mapped) return row.changes;
-    return preview.fields.filter((field) => (mapped[field.key] ?? null) !== (row.item[field.key] ?? null)).map((field) => ({ key: field.key, label: field.header, current: mapped[field.key] ?? null, incoming: row.item[field.key] ?? null }));
-  };
-  const apply = async () => {
-    setBusy(true); setError('');
-    try {
-      const data = await postJson('applyUniquemItemImport', {
-        fileName: preview.fileName,
-        contentBase64,
-        catalogRevision: preview.catalogRevision,
-        reconciliationMode,
-        decisions: {
-          selectedRowIndexes: [...selected],
-          renameMappings: Object.entries(renameMappings).filter(([, productId]) => productId).map(([rowIndex, productId]) => ({ rowIndex: Number(rowIndex), productId })),
-          duplicateChoices,
-          markInactiveItemIds: [...markInactive],
-        },
-      }, { authed: true });
-      onApplied(data);
-    } catch (err) {
-      setError(err?.message || 'The QuickBooks items could not be imported.');
-    } finally { setBusy(false); }
-  };
-
-  return <div className="uniquem-review-backdrop"><section className="uniquem-review" aria-label="Review QuickBooks import">
-    <header><div><span>Import review</span><h2>{preview.fileName}</h2><p>{preview.totalRows} QuickBooks rows</p></div><button onClick={onClose} disabled={busy} aria-label="Close"><FiX /></button></header>
-    {error ? <div className="uniquem-alert">{error}</div> : null}
-    <nav className="uniquem-review-tabs" aria-label="Import categories">{CATEGORIES.map((category) => <button key={category} className={filter === category ? 'active' : ''} onClick={() => setFilter(category)}>{category === 'all' ? 'All' : statusLabel(category)} <strong>{category === 'all' ? preview.totalRows + preview.missing.length : preview.counts[category]}</strong></button>)}</nav>
-    <fieldset className="uniquem-reconciliation"><legend>Assembly inventory reconciliation</legend><label><input type="radio" name="reconciliation" value="reset" checked={reconciliationMode === 'reset'} onChange={() => setReconciliationMode('reset')} /><span><strong>Reset adjustments</strong><small>Use this QuickBooks file as the new inventory baseline.</small></span></label><label><input type="radio" name="reconciliation" value="carry" checked={reconciliationMode === 'carry'} onChange={() => setReconciliationMode('carry')} /><span><strong>Carry adjustments forward</strong><small>Keep Uniquem assembly movements on top of the new snapshot.</small></span></label></fieldset>
-    <div className="uniquem-review-list">
-      {visibleRows.map((row) => {
-        const changes = changesFor(row);
-        const isExpanded = expanded.has(row.rowIndex);
-        return <article className={`uniquem-review-row ${row.category}`} key={row.rowIndex}>
-          <div className="uniquem-review-row-main">
-            {row.category === 'conflict' ? <input type="radio" aria-label={`Choose ${row.item.item} row ${row.rowNumber}`} name={`duplicate-${row.item.normalizedItem}`} checked={duplicateChoices[row.item.normalizedItem] === row.rowIndex} onChange={() => chooseDuplicate(row)} /> : <input type="checkbox" aria-label={`Select ${row.item.item}`} checked={selected.has(row.rowIndex)} disabled={row.category === 'unchanged'} onChange={() => toggleSelected(row.rowIndex)} />}
-            <button className="uniquem-expand" onClick={() => toggleExpanded(row.rowIndex)} aria-label={`Show changes for ${row.item.item}`}>{isExpanded ? <FiChevronDown /> : <FiChevronRight />}</button>
-            <div><strong>{row.item.item}</strong><span>{row.item.type || 'No type'} · {row.item.activeStatus}</span></div>
-            <span className={`uniquem-category ${row.category}`}>{statusLabel(row.category)}</span>
-            <small>{row.category === 'conflict' ? row.conflictReason : `${changes.length} field change${changes.length === 1 ? '' : 's'}`}</small>
-          </div>
-          {row.category === 'new' ? <label className="uniquem-rename">This may be a renamed item:<select value={renameMappings[row.rowIndex] || ''} onChange={(event) => mapRename(row.rowIndex, event.target.value)}><option value="">Create as new</option>{availableRenameTargets.map((item) => <option key={item.productId} value={item.productId}>{item.item} ({item.type})</option>)}</select></label> : null}
-          {isExpanded ? <div className="uniquem-diff"><div className="heading"><span>Field</span><span>Current</span><span>Incoming</span></div>{changes.map((change) => <div key={change.key}><strong>{change.label}</strong><span>{displayValue(change.current)}</span><span>{displayValue(change.incoming)}</span></div>)}</div> : null}
-        </article>;
-      })}
-      {filter === 'missing' || filter === 'all' ? visibleMissing.map((item) => <article className="uniquem-review-row missing" key={`missing-${item.productId}`}><div className="uniquem-review-row-main"><input type="checkbox" aria-label={`Mark ${item.item} inactive`} checked={markInactive.has(item.productId)} onChange={() => setMarkInactive((current) => { const next = new Set(current); next.has(item.productId) ? next.delete(item.productId) : next.add(item.productId); return next; })} /><span className="uniquem-expand" /><div><strong>{item.item}</strong><span>{item.type} · {item.activeStatus}</span></div><span className="uniquem-category missing">Missing from file</span><small>Check to mark Not-active</small></div></article>) : null}
-    </div>
-    <footer><div><strong>{selected.size}</strong> CSV rows selected · <strong>{markInactive.size}</strong> missing items to mark inactive</div><button className="secondary" onClick={onClose} disabled={busy}>Cancel</button><button onClick={apply} disabled={busy}>{busy ? 'Importing…' : 'Apply selected changes'}</button></footer>
-  </section></div>;
-}
-
-export default function ItemsPage() {
-  const inputRef = useRef(null);
-  const [data, setData] = useState({ items: [], imports: [], fields: [] });
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [status, setStatus] = useState('');
-  const [preview, setPreview] = useState(null);
-  const [filePayload, setFilePayload] = useState(null);
-  const [query, setQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [detail, setDetail] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
-    try { setData(await postJson('listUniquemItems', {}, { authed: true })); }
-    catch (err) { setError(err?.message || 'Could not load QuickBooks items.'); }
-    finally { setLoading(false); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  const chooseFile = async (file) => {
-    setError(''); setStatus('');
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.csv')) { setError('Upload a .csv file exported from QuickBooks Desktop.'); return; }
-    if (file.size > MAX_FILE_BYTES) { setError('CSV file must be 5 MB or smaller.'); return; }
-    setBusy(true);
-    try {
-      const contentBase64 = await readFileBase64(file);
-      const next = await postJson('previewUniquemItemImport', { fileName: file.name, contentBase64 }, { authed: true });
-      setFilePayload({ fileName: file.name, contentBase64 }); setPreview(next);
-    } catch (err) { setError(err?.message || 'Could not preview this QuickBooks CSV.'); }
-    finally { setBusy(false); if (inputRef.current) inputRef.current.value = ''; }
-  };
-
-  const types = useMemo(() => [...new Set(data.items.map((item) => item.type).filter(Boolean))].sort(), [data.items]);
-  const statuses = useMemo(() => [...new Set(data.items.map((item) => item.activeStatus).filter(Boolean))].sort(), [data.items]);
-  const items = useMemo(() => data.items.filter((item) => {
-    const term = query.trim().toLowerCase();
-    return (!term || `${item.item} ${item.description || ''} ${item.preferredVendor || ''}`.toLowerCase().includes(term)) && (!typeFilter || item.type === typeFilter) && (!statusFilter || item.activeStatus === statusFilter);
-  }), [data.items, query, typeFilter, statusFilter]);
-
-  return <div className="uniquem-items">
-    {error ? <div className="uniquem-alert">{error}</div> : null}{status ? <div className="uniquem-success">{status}</div> : null}
-    <section className="uniquem-panel"><header><div><h2>QuickBooks Items</h2><p>Read-only item catalog from QuickBooks Enterprise Desktop 2020.</p></div><div className="uniquem-actions"><button className="secondary" onClick={load} disabled={loading || busy}><FiRefreshCw />Refresh</button><button onClick={() => inputRef.current?.click()} disabled={busy}><FiUpload />{busy ? 'Reading CSV…' : 'Upload QuickBooks CSV'}</button><input ref={inputRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => chooseFile(event.target.files?.[0])} /></div></header>
-      <div className="uniquem-filters"><input aria-label="Search items" placeholder="Search item, description, or vendor" value={query} onChange={(event) => setQuery(event.target.value)} /><select aria-label="Filter by type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">All types</option>{types.map((type) => <option key={type}>{type}</option>)}</select><select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{statuses.map((itemStatus) => <option key={itemStatus}>{itemStatus}</option>)}</select></div>
-      {loading ? <p className="uniquem-empty">Loading items…</p> : <div className="uniquem-table-wrap"><table><thead><tr><th>Item</th><th>Type</th><th>Status</th><th>Description</th><th>Quantity On Hand</th><th>U/M</th><th>Cost</th><th>Price</th></tr></thead><tbody>{items.map((item) => <tr key={item.productId} onClick={() => setDetail(item)} tabIndex="0" onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && setDetail(item)}><td><strong>{item.item}</strong></td><td>{item.type}</td><td><span className={`uniquem-item-status ${item.activeStatus === 'Active' ? 'active' : ''}`}>{item.activeStatus}</span></td><td>{item.description || '—'}</td><td>{displayValue(item.quantityOnHand)}</td><td>{item.unitOfMeasure || '—'}</td><td>{displayValue(item.cost)}</td><td>{displayValue(item.price)}</td></tr>)}</tbody></table>{!items.length ? <p className="uniquem-empty">{data.items.length ? 'No items match these filters.' : 'No items yet. Upload a QuickBooks CSV to begin.'}</p> : null}</div>}
-    </section>
-    {data.imports.length ? <section className="uniquem-panel"><header><div><h2>Recent imports</h2><p>Summary history only; CSV contents are not retained.</p></div></header><div className="uniquem-import-history">{data.imports.map((item) => <article key={item.importId}><strong>{item.fileName}</strong><span>{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Imported'}</span><small>{item.created} new · {item.updated} updated · {item.markedInactive} marked inactive · {item.skipped} skipped</small></article>)}</div></section> : null}
-    {detail ? <DetailDrawer item={detail} fields={data.fields} onClose={() => setDetail(null)} /> : null}
-    {preview && filePayload ? <ReviewModal preview={preview} contentBase64={filePayload.contentBase64} onClose={() => { setPreview(null); setFilePayload(null); }} onApplied={(next) => { setData({ items: next.items, imports: next.imports, fields: next.fields }); setStatus(`${next.import.created} items created and ${next.import.updated} updated.`); setPreview(null); setFilePayload(null); }} /> : null}
-  </div>;
-}
-
-export { displayValue, readFileBase64 };
+export { Thumb, squareImage };

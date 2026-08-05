@@ -53,3 +53,6 @@ jobs:
 
       - name: Deploy Functions
         run: firebase deploy --only functions --project quotechemfb --non-interactive --force --message "CI functions deploy"
+
+      - name: Reset Uniquem for manual inventory schema
+        run: node functions/scripts/reset-uniquem.js

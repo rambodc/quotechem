@@ -2,182 +2,43 @@ import { randomUUID } from 'node:crypto';
 import { admin, db } from '../../core/firebase.js';
 import { miniAppHandler } from '../../core/http.js';
 
-const ITEMS = 'uniquemItems';
-const RECIPES = 'uniquemAssemblyRecipes';
-const REVISIONS = 'uniquemAssemblyRecipeRevisions';
-const BUILDS = 'uniquemAssemblyBuilds';
-const MAX_COMPONENTS = 100;
-const handler = (work) => miniAppHandler('uniquem', work);
-
+const ITEMS = 'uniquemItems'; const BUILDS = 'uniquemAssemblyBuilds'; const PAGE_SIZE = 50; const TOLERANCE = 1e-6; const handler = (work) => miniAppHandler('uniquem', async (...args) => { if (!(await db.collection('uniquemSchema').doc('manual-inventory-v1').get()).exists) invalid('Uniquem upgrade is in progress. Try again shortly.', 503); return work(...args); });
+const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max); const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 function invalid(message, status = 400) { throw Object.assign(new Error(message), { status }); }
-const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
-const finite = (value) => typeof value === 'number' && Number.isFinite(value);
-const quantity = (value, label) => {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) invalid(`${label} must be greater than zero.`);
-  return number;
-};
-const isoDate = (value) => {
-  const text = clean(value, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(`${text}T00:00:00Z`))) invalid('Build date is invalid.');
-  return text;
-};
-const timestampValue = (value) => value?.toDate ? value.toDate().toISOString() : value || null;
-const mapDoc = (doc) => {
-  const value = { ...(doc.data() || {}) };
-  for (const key of ['createdAt', 'updatedAt', 'postedAt', 'reversedAt', 'archivedAt']) if (value[key]) value[key] = timestampValue(value[key]);
-  return value;
-};
-const itemView = (doc) => {
-  const item = doc.data() || {};
-  const quickBooksQuantity = finite(item.quantityOnHand) ? item.quantityOnHand : 0;
-  const assemblyAdjustment = finite(item.assemblyAdjustment) ? item.assemblyAdjustment : 0;
-  return { productId: item.productId || doc.id, item: item.item || '', type: item.type || '', activeStatus: item.activeStatus || '', unitOfMeasure: item.unitOfMeasure || '', quickBooksQuantity, assemblyAdjustment, availableQuantity: quickBooksQuantity + assemblyAdjustment };
-};
+function iso(value) { return value?.toDate ? value.toDate().toISOString() : value || null; }
+function itemView(doc) { const v = doc.data() || {}; return { productId: v.productId || doc.id, item: v.item || '', description: v.description || '', active: v.active === true, activeStatus: v.active === true ? 'Active' : 'Inactive', unitOfMeasure: v.unitOfMeasure || '', quantityOnHand: Number(v.quantityOnHand) || 0, color: v.color || '#64748b', image: v.image || null, lastAssemblyComponents: v.lastAssemblyComponents || [] }; }
+function buildView(doc) { const v = doc.data() || {}; return { ...v, buildId: v.buildId || doc.id, postedAt: iso(v.postedAt), reversedAt: iso(v.reversedAt) }; }
+export const percentageTotal = (components = []) => components.reduce((sum, row) => sum + Number(row.percentage || 0), 0);
+export const isCompletePercentage = (components) => Math.abs(percentageTotal(components) - 100) <= TOLERANCE;
+export function componentPayload(value, outputProductId) { if (!Array.isArray(value) || !value.length || value.length > 100) invalid('Choose between 1 and 100 components.'); const ids = new Set(); const rows = value.map((row, index) => { const productId = clean(row?.productId, 160); const percentage = Number(row?.percentage); if (!productId || !finite(percentage) || percentage <= 0 || percentage > 100) invalid(`Component ${index + 1} requires a percentage above 0 and no more than 100.`); if (productId === outputProductId) invalid('The finished item cannot be its own component.'); if (ids.has(productId)) invalid('Each component may only be selected once.'); ids.add(productId); return { productId, percentage }; }); if (!isCompletePercentage(rows)) invalid(`Component percentages must total 100%. Current total is ${percentageTotal(rows)}%.`); return rows; }
+function positive(value, label) { const result = Number(value); if (!finite(result) || result <= 0) invalid(`${label} must be positive.`); return result; }
+function date(value) { const text = clean(value, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) invalid('Build date is required.'); return text; }
+async function itemsSnapshot(tx = null) { const query = db.collection(ITEMS).limit(5000); return tx ? tx.get(query) : query.get(); }
 
-export function normalizeComponents(components, outputProductId) {
-  if (!Array.isArray(components) || !components.length) invalid('Add at least one component.');
-  if (components.length > MAX_COMPONENTS) invalid(`An assembly may contain at most ${MAX_COMPONENTS} components.`);
-  const seen = new Set();
-  return components.map((component, index) => {
-    const productId = clean(component?.productId, 160);
-    if (!productId) invalid(`Component ${index + 1} must select an item.`);
-    if (productId === outputProductId) invalid('The finished item cannot also be a component.');
-    if (seen.has(productId)) invalid('Each component item may appear only once.');
-    seen.add(productId);
-    const percentage = quantity(component?.percentage, `Component ${index + 1} percentage`);
-    if (percentage > 100) invalid(`Component ${index + 1} percentage cannot exceed 100%.`);
-    return { productId, percentage };
-  });
-}
-
-export function percentageTotal(components = []) {
-  return components.reduce((total, component) => total + component.percentage, 0);
-}
-
-export function isCompletePercentage(total) {
-  return Math.abs(total - 100) < 0.0001;
-}
-
-export function calculatedComponents(components, outputQuantity) {
-  const output = quantity(outputQuantity, 'Output quantity');
-  return components.map((component) => ({ ...component, quantity: output * component.percentage / 100 }));
-}
-
-export function buildMovements(outputProductId, outputQuantity, components) {
-  return [...components.map((component) => ({ productId: component.productId, quantity: -component.quantity, role: 'component' })), { productId: outputProductId, quantity: outputQuantity, role: 'output' }];
-}
-
-function recipePayload(body, itemsById) {
-  const name = clean(body?.name, 160);
-  const outputProductId = clean(body?.outputProductId, 160);
-  if (!name) invalid('Recipe name is required.');
-  const output = itemsById.get(outputProductId);
-  if (!output || output.activeStatus !== 'Active') invalid('Select an active finished item.', 409);
-  const components = normalizeComponents(body?.components, outputProductId);
-  for (const component of components) {
-    const item = itemsById.get(component.productId);
-    if (!item || item.activeStatus !== 'Active') invalid('Every component must be an active catalog item.', 409);
-  }
-  return { name, outputProductId, outputItem: output.item, outputUnitOfMeasure: output.unitOfMeasure, percentageTotal: percentageTotal(components), components: components.map((component) => ({ ...component, item: itemsById.get(component.productId).item, unitOfMeasure: itemsById.get(component.productId).unitOfMeasure })) };
-}
-
-async function itemSnapshot(tx = null) {
-  const query = db.collection(ITEMS).limit(1000);
-  return tx ? tx.get(query) : query.get();
-}
-
-async function workspace() {
-  const [itemsSnap, recipesSnap, buildsSnap] = await Promise.all([
-    itemSnapshot(), db.collection(RECIPES).limit(500).get(), db.collection(BUILDS).limit(500).get(),
-  ]);
-  const recipes = recipesSnap.docs.map(mapDoc).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  const builds = buildsSnap.docs.map(mapDoc).sort((a, b) => String(b.postedAt || '').localeCompare(String(a.postedAt || '')));
-  return { items: itemsSnap.docs.map(itemView).sort((a, b) => a.item.localeCompare(b.item)), recipes, builds };
-}
-
-export const getUniquemAssemblyWorkspace = handler(async () => workspace());
-
-export const saveUniquemAssemblyRecipe = handler(async (req, user) => {
-  const recipeId = clean(req.body?.recipeId, 160) || randomUUID();
-  const expectedRevision = req.body?.expectedRevision == null ? null : clean(req.body.expectedRevision, 160);
-  await db.runTransaction(async (tx) => {
-    const [itemsSnap, currentSnap] = await Promise.all([itemSnapshot(tx), tx.get(db.collection(RECIPES).doc(recipeId))]);
-    const itemsById = new Map(itemsSnap.docs.map((doc) => [doc.id, itemView(doc)]));
-    const payload = recipePayload(req.body, itemsById);
-    const current = currentSnap.exists ? currentSnap.data() || {} : null;
-    if (current && expectedRevision !== current.revision) invalid('This recipe changed while you were editing. Reload and try again.', 409);
-    if (!current && expectedRevision) invalid('This recipe no longer exists.', 409);
-    const revision = randomUUID(); const now = admin.firestore.FieldValue.serverTimestamp(); const revisionNumber = (current?.revisionNumber || 0) + 1;
-    const saved = { recipeId, ...payload, status: 'Active', revision, revisionNumber, createdAt: current?.createdAt || now, createdBy: current?.createdBy || user.uid, createdByEmail: current?.createdByEmail || user.email || '', updatedAt: now, updatedBy: user.uid, updatedByEmail: user.email || '' };
-    tx.set(db.collection(RECIPES).doc(recipeId), saved, { merge: false });
-    tx.create(db.collection(REVISIONS).doc(revision), { ...saved, savedAt: now, savedBy: user.uid, savedByEmail: user.email || '' });
-  });
-  return workspace();
-});
-
-export const archiveUniquemAssemblyRecipe = handler(async (req, user) => {
-  const recipeId = clean(req.body?.recipeId, 160); const expectedRevision = clean(req.body?.expectedRevision, 160);
-  if (!recipeId || !expectedRevision) invalid('A reviewed recipe is required.');
-  await db.runTransaction(async (tx) => {
-    const ref = db.collection(RECIPES).doc(recipeId); const snap = await tx.get(ref);
-    if (!snap.exists) invalid('Recipe not found.', 404);
-    const current = snap.data() || {}; if (current.revision !== expectedRevision) invalid('This recipe changed while you were editing.', 409);
-    if (current.status === 'Archived') return;
-    const revision = randomUUID(); const now = admin.firestore.FieldValue.serverTimestamp(); const revisionNumber = (current.revisionNumber || 0) + 1;
-    const archived = { ...current, status: 'Archived', revision, revisionNumber, archivedAt: now, archivedBy: user.uid, archivedByEmail: user.email || '', updatedAt: now, updatedBy: user.uid, updatedByEmail: user.email || '' };
-    tx.set(ref, archived, { merge: false });
-    tx.create(db.collection(REVISIONS).doc(revision), { ...archived, savedAt: now, savedBy: user.uid, savedByEmail: user.email || '' });
-  });
-  return workspace();
+export const getUniquemAssemblyWorkspace = handler(async (req) => {
+  const query = clean(req.body?.query, 160).toLowerCase(); const cursor = clean(req.body?.cursor, 160); const historyCursor = clean(req.body?.historyCursor, 160);
+  const [itemSnap, buildSnap] = await Promise.all([itemsSnapshot(), db.collection(BUILDS).orderBy('postedAt', 'desc').limit(5000).get()]);
+  const all = itemSnap.docs.map(itemView).filter((item) => item.active && (!query || `${item.item} ${item.description}`.toLowerCase().includes(query))).sort((a,b) => a.item.localeCompare(b.item)); const start = cursor ? Math.max(0, all.findIndex((x) => x.productId === cursor) + 1) : 0; const items = all.slice(start, start + PAGE_SIZE);
+  const builds = buildSnap.docs.map(buildView); const hStart = historyCursor ? Math.max(0, builds.findIndex((x) => x.buildId === historyCursor) + 1) : 0; const history = builds.slice(hStart, hStart + PAGE_SIZE);
+  return { items, nextCursor: start + PAGE_SIZE < all.length ? items.at(-1)?.productId : null, builds: history, nextHistoryCursor: hStart + PAGE_SIZE < builds.length ? history.at(-1)?.buildId : null };
 });
 
 export const postUniquemAssemblyBuild = handler(async (req, user) => {
-  const recipeId = clean(req.body?.recipeId, 160); const recipeRevision = clean(req.body?.recipeRevision, 160);
-  if (!recipeId || !recipeRevision) invalid('Select a current assembly recipe.');
-  const buildId = randomUUID();
+  const outputProductId = clean(req.body?.outputProductId, 160); const outputQuantity = positive(req.body?.outputQuantity, 'Finished quantity'); const components = componentPayload(req.body?.components, outputProductId); let result;
   await db.runTransaction(async (tx) => {
-    const [itemsSnap, recipeSnap] = await Promise.all([itemSnapshot(tx), tx.get(db.collection(RECIPES).doc(recipeId))]);
-    if (!recipeSnap.exists) invalid('Recipe not found.', 404);
-    const recipe = recipeSnap.data() || {};
-    if (recipe.status !== 'Active' || recipe.revision !== recipeRevision) invalid('This recipe changed. Reload it before posting.', 409);
-    const itemsById = new Map(itemsSnap.docs.map((doc) => [doc.id, itemView(doc)]));
-    const outputQuantity = quantity(req.body?.outputQuantity, 'Output quantity');
-    const percentages = normalizeComponents(req.body?.components, recipe.outputProductId);
-    const components = calculatedComponents(percentages, outputQuantity);
-    const referenced = [recipe.outputProductId, ...components.map((item) => item.productId)];
-    for (const productId of referenced) if (!itemsById.has(productId)) invalid('A selected assembly item no longer exists.', 409);
-    const recipeById = new Map(recipe.components.map((item) => [item.productId, item.percentage]));
-    const movements = buildMovements(recipe.outputProductId, outputQuantity, components);
-    const shortages = movements.filter((move) => move.quantity < 0 && itemsById.get(move.productId).availableQuantity + move.quantity < 0).map((move) => ({ productId: move.productId, item: itemsById.get(move.productId).item, available: itemsById.get(move.productId).availableQuantity, required: -move.quantity, projected: itemsById.get(move.productId).availableQuantity + move.quantity }));
-    if (shortages.length && req.body?.acknowledgeShortage !== true) invalid(`Insufficient inventory for ${shortages.map((item) => item.item).join(', ')}. Confirm the shortage to post.`, 409);
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    for (const move of movements) tx.update(db.collection(ITEMS).doc(move.productId), { assemblyAdjustment: admin.firestore.FieldValue.increment(move.quantity), assemblyUpdatedAt: now, assemblyUpdatedBy: user.uid });
-    const componentSnapshots = components.map((component) => ({ ...component, item: itemsById.get(component.productId).item, unitOfMeasure: itemsById.get(component.productId).unitOfMeasure, recipePercentage: recipeById.get(component.productId) || 0, percentageVariance: component.percentage - (recipeById.get(component.productId) || 0) }));
-    tx.create(db.collection(BUILDS).doc(buildId), { buildId, kind: 'build', status: 'Posted', recipeId, recipeRevision, recipeSnapshot: recipe, buildDate: isoDate(req.body?.buildDate), reference: clean(req.body?.reference, 160), notes: clean(req.body?.notes, 2000), outputProductId: recipe.outputProductId, outputItem: itemsById.get(recipe.outputProductId).item, outputUnitOfMeasure: itemsById.get(recipe.outputProductId).unitOfMeasure, outputQuantity, percentageTotal: percentageTotal(components), components: componentSnapshots, movements, shortages, postedAt: now, postedBy: user.uid, postedByEmail: user.email || '' });
-  });
-  return workspace();
+    const snap = await itemsSnapshot(tx); const items = new Map(snap.docs.map((doc) => [doc.id, { doc, ...itemView(doc) }])); const output = items.get(outputProductId); if (!output?.active) invalid('Select an active finished item.', 409);
+    for (const row of components) if (!items.get(row.productId)?.active) invalid('Every component must be active.', 409);
+    const calculated = components.map((row) => ({ ...row, quantity: outputQuantity * row.percentage / 100 })); const movements = [...calculated.map((row) => ({ productId: row.productId, quantity: -row.quantity, role: 'component' })), { productId: outputProductId, quantity: outputQuantity, role: 'output' }];
+    const shortages = movements.filter((move) => move.quantity < 0 && items.get(move.productId).quantityOnHand + move.quantity < 0).map((move) => ({ productId: move.productId, item: items.get(move.productId).item, current: items.get(move.productId).quantityOnHand, projected: items.get(move.productId).quantityOnHand + move.quantity })); if (shortages.length && req.body?.acknowledgeShortage !== true) invalid('Confirm that this build will create negative inventory.', 409);
+    const now = admin.firestore.FieldValue.serverTimestamp(); for (const move of movements) tx.update(db.collection(ITEMS).doc(move.productId), { quantityOnHand: admin.firestore.FieldValue.increment(move.quantity), stockUpdatedAt: now, stockUpdatedBy: user.uid, updatedAt: now, updatedBy: user.uid });
+    const componentSnapshots = calculated.map((row) => { const item = items.get(row.productId); return { ...row, item: item.item, unitOfMeasure: item.unitOfMeasure, color: item.color, image: item.image || null }; }); const buildId = randomUUID(); const build = { buildId, kind: 'build', status: 'Posted', outputProductId, outputItem: output.item, outputUnitOfMeasure: output.unitOfMeasure, outputColor: output.color, outputImage: output.image || null, outputQuantity, components: componentSnapshots, percentageTotal: 100, movements, shortages, buildDate: date(req.body?.buildDate), reference: clean(req.body?.reference,160), notes: clean(req.body?.notes), postedAt: now, postedBy: user.uid, postedByEmail: user.email || '' };
+    tx.create(db.collection(BUILDS).doc(buildId), build); tx.update(db.collection(ITEMS).doc(outputProductId), { lastAssemblyComponents: components, lastAssemblyBuildId: buildId }); result = build;
+  }); return { build: result };
 });
 
 export const reverseUniquemAssemblyBuild = handler(async (req, user) => {
-  const buildId = clean(req.body?.buildId, 160); if (!buildId) invalid('Select a build to reverse.');
-  const reason = clean(req.body?.reason, 500); if (!reason) invalid('A reversal reason is required.');
-  const reversalId = randomUUID();
-  await db.runTransaction(async (tx) => {
-    const [itemsSnap, buildSnap] = await Promise.all([itemSnapshot(tx), tx.get(db.collection(BUILDS).doc(buildId))]);
-    if (!buildSnap.exists) invalid('Build not found.', 404);
-    const build = buildSnap.data() || {}; if (build.kind !== 'build' || build.status !== 'Posted' || build.reversalId) invalid('This build cannot be reversed.', 409);
-    const itemsById = new Map(itemsSnap.docs.map((doc) => [doc.id, itemView(doc)]));
-    const movements = (build.movements || []).map((move) => ({ ...move, quantity: -move.quantity }));
-    for (const move of movements) if (!itemsById.has(move.productId)) invalid('An item used by this build no longer exists.', 409);
-    const shortages = movements.filter((move) => itemsById.get(move.productId).availableQuantity + move.quantity < 0).map((move) => ({ productId: move.productId, item: itemsById.get(move.productId).item, available: itemsById.get(move.productId).availableQuantity, change: move.quantity, projected: itemsById.get(move.productId).availableQuantity + move.quantity }));
-    if (shortages.length && req.body?.acknowledgeShortage !== true) invalid(`Reversal would make ${shortages.map((item) => item.item).join(', ')} negative. Confirm to continue.`, 409);
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    for (const move of movements) tx.update(db.collection(ITEMS).doc(move.productId), { assemblyAdjustment: admin.firestore.FieldValue.increment(move.quantity), assemblyUpdatedAt: now, assemblyUpdatedBy: user.uid });
-    tx.update(buildSnap.ref, { status: 'Reversed', reversalId, reversedAt: now, reversedBy: user.uid, reversedByEmail: user.email || '', reversalReason: reason });
-    tx.create(db.collection(BUILDS).doc(reversalId), { buildId: reversalId, kind: 'reversal', status: 'Posted', reversesBuildId: buildId, buildDate: isoDate(req.body?.buildDate), reference: build.reference || '', notes: reason, outputProductId: build.outputProductId, outputItem: build.outputItem, movements, shortages, postedAt: now, postedBy: user.uid, postedByEmail: user.email || '' });
-  });
-  return workspace();
+  const buildId = clean(req.body?.buildId,160); const reason = clean(req.body?.reason,2000); if (!reason) invalid('Reversal reason is required.'); let result;
+  await db.runTransaction(async (tx) => { const buildRef = db.collection(BUILDS).doc(buildId); const buildSnap = await tx.get(buildRef); if (!buildSnap.exists) invalid('Build no longer exists.',404); const build = buildSnap.data(); if (build.kind !== 'build' || build.status !== 'Posted' || build.reversalId) invalid('This build cannot be reversed again.',409); const itemSnap = await itemsSnapshot(tx); const items = new Map(itemSnap.docs.map((doc) => [doc.id,itemView(doc)])); const movements = build.movements.map((move) => ({ ...move, quantity: -move.quantity })); const shortages = movements.filter((move) => (items.get(move.productId)?.quantityOnHand || 0) + move.quantity < 0); if (shortages.length && req.body?.acknowledgeShortage !== true) invalid('Confirm that this reversal will create negative inventory.',409); const now = admin.firestore.FieldValue.serverTimestamp(); for (const move of movements) { if (!items.has(move.productId)) invalid('A referenced item no longer exists.',409); tx.update(db.collection(ITEMS).doc(move.productId), { quantityOnHand: admin.firestore.FieldValue.increment(move.quantity), stockUpdatedAt: now, stockUpdatedBy: user.uid, updatedAt: now, updatedBy: user.uid }); } const reversalId = randomUUID(); const reversal = { buildId: reversalId, kind: 'reversal', status: 'Posted', reversesBuildId: buildId, outputProductId: build.outputProductId, outputItem: build.outputItem, outputUnitOfMeasure: build.outputUnitOfMeasure, outputColor: build.outputColor, outputImage: build.outputImage || null, movements, shortages, buildDate: date(req.body?.buildDate), notes: reason, postedAt: now, postedBy: user.uid, postedByEmail: user.email || '' }; tx.create(db.collection(BUILDS).doc(reversalId), reversal); tx.update(buildRef, { status: 'Reversed', reversalId, reversedAt: now, reversedBy: user.uid }); result = reversal; }); return { build: result };
 });
 
-export const __testables = { quantity, isoDate, recipePayload };
+export const __testables = { componentPayload, percentageTotal, isCompletePercentage };

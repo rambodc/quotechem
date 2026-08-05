@@ -4,12 +4,13 @@ import ItemsPage from './ItemsPage';
 import InventoryPage from './InventoryPage';
 import AssemblyPage from './AssemblyPage';
 import './Uniquem.css';
+import './UniquemRedesign.css';
 
 const PAGE_META = {
   dashboard: { title: 'Dashboard', eyebrow: 'Uniquem', icon: FiGrid },
-  items: { title: 'Items', eyebrow: 'QuickBooks Desktop', icon: FiList },
+  items: { title: 'Items', eyebrow: 'Inventory Catalog', icon: FiList },
   assembly: { title: 'Assembly', eyebrow: 'Production', icon: FiTool },
-  inventory: { title: '3D Inventory', eyebrow: 'QuickBooks Snapshot', icon: FiPackage },
+  inventory: { title: '3D Inventory', eyebrow: 'Current Stock', icon: FiPackage },
 };
 
 export default function Uniquem({ page = 'dashboard' }) {

@@ -12,25 +12,16 @@ export {
 
 export {
   listUniquemItems,
-  previewUniquemItemImport,
-  applyUniquemItemImport,
+  saveUniquemItem,
+  uploadUniquemItemImage,
+  adjustUniquemItemStock,
 } from './apps/uniquem/items.js';
-export { getUniquemInventory, saveUniquemInventoryLayout } from './apps/uniquem/inventory.js';
+export { getUniquemInventory } from './apps/uniquem/inventory.js';
 export {
   getUniquemAssemblyWorkspace,
-  saveUniquemAssemblyRecipe,
-  archiveUniquemAssemblyRecipe,
   postUniquemAssemblyBuild,
   reverseUniquemAssemblyBuild,
 } from './apps/uniquem/assemblies.js';
-export {
-  uploadUniquemPalletTextureSources,
-  getUniquemPalletTexture,
-  generateUniquemPalletTexture,
-  approveUniquemPalletTexture,
-  removeUniquemPalletTexture,
-  discardUniquemPalletTextureDraft,
-} from './apps/uniquem/textures.js';
 export {
   generateThreeDScene,
   listThreeDModels,

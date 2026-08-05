@@ -9,21 +9,6 @@ function material(color, options = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: options.roughness ?? 0.68, metalness: options.metalness ?? 0.04, transparent: options.opacity < 1, opacity: options.opacity ?? 1 });
 }
 
-export const TEXTURED_BOX_FACE_INDEXES = [0, 1, 4, 5];
-
-function sideTextureMaterials(url, fallbackColor) {
-  const faces = Array.from({ length: 6 }, () => material(fallbackColor));
-  if (!url) return faces;
-  new THREE.TextureLoader().load(url, (source) => {
-    source.colorSpace = THREE.SRGBColorSpace;
-    // BoxGeometry groups are +X, -X, +Y, -Y, +Z, -Z. Only the four vertical faces use the photo.
-    TEXTURED_BOX_FACE_INDEXES.forEach((index) => {
-      faces[index].map = source; faces[index].color.set('#ffffff'); faces[index].needsUpdate = true;
-    });
-  }, undefined, () => {});
-  return faces;
-}
-
 export function isTapGesture(start, end) {
   if (!start || !end) return false;
   return Math.hypot(end.x - start.x, end.y - start.y) <= TAP_DISTANCE && end.time - start.time < 700;
@@ -31,7 +16,7 @@ export function isTapGesture(start, end) {
 
 function addLoads(group, product) {
   const tote = product.packaging.representation === 'tote';
-  const loadMaterial = !tote && product.approvedTexture?.url ? sideTextureMaterials(product.approvedTexture.url, product.color) : material(product.color);
+  const loadMaterial = material(product.color);
   const loads = new THREE.InstancedMesh(sharedBox, loadMaterial, product.loadCount);
   const pallets = tote ? null : new THREE.InstancedMesh(sharedBox, material('#8b5a2b'), product.loadCount);
   const cages = tote ? new THREE.InstancedMesh(sharedBox, new THREE.MeshBasicMaterial({ color: '#dbeafe', wireframe: true }), product.loadCount) : null;

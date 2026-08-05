@@ -4,7 +4,7 @@ export const MINI_APPS = [
   {
     id: 'uniquem',
     label: 'Uniquem',
-    description: 'Import and review QuickBooks Desktop items.',
+    description: 'Manage items, assemblies, and 3D inventory.',
     icon: FiPackage,
     adminOnly: false,
     defaultVisibleForRoles: ['admin'],

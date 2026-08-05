@@ -63,18 +63,9 @@ const mockThreeDVersions = [
 ];
 
 const mockUniquemItems = {
-  fields: [
-    { header: 'Active Status', key: 'activeStatus', type: 'string' },
-    { header: 'Type', key: 'type', type: 'string' },
-    { header: 'Item', key: 'item', type: 'string' },
-    { header: 'Description', key: 'description', type: 'string' },
-    { header: 'Quantity On Hand', key: 'quantityOnHand', type: 'number' },
-    { header: 'U/M', key: 'unitOfMeasure', type: 'string' },
-    { header: 'Cost', key: 'cost', type: 'number' },
-    { header: 'Price', key: 'price', type: 'number' },
-  ],
-  items: [{ productId: 'item-1', activeStatus: 'Active', type: 'Inventory Assembly', item: 'ApHrox', description: 'ApHrox (1000L/Tote)', quantityOnHand: 0, unitOfMeasure: 'litre (l)', cost: 0, price: 3.5 }],
-  imports: [],
+  items: [{ productId: 'item-1', active: true, activeStatus: 'Active', item: 'ApHrox', description: 'ApHrox', quantityOnHand: 0, unitOfMeasure: 'Liters', color: '#0f766e', packaging: [] }],
+  nextCursor: null,
+  total: 1,
 };
 
 const mockUniquemInventory = {
@@ -83,9 +74,9 @@ const mockUniquemInventory = {
 };
 
 const mockUniquemAssembly = {
-  items: [{ productId: 'item-1', item: 'ApHrox', activeStatus: 'Active', type: 'Inventory Assembly', unitOfMeasure: 'litre (l)', quickBooksQuantity: 0, assemblyAdjustment: 0, availableQuantity: 0 }],
-  recipes: [],
+  items: [{ productId: 'item-1', item: 'ApHrox', active: true, activeStatus: 'Active', unitOfMeasure: 'Liters', quantityOnHand: 0 }],
   builds: [],
+  nextHistoryCursor: null,
 };
 
 jest.mock('./firebase', () => ({
@@ -391,7 +382,7 @@ describe('mini-app portal routing', () => {
     expect(screen.getByTestId('three-d-creator-canvas')).toBeTruthy();
   });
 
-  test('Uniquem exposes Dashboard, QuickBooks Items, Assembly, and 3D Inventory routes', async () => {
+  test('Uniquem exposes Dashboard, Items, Assembly, and 3D Inventory routes', async () => {
     const cases = [
       ['/apps/uniquem/dashboard', 'Dashboard'],
       ['/apps/uniquem/items', 'Items'],
@@ -401,7 +392,7 @@ describe('mini-app portal routing', () => {
 
     for (const [path, title] of cases) {
       renderAt(path, 'admin');
-      expect(await screen.findByRole('heading', { name: title })).toBeTruthy();
+      expect((await screen.findAllByRole('heading', { name: title })).length).toBeGreaterThan(0);
       cleanup();
     }
 
@@ -411,12 +402,11 @@ describe('mini-app portal routing', () => {
     expect(screen.getByLabelText('Blank dashboard')).toBeTruthy();
   });
 
-  test('Uniquem Items is read-only and displays imported QuickBooks fields', async () => {
+  test('Uniquem Items displays the manual catalog controls', async () => {
     renderAt('/apps/uniquem/items', 'admin');
-    expect(await screen.findByText('ApHrox')).toBeTruthy();
-    expect(screen.getAllByText('Inventory Assembly').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /Upload QuickBooks CSV/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Create/i })).not.toBeTruthy();
+    expect((await screen.findAllByText('ApHrox')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /New item/i })).toBeTruthy();
+    expect(screen.queryByText(/QuickBooks/i)).not.toBeTruthy();
   });
 
   test('3D Creator creates a saved model with prompt and optional image', async () => {
