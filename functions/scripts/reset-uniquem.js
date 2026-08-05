@@ -1,4 +1,15 @@
-import { db, storage, admin } from '../core/firebase.js';
+import admin from 'firebase-admin';
+import { GoogleAuth } from 'google-auth-library';
+
+const googleAuth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+const credential = {
+  async getAccessToken() {
+    const client = await googleAuth.getClient(); const token = await client.getAccessToken();
+    return { access_token: token.token, expires_in: 3500 };
+  },
+};
+admin.initializeApp({ credential, projectId: process.env.GOOGLE_CLOUD_PROJECT || 'quotechemfb', storageBucket: 'quotechemfb.firebasestorage.app' });
+const db = admin.firestore(); const storage = admin.storage();
 
 const MARKER = db.collection('uniquemSchema').doc('manual-inventory-v1');
 const collections = [
