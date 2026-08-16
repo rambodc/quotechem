@@ -256,10 +256,11 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   useEffect(() => {
     const viewport = window.visualViewport;
     const syncViewport = () => {
-      const height = viewport?.height || window.innerHeight;
-      const keyboardOpen = window.innerHeight - height > 140;
-      document.documentElement.style.setProperty('--qc-chat-vh', `${height}px`);
-      document.documentElement.style.setProperty('--qc-keyboard-safe', keyboardOpen ? '0px' : 'env(safe-area-inset-bottom)');
+      const visibleBottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
+      const coveredHeight = Math.max(0, window.innerHeight - visibleBottom);
+      const keyboardOpen = coveredHeight > 120;
+      document.documentElement.style.setProperty('--qc-keyboard-inset', `${keyboardOpen ? coveredHeight : 0}px`);
+      document.documentElement.classList.toggle('qc-keyboard-open', keyboardOpen);
     };
     syncViewport();
     viewport?.addEventListener('resize', syncViewport);
@@ -269,8 +270,8 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
       viewport?.removeEventListener('resize', syncViewport);
       viewport?.removeEventListener('scroll', syncViewport);
       window.removeEventListener('resize', syncViewport);
-      document.documentElement.style.removeProperty('--qc-chat-vh');
-      document.documentElement.style.removeProperty('--qc-keyboard-safe');
+      document.documentElement.style.removeProperty('--qc-keyboard-inset');
+      document.documentElement.classList.remove('qc-keyboard-open');
     };
   }, []);
 
