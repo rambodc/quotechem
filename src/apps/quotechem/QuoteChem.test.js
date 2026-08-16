@@ -1,4 +1,10 @@
-import { buildQuestions, ISSUES, NEEDS } from './QuoteChem';
+import React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import QuoteChem, { buildQuestions, ISSUES, NEEDS } from './QuoteChem';
+import { postJson } from '../../lib/api';
+
+jest.mock('../../firebase', () => ({ auth: { currentUser: null } }));
+jest.mock('../../lib/api', () => ({ postJson: jest.fn() }));
 
 describe('QuoteChem conversation definitions', () => {
   test('offers every planned entry path', () => {
@@ -17,5 +23,20 @@ describe('QuoteChem conversation definitions', () => {
   test.each(['drilling', 'completion', 'supplier', 'pricing', 'exact', 'describe'])('%s reaches logistics qualification', (need) => {
     const ids = buildQuestions(need).map((question) => question.id);
     expect(ids.slice(-3)).toEqual(['quantity', 'location', 'timing']);
+  });
+
+  test('guided context opens the real AI composer and sends a desktop message', async () => {
+    postJson.mockResolvedValueOnce({ reply: 'What mud system are you using?', quickReplies: ['Water based', 'Oil based'], readyForContact: false });
+    render(<QuoteChem />);
+    fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    expect(screen.getByText('Drilling Chemical')).toBeTruthy();
+    const composer = screen.getByPlaceholderText('Message QuoteChem…');
+    fireEvent.change(composer, { target: { value: 'We have severe fluid loss.' } });
+    fireEvent.keyDown(composer, { key: 'Enter', shiftKey: false });
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('quotechemChat', expect.objectContaining({
+      context: expect.objectContaining({ needLabel: 'Drilling Chemical' }),
+      messages: [expect.objectContaining({ role: 'user', text: 'We have severe fluid loss.' })],
+    }), { authed: true }));
+    expect(await screen.findByText('What mud system are you using?')).toBeTruthy();
   });
 });

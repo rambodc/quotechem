@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FiActivity, FiArrowLeft, FiArrowRight, FiCheck, FiCheckCircle, FiChevronRight,
-  FiCircle, FiDollarSign, FiDroplet, FiGitMerge, FiMessageSquare,
-  FiPackage, FiRefreshCw, FiRepeat, FiSend, FiShield, FiTarget, FiTool, FiTruck,
-  FiUsers, FiWind, FiXCircle, FiZap,
+  FiCircle, FiCopy, FiDollarSign, FiDroplet, FiGitMerge, FiImage, FiMessageSquare,
+  FiMic, FiPackage, FiPause, FiRefreshCw, FiRepeat, FiSend, FiShield, FiSquare,
+  FiTarget, FiTool, FiTruck, FiUsers, FiVolume2, FiWind, FiX, FiXCircle, FiZap,
 } from 'react-icons/fi';
+import { postJson } from '../../lib/api';
 import './QuoteChem.css';
 
 export const NEEDS = [
@@ -210,57 +211,217 @@ function ProblemStage({ area, issue, onArea, onIssue, onContinue }) {
   );
 }
 
-function ChatStage({ need, issue, questions, answers, onAnswer, onFinish }) {
-  const firstUnanswered = questions.findIndex((question) => !answers[question.id]);
-  const currentIndex = firstUnanswered === -1 ? questions.length : firstUnanswered;
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read this file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function MessageActions({ message, speakingId, onSpeak }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(message.text); setCopied(true); window.setTimeout(() => setCopied(false), 1200); } catch {}
+  };
+  return (
+    <div className="qc-message-actions">
+      <button type="button" onClick={copy} aria-label="Copy response"><FiCopy /> {copied ? 'Copied' : 'Copy'}</button>
+      <button type="button" onClick={() => onSpeak(message)} title="AI-generated voice" aria-label={speakingId === message.id ? 'Stop AI-generated voice' : 'Play AI-generated voice'}>
+        {speakingId === message.id ? <FiPause /> : <FiVolume2 />} {speakingId === message.id ? 'Stop' : 'Listen'}
+      </button>
+    </div>
+  );
+}
+
+function ChatStage({ need, area, issue, onFinish }) {
   const [draft, setDraft] = useState('');
-  const [typing, setTyping] = useState(true);
+  const [messages, setMessages] = useState([]);
+  const [quickReplies, setQuickReplies] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const [attachment, setAttachment] = useState(null);
+  const [lastAttempt, setLastAttempt] = useState(null);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [transcribing, setTranscribing] = useState(false);
+  const [speakingId, setSpeakingId] = useState('');
   const endRef = useRef(null);
-  const current = questions[currentIndex];
+  const textareaRef = useRef(null);
+  const fileRef = useRef(null);
+  const recorderRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const recordingCanceledRef = useRef(false);
+  const audioRef = useRef(null);
+  const messageNumberRef = useRef(0);
+  const context = useMemo(() => ({
+    needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
+    areaLabel: area ? titleFor(AREAS, area) : '',
+    issueLabel: issue ? titleFor(ISSUES, issue) : '',
+  }), [area, issue, need]);
+
+  const nextId = (prefix) => `${prefix}-${Date.now()}-${messageNumberRef.current += 1}`;
 
   useEffect(() => {
-    setTyping(true);
-    const timer = window.setTimeout(() => setTyping(false), 420);
-    return () => window.clearTimeout(timer);
-  }, [currentIndex]);
+    const viewport = window.visualViewport;
+    const syncViewport = () => document.documentElement.style.setProperty('--qc-chat-vh', `${viewport?.height || window.innerHeight}px`);
+    syncViewport();
+    viewport?.addEventListener('resize', syncViewport);
+    viewport?.addEventListener('scroll', syncViewport);
+    window.addEventListener('resize', syncViewport);
+    return () => {
+      viewport?.removeEventListener('resize', syncViewport);
+      viewport?.removeEventListener('scroll', syncViewport);
+      window.removeEventListener('resize', syncViewport);
+      document.documentElement.style.removeProperty('--qc-chat-vh');
+    };
+  }, []);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [currentIndex, typing]);
+  useEffect(() => { endRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }); }, [messages, pending, error]);
+  useEffect(() => {
+    const field = textareaRef.current;
+    if (!field) return;
+    field.style.height = '0px';
+    field.style.height = `${Math.min(field.scrollHeight, 180)}px`;
+  }, [draft]);
+  useEffect(() => () => {
+    if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
+    recorderRef.current?.stream?.getTracks?.().forEach((track) => track.stop());
+    audioRef.current?.pause?.();
+  }, []);
+
+  const requestReply = async (nextMessages, image) => {
+    setPending(true); setError(''); setQuickReplies([]);
+    const attempt = { messages: nextMessages, image };
+    setLastAttempt(attempt);
+    try {
+      const result = await postJson('quotechemChat', {
+        context,
+        messages: nextMessages.map(({ role, text }) => ({ role, text })),
+        image: image ? { dataUrl: image.dataUrl, name: image.name } : null,
+      }, { authed: true });
+      setMessages((current) => [...current, { id: nextId('assistant'), role: 'assistant', text: result.reply }]);
+      setQuickReplies(Array.isArray(result.quickReplies) ? result.quickReplies : []);
+      setReady(Boolean(result.readyForContact));
+      setLastAttempt(null);
+    } catch (reason) {
+      setError(reason?.message || 'The assistant could not respond.');
+    } finally { setPending(false); }
+  };
+
+  const send = async (textValue = draft) => {
+    const text = String(textValue || '').trim();
+    if (pending || (!text && !attachment)) return;
+    const userMessage = { id: nextId('user'), role: 'user', text: text || 'Please review the attached image.', image: attachment };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages); setDraft(''); setAttachment(null); setReady(false);
+    await requestReply(nextMessages, userMessage.image);
+  };
 
   const submitText = (event) => {
     event.preventDefault();
-    if (!draft.trim() || !current) return;
-    onAnswer(current.id, draft.trim());
-    setDraft('');
+    send();
+  };
+
+  const chooseFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) return setError('Choose a JPEG, PNG, WebP, or GIF image.');
+    if (file.size > 8 * 1024 * 1024) return setError('Images must be 8 MB or smaller.');
+    try { setAttachment({ name: file.name, type: file.type, dataUrl: await readAsDataUrl(file) }); setError(''); } catch (reason) { setError(reason.message); }
+  };
+
+  const finishRecording = (cancel = false) => {
+    recordingCanceledRef.current = cancel;
+    if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    setRecording(false);
+  };
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return setError('Voice recording is not supported in this browser.');
+    setError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferred = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find((type) => window.MediaRecorder.isTypeSupported?.(type));
+      const recorder = new window.MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
+      const chunks = [];
+      recorderRef.current = recorder;
+      recordingCanceledRef.current = false;
+      recorder.ondataavailable = (event) => { if (event.data?.size) chunks.push(event.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        if (recordingCanceledRef.current) return;
+        const blob = new Blob(chunks, { type: (recorder.mimeType || 'audio/webm').split(';')[0] });
+        setTranscribing(true);
+        try {
+          const audioDataUrl = await readAsDataUrl(blob);
+          const result = await postJson('quotechemTranscribe', { audioDataUrl }, { authed: true });
+          setDraft((current) => current ? `${current.trim()} ${result.transcript}` : result.transcript);
+          window.setTimeout(() => textareaRef.current?.focus(), 0);
+        } catch (reason) { setError(reason?.message || 'Unable to transcribe the recording.'); }
+        finally { setTranscribing(false); }
+      };
+      recorder.start(); setRecording(true); setRecordingSeconds(0);
+      recordingTimerRef.current = window.setInterval(() => setRecordingSeconds((seconds) => {
+        if (seconds >= 44) { window.setTimeout(() => finishRecording(false), 0); return 45; }
+        return seconds + 1;
+      }), 1000);
+    } catch { setError('Microphone access was denied. You can continue by typing.'); }
+  };
+
+  const speak = async (message) => {
+    if (speakingId === message.id) { audioRef.current?.pause(); setSpeakingId(''); return; }
+    audioRef.current?.pause(); setSpeakingId(message.id); setError('');
+    try {
+      const result = await postJson('quotechemSpeak', { text: message.text }, { authed: true });
+      const audio = new Audio(result.audioDataUrl);
+      audioRef.current = audio;
+      audio.onended = () => setSpeakingId('');
+      audio.onerror = () => { setSpeakingId(''); setError('Unable to play this spoken response.'); };
+      await audio.play();
+    } catch (reason) { setSpeakingId(''); setError(reason?.message || 'Unable to generate speech.'); }
+  };
+
+  const onComposerKeyDown = (event) => {
+    const mobile = window.matchMedia?.('(max-width: 680px)').matches;
+    if (event.key === 'Enter' && !event.shiftKey && !mobile) { event.preventDefault(); send(); }
   };
 
   return (
     <div className="qc-stage qc-chat-stage">
-      <div className="qc-chat-heading"><div><span>Technical sourcing assistant</span><h1>Let’s qualify your requirement</h1></div><div className="qc-live"><i /> Guided demo</div></div>
-      <div className="qc-context"><strong>{need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need)}</strong>{issue ? <><FiChevronRight /> <span>{titleFor(ISSUES, issue)}</span></> : null}</div>
+      <div className="qc-chat-heading"><div><span>AI technical sourcing assistant</span><h1>Let’s qualify your requirement</h1></div><div className="qc-live"><i /> AI connected</div></div>
+      <div className="qc-context"><strong>{context.needLabel}</strong>{context.areaLabel ? <><FiChevronRight /><span>{context.areaLabel}</span></> : null}{context.issueLabel ? <><FiChevronRight /><span>{context.issueLabel}</span></> : null}</div>
+      <div className="qc-chat-shell">
       <div className="qc-chat" aria-live="polite">
-        <div className="qc-bubble assistant">I’ll ask only the details our sourcing team needs to begin evaluating suitable options.</div>
-        {questions.slice(0, currentIndex).map((question) => (
-          <React.Fragment key={question.id}>
-            <div className="qc-bubble assistant">{question.prompt}</div>
-            <div className="qc-bubble user">{answers[question.id]}</div>
-          </React.Fragment>
-        ))}
-        {current ? <div className="qc-bubble assistant">{current.prompt}</div> : null}
-        {typing ? <div className="qc-typing" aria-label="Assistant is typing"><i /><i /><i /></div> : null}
+        {!messages.length ? <div className="qc-chat-welcome"><div className="qc-ai-mark"><FiDroplet /></div><h2>What should we know?</h2><p>Describe the requirement, operating conditions, current treatment, or attach a field image. I’ll ask only the next useful question.</p></div> : null}
+        {messages.map((message) => <div className={`qc-message-row ${message.role}`} key={message.id}>
+          <div className="qc-message-avatar">{message.role === 'assistant' ? <FiDroplet /> : 'You'}</div>
+          <div className="qc-message-body">{message.image ? <img src={message.image.dataUrl} alt={`Attached ${message.image.name}`} /> : null}<div className="qc-message-text">{message.text}</div>{message.role === 'assistant' ? <MessageActions message={message} speakingId={speakingId} onSpeak={speak} /> : null}</div>
+        </div>)}
+        {pending ? <div className="qc-message-row assistant"><div className="qc-message-avatar"><FiDroplet /></div><div className="qc-typing" aria-label="Assistant is thinking"><i /><i /><i /></div></div> : null}
+        {error ? <div className="qc-chat-error" role="alert"><FiXCircle /><span>{error}</span>{lastAttempt && !pending ? <button type="button" onClick={() => requestReply(lastAttempt.messages, lastAttempt.image)}>Retry</button> : null}</div> : null}
         <div ref={endRef} />
       </div>
-      {!typing && current ? (
-        <div className="qc-response">
-          {current.options ? <div className="qc-quick-replies">{current.options.map((option) => <button type="button" key={option} onClick={() => onAnswer(current.id, option)}>{option}</button>)}</div> : null}
+      <div className="qc-composer-zone">
+          {quickReplies.length ? <div className="qc-quick-replies">{quickReplies.map((option) => <button type="button" key={option} disabled={pending} onClick={() => send(option)}>{option}</button>)}</div> : null}
+          {ready ? <button type="button" className="qc-ready-banner" onClick={onFinish}><FiCheckCircle /><span><strong>Enough information to begin</strong><small>Continue to contact details</small></span><FiArrowRight /></button> : null}
+          {attachment ? <div className="qc-attachment-preview"><img src={attachment.dataUrl} alt="Attachment preview" /><span><strong>{attachment.name}</strong><small>Image ready to send</small></span><button type="button" onClick={() => setAttachment(null)} aria-label="Remove image"><FiX /></button></div> : null}
+          {recording ? <div className="qc-recording"><i /><strong>Recording {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}</strong><button type="button" onClick={() => finishRecording(true)}><FiX /> Cancel</button><button type="button" onClick={() => finishRecording(false)}><FiSquare /> Stop</button></div> : null}
           <form onSubmit={submitText} className="qc-message-form">
-            <label className="sr-only" htmlFor="qc-message">Your answer</label>
-            <input id="qc-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={current.placeholder || 'Type your answer…'} />
-            <button type="submit" disabled={!draft.trim()} aria-label="Send answer"><FiSend /></button>
+            <button type="button" className="qc-composer-tool" onClick={() => fileRef.current?.click()} disabled={pending || recording} aria-label="Attach image"><FiImage /></button>
+            <input ref={fileRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={chooseFile} />
+            <label className="sr-only" htmlFor="qc-message">Message</label>
+            <textarea ref={textareaRef} id="qc-message" rows="1" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown} placeholder={transcribing ? 'Transcribing…' : 'Message QuoteChem…'} disabled={pending || recording || transcribing} />
+            <button type="button" className={`qc-composer-tool ${recording ? 'active' : ''}`} onClick={startRecording} disabled={pending || recording || transcribing} aria-label="Record voice message"><FiMic /></button>
+            <button type="submit" className="qc-send" disabled={pending || recording || transcribing || (!draft.trim() && !attachment)} aria-label="Send message"><FiSend /></button>
           </form>
-          {current.optional ? <button type="button" className="qc-skip" onClick={() => onAnswer(current.id, 'Not provided')}>Skip this question</button> : null}
+          <div className="qc-composer-meta"><span>AI can make mistakes. Verify critical technical information.</span><button type="button" onClick={onFinish}>Finish request</button></div>
         </div>
-      ) : null}
-      {currentIndex === questions.length ? <div className="qc-qualified"><FiCheckCircle /><div><strong>That’s enough to begin.</strong><p>I have the key technical and logistical details for the sourcing team.</p></div><button type="button" className="qc-primary" onClick={onFinish}>Add contact details <FiArrowRight /></button></div> : null}
+      </div>
     </div>
   );
 }
@@ -279,7 +440,7 @@ function ContactStage({ values, onChange, onSubmit }) {
   };
   return (
     <div className="qc-stage qc-contact">
-      <div className="qc-section-heading"><span>Final step</span><h1>Where should we send our findings?</h1><p>No account or password is required. This design prototype does not transmit or store your information.</p></div>
+      <div className="qc-section-heading"><span>Final step</span><h1>Where should we send our findings?</h1><p>No account or password is required. Contact details remain in this browser prototype and are not submitted.</p></div>
       <form onSubmit={submit} noValidate>
         {[['name', 'Name', 'Your full name', true], ['company', 'Company', 'Company name', true], ['email', 'Work email', 'name@company.com', true], ['phone', 'Phone number', 'Optional', false], ['country', 'Country / location', 'Country or operating region', true]].map(([key, label, placeholder, required]) => (
           <label key={key}>{label}{required ? <span> *</span> : null}<input type={key === 'email' ? 'email' : 'text'} value={values[key]} onChange={(event) => onChange(key, event.target.value)} placeholder={placeholder} aria-invalid={Boolean(errors[key])} aria-describedby={errors[key] ? `${key}-error` : undefined} />{errors[key] ? <small id={`${key}-error`} className="qc-error">{errors[key]}</small> : null}</label>
@@ -299,7 +460,7 @@ function CompleteStage({ requestId, onRestart }) {
     <div className="qc-stage qc-complete">
       <div className="qc-success-icon"><FiCheck /></div><p className="qc-kicker">Request {requestId}</p><h1>We’re on it.</h1><p className="qc-lead">Your demo request is ready for the QuoteChem sourcing workflow.</p>
       <div className="qc-timeline">{steps.map(([label, Icon, status], index) => <div key={label} className={status || ''}><span><Icon /></span><p><strong>{label}</strong><small>{index === 0 ? 'Completed in this prototype' : 'Next step in the future workflow'}</small></p></div>)}</div>
-      <div className="qc-demo-notice"><FiShield /><div><strong>Design prototype only</strong><p>No request or contact information was transmitted, saved, or sent to the sourcing team.</p></div></div>
+      <div className="qc-demo-notice"><FiShield /><div><strong>Design prototype only</strong><p>The AI conversation was processed securely, but no request or contact information was saved or sent to the sourcing team.</p></div></div>
       <button type="button" className="qc-primary" onClick={onRestart}><FiRefreshCw /> Start another request</button>
     </div>
   );
@@ -314,10 +475,8 @@ export default function QuoteChem() {
   const [need, setNeed] = useState('');
   const [area, setArea] = useState('');
   const [issue, setIssue] = useState('');
-  const [answers, setAnswers] = useState({});
   const [contact, setContact] = useState({ name: '', company: '', email: '', phone: '', country: '' });
   const [requestId, setRequestId] = useState('');
-  const questions = useMemo(() => buildQuestions(need, issue), [need, issue]);
 
   const chooseNeed = (id) => { setNeed(id); setStage(id === 'production' ? 'problem' : 'chat'); };
   const goBack = () => {
@@ -325,7 +484,7 @@ export default function QuoteChem() {
     else if (stage === 'chat') setStage(need === 'production' ? 'problem' : 'need');
     else if (stage === 'contact') setStage('chat');
   };
-  const restart = () => { setStage('need'); setNeed(''); setArea(''); setIssue(''); setAnswers({}); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); };
+  const restart = () => { setStage('need'); setNeed(''); setArea(''); setIssue(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); };
   const complete = () => { setRequestId(makeRequestId()); setStage('complete'); };
 
   return (
@@ -334,11 +493,11 @@ export default function QuoteChem() {
       <div className="qc-content"><Progress stage={stage} />
         {stage === 'need' ? <NeedStage onChoose={chooseNeed} /> : null}
         {stage === 'problem' ? <ProblemStage area={area} issue={issue} onArea={setArea} onIssue={setIssue} onContinue={() => setStage('chat')} /> : null}
-        {stage === 'chat' ? <ChatStage need={need} issue={issue} questions={questions} answers={answers} onAnswer={(key, value) => setAnswers((prev) => ({ ...prev, [key]: value }))} onFinish={() => setStage('contact')} /> : null}
+        {stage === 'chat' ? <ChatStage need={need} area={area} issue={issue} onFinish={() => setStage('contact')} /> : null}
         {stage === 'contact' ? <ContactStage values={contact} onChange={(key, value) => setContact((prev) => ({ ...prev, [key]: value }))} onSubmit={complete} /> : null}
         {stage === 'complete' ? <CompleteStage requestId={requestId} onRestart={restart} /> : null}
       </div>
-      <footer className="qc-footer"><FiShield /> Secure prototype experience <span>•</span> No data transmitted</footer>
+      <footer className="qc-footer"><FiShield /> Secure AI prototype <span>•</span> Conversation history is not saved</footer>
     </div>
   );
 }
