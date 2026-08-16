@@ -1,6 +1,16 @@
-import { FiBox, FiPackage, FiShield, FiUser } from 'react-icons/fi';
+import { FiBox, FiDroplet, FiPackage, FiShield, FiUser } from 'react-icons/fi';
 
 export const MINI_APPS = [
+  {
+    id: 'quotechem',
+    label: 'QuoteChem',
+    description: 'Prototype the guided oilfield chemical sourcing experience.',
+    icon: FiDroplet,
+    adminOnly: false,
+    defaultVisibleForRoles: ['admin'],
+    defaultPath: '/apps/quotechem',
+    navItems: [],
+  },
   {
     id: 'uniquem',
     label: 'Uniquem',

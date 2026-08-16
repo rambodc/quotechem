@@ -16,6 +16,7 @@ import { canAccessMiniApp, getMiniApp } from './apps/registry/miniApps';
 import Uniquem from './apps/uniquem';
 import ThreeD from './apps/three-d';
 import UserAccess from './admin/UserAccess';
+import QuoteChem from './apps/quotechem';
 
 export const UserContext = createContext(null);
 
@@ -199,6 +200,14 @@ function App() {
           <Route path="/account" element={<Navigate to="/portal" replace />} />
           <Route path="/account/*" element={<Navigate to="/portal" replace />} />
 
+          <Route
+            path="/apps/quotechem"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotechem" appPath="sourcing">
+                <QuoteChem />
+              </MiniAppRoute>
+            }
+          />
           <Route
             path="/apps/uniquem"
             element={

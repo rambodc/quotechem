@@ -48,6 +48,13 @@
   --tile-focus: #99f6e4;
 }
 
+.mini-app-tile.app-quotechem {
+  --tile-accent: #167ee8;
+  --tile-glow-soft: rgba(22, 126, 232, 0.3);
+  --tile-glow-strong: rgba(22, 126, 232, 0.42);
+  --tile-focus: #7dd3fc;
+}
+
 .mini-app-tile.app-three-d {
   --tile-accent: #2563eb;
   --tile-glow-soft: rgba(59, 130, 246, 0.28);
