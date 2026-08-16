@@ -26,7 +26,7 @@ describe('QuoteChem conversation definitions', () => {
   });
 
   test('guided context opens the real AI composer and sends a desktop message', async () => {
-    postJson.mockResolvedValueOnce({ reply: 'What mud system are you using?', quickReplies: ['Water based', 'Oil based'], readyForContact: false });
+    postJson.mockResolvedValueOnce({ conversationId: 'conversation-1', reply: 'What mud system are you using?', quickReplies: ['Water based', 'Oil based'], readyForContact: false });
     render(<QuoteChem />);
     fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
     expect(screen.getByText('Drilling Chemical')).toBeTruthy();
@@ -35,7 +35,9 @@ describe('QuoteChem conversation definitions', () => {
     fireEvent.keyDown(composer, { key: 'Enter', shiftKey: false });
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('quotechemChat', expect.objectContaining({
       context: expect.objectContaining({ needLabel: 'Drilling Chemical' }),
-      messages: [expect.objectContaining({ role: 'user', text: 'We have severe fluid loss.' })],
+      messageId: expect.any(String),
+      conversationId: expect.any(String),
+      text: 'We have severe fluid loss.',
     }), { authed: true }));
     expect(await screen.findByText('What mud system are you using?')).toBeTruthy();
   });
