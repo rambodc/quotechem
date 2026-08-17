@@ -70,7 +70,8 @@ describe('QuoteChem conversation definitions', () => {
     viewport.height = 390;
     viewport.offsetTop = 118;
     listeners.resize();
-    expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe('390px');
+    expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe('');
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe('390px'));
     expect(document.documentElement.style.getPropertyValue('--qc-keyboard-top')).toBe('118px');
     fireEvent.blur(composer);
     await waitFor(() => expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe(''));

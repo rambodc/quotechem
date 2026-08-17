@@ -249,6 +249,7 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   const composerFocusedRef = useRef(false);
   const syncViewportRef = useRef(() => {});
   const blurTimerRef = useRef(null);
+  const viewportTimerRef = useRef(null);
   const context = useMemo(() => ({
     needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
     areaLabel: area ? titleFor(AREAS, area) : '',
@@ -264,21 +265,26 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
       document.documentElement.style.setProperty('--qc-keyboard-height', `${Math.round(viewport?.height || window.innerHeight)}px`);
       document.documentElement.style.setProperty('--qc-keyboard-top', `${Math.round(viewport?.offsetTop || 0)}px`);
     };
-    syncViewportRef.current = syncViewport;
+    const scheduleViewportSync = () => {
+      window.clearTimeout(viewportTimerRef.current);
+      viewportTimerRef.current = window.setTimeout(syncViewport, 100);
+    };
+    syncViewportRef.current = scheduleViewportSync;
     const previousRootBackground = document.documentElement.style.backgroundColor;
     const previousBodyBackground = document.body.style.backgroundColor;
     document.documentElement.style.backgroundColor = '#061321';
     document.body.style.backgroundColor = '#061321';
     document.scrollingElement?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
     syncViewport();
-    viewport?.addEventListener('resize', syncViewport);
-    viewport?.addEventListener('scroll', syncViewport);
-    window.addEventListener('resize', syncViewport);
+    viewport?.addEventListener('resize', scheduleViewportSync);
+    viewport?.addEventListener('scroll', scheduleViewportSync);
+    window.addEventListener('resize', scheduleViewportSync);
     return () => {
-      viewport?.removeEventListener('resize', syncViewport);
-      viewport?.removeEventListener('scroll', syncViewport);
-      window.removeEventListener('resize', syncViewport);
+      viewport?.removeEventListener('resize', scheduleViewportSync);
+      viewport?.removeEventListener('scroll', scheduleViewportSync);
+      window.removeEventListener('resize', scheduleViewportSync);
       window.clearTimeout(blurTimerRef.current);
+      window.clearTimeout(viewportTimerRef.current);
       document.documentElement.style.removeProperty('--qc-keyboard-height');
       document.documentElement.style.removeProperty('--qc-keyboard-top');
       document.documentElement.classList.remove('qc-composer-focused');
@@ -353,7 +359,7 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
     window.clearTimeout(blurTimerRef.current);
     composerFocusedRef.current = true;
     document.documentElement.classList.add('qc-composer-focused');
-    window.requestAnimationFrame(() => syncViewportRef.current());
+    syncViewportRef.current();
   };
 
   const onComposerBlur = () => {
