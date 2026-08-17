@@ -259,9 +259,13 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
       const visibleBottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
       const coveredHeight = Math.max(0, window.innerHeight - visibleBottom);
       const keyboardOpen = coveredHeight > 120;
-      document.documentElement.style.setProperty('--qc-keyboard-inset', `${keyboardOpen ? coveredHeight : 0}px`);
+      document.documentElement.style.setProperty('--qc-visual-inset', `${coveredHeight}px`);
       document.documentElement.classList.toggle('qc-keyboard-open', keyboardOpen);
     };
+    const previousRootBackground = document.documentElement.style.backgroundColor;
+    const previousBodyBackground = document.body.style.backgroundColor;
+    document.documentElement.style.backgroundColor = '#061321';
+    document.body.style.backgroundColor = '#061321';
     syncViewport();
     viewport?.addEventListener('resize', syncViewport);
     viewport?.addEventListener('scroll', syncViewport);
@@ -270,8 +274,10 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
       viewport?.removeEventListener('resize', syncViewport);
       viewport?.removeEventListener('scroll', syncViewport);
       window.removeEventListener('resize', syncViewport);
-      document.documentElement.style.removeProperty('--qc-keyboard-inset');
+      document.documentElement.style.removeProperty('--qc-visual-inset');
       document.documentElement.classList.remove('qc-keyboard-open');
+      document.documentElement.style.backgroundColor = previousRootBackground;
+      document.body.style.backgroundColor = previousBodyBackground;
     };
   }, []);
 
