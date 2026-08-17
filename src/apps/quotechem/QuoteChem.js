@@ -247,8 +247,8 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   const fileRef = useRef(null);
   const messageNumberRef = useRef(0);
   const composerFocusedRef = useRef(false);
-  const restingViewportRef = useRef(null);
   const syncViewportRef = useRef(() => {});
+  const blurTimerRef = useRef(null);
   const context = useMemo(() => ({
     needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
     areaLabel: area ? titleFor(AREAS, area) : '',
@@ -259,19 +259,16 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
 
   useEffect(() => {
     const viewport = window.visualViewport;
-    const syncViewport = (restoreResting = false) => {
-      const current = { height: viewport?.height || window.innerHeight, top: viewport?.offsetTop || 0 };
-      if (restingViewportRef.current === null) restingViewportRef.current = current;
-      if (!composerFocusedRef.current && !restoreResting) restingViewportRef.current = current;
-      const target = composerFocusedRef.current ? current : restingViewportRef.current;
-      document.documentElement.style.setProperty('--qc-page-height', `${Math.round(target.height)}px`);
-      document.documentElement.style.setProperty('--qc-page-top', `${Math.round(target.top)}px`);
+    const syncViewport = () => {
+      if (!composerFocusedRef.current) return;
+      document.documentElement.style.setProperty('--qc-keyboard-height', `${Math.round(viewport?.height || window.innerHeight)}px`);
     };
     syncViewportRef.current = syncViewport;
     const previousRootBackground = document.documentElement.style.backgroundColor;
     const previousBodyBackground = document.body.style.backgroundColor;
     document.documentElement.style.backgroundColor = '#061321';
     document.body.style.backgroundColor = '#061321';
+    document.scrollingElement?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
     syncViewport();
     viewport?.addEventListener('resize', syncViewport);
     viewport?.addEventListener('scroll', syncViewport);
@@ -280,8 +277,8 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
       viewport?.removeEventListener('resize', syncViewport);
       viewport?.removeEventListener('scroll', syncViewport);
       window.removeEventListener('resize', syncViewport);
-      document.documentElement.style.removeProperty('--qc-page-height');
-      document.documentElement.style.removeProperty('--qc-page-top');
+      window.clearTimeout(blurTimerRef.current);
+      document.documentElement.style.removeProperty('--qc-keyboard-height');
       document.documentElement.classList.remove('qc-composer-focused');
       document.documentElement.style.backgroundColor = previousRootBackground;
       document.body.style.backgroundColor = previousBodyBackground;
@@ -351,6 +348,7 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   };
 
   const onComposerFocus = () => {
+    window.clearTimeout(blurTimerRef.current);
     composerFocusedRef.current = true;
     document.documentElement.classList.add('qc-composer-focused');
     window.requestAnimationFrame(() => syncViewportRef.current());
@@ -358,8 +356,11 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
 
   const onComposerBlur = () => {
     composerFocusedRef.current = false;
-    document.documentElement.classList.remove('qc-composer-focused');
-    syncViewportRef.current(true);
+    blurTimerRef.current = window.setTimeout(() => {
+      document.documentElement.classList.remove('qc-composer-focused');
+      document.documentElement.style.removeProperty('--qc-keyboard-height');
+      document.scrollingElement?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+    }, 250);
   };
 
   return (

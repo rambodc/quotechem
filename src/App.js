@@ -206,7 +206,7 @@ function App() {
             path="/apps/quotechem"
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotechem" appPath="sourcing">
-                <QuoteChem />
+                <QuoteChem key="quotechem-guided" />
               </MiniAppRoute>
             }
           />
@@ -214,7 +214,7 @@ function App() {
             path="/apps/quotechem/chat"
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotechem" appPath="sourcing" standalone>
-                <QuoteChem />
+                <QuoteChem key="quotechem-chat" />
               </MiniAppRoute>
             }
           />

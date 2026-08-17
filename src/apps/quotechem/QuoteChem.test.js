@@ -54,7 +54,7 @@ describe('QuoteChem conversation definitions', () => {
     expect(await screen.findByText('What mud system are you using?')).toBeTruthy();
   });
 
-  test('restores the composer immediately when Safari reports a stale viewport after blur', () => {
+  test('sizes the standalone page to the keyboard viewport and clears it after blur', async () => {
     const listeners = {};
     const viewport = {
       height: 700,
@@ -69,9 +69,9 @@ describe('QuoteChem conversation definitions', () => {
     fireEvent.focus(composer);
     viewport.height = 390;
     listeners.resize();
-    expect(document.documentElement.style.getPropertyValue('--qc-page-height')).toBe('390px');
+    expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe('390px');
     fireEvent.blur(composer);
-    expect(document.documentElement.style.getPropertyValue('--qc-page-height')).toBe('700px');
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe(''));
     delete window.visualViewport;
   });
 });

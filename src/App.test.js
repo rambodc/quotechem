@@ -325,6 +325,22 @@ function renderSignedOutAt(path) {
 }
 
 describe('mini-app portal routing', () => {
+  test('QuoteChem chat opens as a standalone protected page', async () => {
+    const view = renderAt('/apps/quotechem/chat', 'admin');
+
+    expect(await screen.findByRole('heading', { name: /qualify your requirement/i })).toBeTruthy();
+    expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
+    expect(view.container.querySelector('.portal-topbar')).toBeNull();
+    expect(view.container.querySelector('.qc-is-chat')).toBeTruthy();
+  });
+
+  test('QuoteChem chat rejects users without app access', async () => {
+    renderAt('/apps/quotechem/chat', 'user', []);
+
+    expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Message QuoteChem…')).toBeNull();
+  });
+
   test('admin users do not see removed Quotes app on the launcher', async () => {
     renderAt('/portal', 'admin');
 
