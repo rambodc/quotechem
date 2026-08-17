@@ -68,10 +68,13 @@ describe('QuoteChem conversation definitions', () => {
     const composer = screen.getByPlaceholderText('Message QuoteChem…');
     fireEvent.focus(composer);
     viewport.height = 390;
+    viewport.offsetTop = 118;
     listeners.resize();
     expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe('390px');
+    expect(document.documentElement.style.getPropertyValue('--qc-keyboard-top')).toBe('118px');
     fireEvent.blur(composer);
     await waitFor(() => expect(document.documentElement.style.getPropertyValue('--qc-keyboard-height')).toBe(''));
+    expect(document.documentElement.style.getPropertyValue('--qc-keyboard-top')).toBe('');
     delete window.visualViewport;
   });
 });
