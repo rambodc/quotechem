@@ -1,10 +1,22 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import QuoteChem, { buildQuestions, ISSUES, NEEDS } from './QuoteChem';
 import { postJson } from '../../lib/api';
 
 jest.mock('../../firebase', () => ({ auth: { currentUser: null } }));
 jest.mock('../../lib/api', () => ({ postJson: jest.fn() }));
+
+function renderQuoteChem() {
+  return render(
+    <MemoryRouter initialEntries={['/apps/quotechem']}>
+      <Routes>
+        <Route path="/apps/quotechem" element={<QuoteChem key="guided" />} />
+        <Route path="/apps/quotechem/chat" element={<QuoteChem key="chat" />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 describe('QuoteChem conversation definitions', () => {
   test('offers every planned entry path', () => {
@@ -27,7 +39,7 @@ describe('QuoteChem conversation definitions', () => {
 
   test('guided context opens the real AI composer and sends a desktop message', async () => {
     postJson.mockResolvedValueOnce({ conversationId: 'conversation-1', reply: 'What mud system are you using?', quickReplies: ['Water based', 'Oil based'], readyForContact: false });
-    render(<QuoteChem />);
+    renderQuoteChem();
     fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
     expect(screen.getByText('Drilling Chemical')).toBeTruthy();
     const composer = screen.getByPlaceholderText('Message QuoteChem…');
@@ -40,5 +52,26 @@ describe('QuoteChem conversation definitions', () => {
       text: 'We have severe fluid loss.',
     }), { authed: true }));
     expect(await screen.findByText('What mud system are you using?')).toBeTruthy();
+  });
+
+  test('restores the composer immediately when Safari reports a stale viewport after blur', () => {
+    const listeners = {};
+    const viewport = {
+      height: 700,
+      offsetTop: 0,
+      addEventListener: jest.fn((name, callback) => { listeners[name] = callback; }),
+      removeEventListener: jest.fn(),
+    };
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    renderQuoteChem();
+    fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    const composer = screen.getByPlaceholderText('Message QuoteChem…');
+    fireEvent.focus(composer);
+    viewport.height = 390;
+    listeners.resize();
+    expect(document.documentElement.style.getPropertyValue('--qc-page-height')).toBe('390px');
+    fireEvent.blur(composer);
+    expect(document.documentElement.style.getPropertyValue('--qc-page-height')).toBe('700px');
+    delete window.visualViewport;
   });
 });

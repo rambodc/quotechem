@@ -65,7 +65,7 @@ function ProtectedRoute({ user, checking, children }) {
   return user ? children : <Navigate to="/signin" replace />;
 }
 
-function MiniAppRoute({ user, checking, appId, appPath, children }) {
+function MiniAppRoute({ user, checking, appId, appPath, standalone = false, children }) {
   if (checking) return null;
   if (!user) return <Navigate to="/signin" replace />;
 
@@ -73,6 +73,8 @@ function MiniAppRoute({ user, checking, appId, appPath, children }) {
   if (!canAccessMiniApp(app, user.role, user.enabledMiniApps)) return <Navigate to="/portal" replace />;
 
   if (!appPath && !children) return <Navigate to={app.defaultPath} replace />;
+
+  if (standalone) return children;
 
   return (
     <PortalLayout user={user} app={app}>
@@ -204,6 +206,14 @@ function App() {
             path="/apps/quotechem"
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotechem" appPath="sourcing">
+                <QuoteChem />
+              </MiniAppRoute>
+            }
+          />
+          <Route
+            path="/apps/quotechem/chat"
+            element={
+              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotechem" appPath="sourcing" standalone>
                 <QuoteChem />
               </MiniAppRoute>
             }

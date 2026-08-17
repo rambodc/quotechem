@@ -5,6 +5,7 @@ import {
   FiMessageSquare, FiPackage, FiRefreshCw, FiRepeat, FiSend, FiShield,
   FiTarget, FiTool, FiTruck, FiUsers, FiWind, FiX, FiXCircle, FiZap,
 } from 'react-icons/fi';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { postJson } from '../../lib/api';
 import './QuoteChem.css';
 
@@ -241,10 +242,13 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   const [error, setError] = useState('');
   const [attachment, setAttachment] = useState(null);
   const [lastAttempt, setLastAttempt] = useState(null);
-  const endRef = useRef(null);
+  const chatRef = useRef(null);
   const textareaRef = useRef(null);
   const fileRef = useRef(null);
   const messageNumberRef = useRef(0);
+  const composerFocusedRef = useRef(false);
+  const restingViewportRef = useRef(null);
+  const syncViewportRef = useRef(() => {});
   const context = useMemo(() => ({
     needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
     areaLabel: area ? titleFor(AREAS, area) : '',
@@ -255,13 +259,15 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
 
   useEffect(() => {
     const viewport = window.visualViewport;
-    const syncViewport = () => {
-      const visibleBottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
-      const coveredHeight = Math.max(0, window.innerHeight - visibleBottom);
-      const keyboardOpen = coveredHeight > 120;
-      document.documentElement.style.setProperty('--qc-visual-inset', `${coveredHeight}px`);
-      document.documentElement.classList.toggle('qc-keyboard-open', keyboardOpen);
+    const syncViewport = (restoreResting = false) => {
+      const current = { height: viewport?.height || window.innerHeight, top: viewport?.offsetTop || 0 };
+      if (restingViewportRef.current === null) restingViewportRef.current = current;
+      if (!composerFocusedRef.current && !restoreResting) restingViewportRef.current = current;
+      const target = composerFocusedRef.current ? current : restingViewportRef.current;
+      document.documentElement.style.setProperty('--qc-page-height', `${Math.round(target.height)}px`);
+      document.documentElement.style.setProperty('--qc-page-top', `${Math.round(target.top)}px`);
     };
+    syncViewportRef.current = syncViewport;
     const previousRootBackground = document.documentElement.style.backgroundColor;
     const previousBodyBackground = document.body.style.backgroundColor;
     document.documentElement.style.backgroundColor = '#061321';
@@ -274,14 +280,19 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
       viewport?.removeEventListener('resize', syncViewport);
       viewport?.removeEventListener('scroll', syncViewport);
       window.removeEventListener('resize', syncViewport);
-      document.documentElement.style.removeProperty('--qc-visual-inset');
-      document.documentElement.classList.remove('qc-keyboard-open');
+      document.documentElement.style.removeProperty('--qc-page-height');
+      document.documentElement.style.removeProperty('--qc-page-top');
+      document.documentElement.classList.remove('qc-composer-focused');
       document.documentElement.style.backgroundColor = previousRootBackground;
       document.body.style.backgroundColor = previousBodyBackground;
     };
   }, []);
 
-  useEffect(() => { endRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }); }, [messages, pending, error]);
+  useEffect(() => {
+    const thread = chatRef.current;
+    if (!thread) return;
+    thread.scrollTo?.({ top: thread.scrollHeight, behavior: 'smooth' });
+  }, [messages, pending, error]);
   useEffect(() => {
     const field = textareaRef.current;
     if (!field) return;
@@ -339,12 +350,24 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
     if (event.key === 'Enter' && !event.shiftKey && !mobile) { event.preventDefault(); send(); }
   };
 
+  const onComposerFocus = () => {
+    composerFocusedRef.current = true;
+    document.documentElement.classList.add('qc-composer-focused');
+    window.requestAnimationFrame(() => syncViewportRef.current());
+  };
+
+  const onComposerBlur = () => {
+    composerFocusedRef.current = false;
+    document.documentElement.classList.remove('qc-composer-focused');
+    syncViewportRef.current(true);
+  };
+
   return (
     <div className="qc-stage qc-chat-stage">
       <div className="qc-chat-heading"><div><span>AI technical sourcing assistant</span><h1>Let’s qualify your requirement</h1></div><div className="qc-live"><i /> AI connected</div></div>
       <div className="qc-context"><strong>{context.needLabel}</strong>{context.areaLabel ? <><FiChevronRight /><span>{context.areaLabel}</span></> : null}{context.issueLabel ? <><FiChevronRight /><span>{context.issueLabel}</span></> : null}</div>
       <div className="qc-chat-shell">
-      <div className="qc-chat" aria-live="polite">
+      <div ref={chatRef} className="qc-chat" aria-live="polite">
         {!messages.length ? <div className="qc-chat-welcome"><div className="qc-ai-mark"><FiDroplet /></div><h2>What should we know?</h2><p>Describe the requirement or attach a useful field photo, product label, SDS/TDS, water analysis, or lab report. I’ll ask no more than three focused questions.</p></div> : null}
         {messages.map((message) => <div className={`qc-message-row ${message.role}`} key={message.id}>
           <div className="qc-message-avatar">{message.role === 'assistant' ? <FiDroplet /> : 'You'}</div>
@@ -352,7 +375,6 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
         </div>)}
         {pending ? <div className="qc-message-row assistant"><div className="qc-message-avatar"><FiDroplet /></div><div className="qc-typing" aria-label="Assistant is thinking"><i /><i /><i /></div></div> : null}
         {error ? <div className="qc-chat-error" role="alert"><FiXCircle /><span>{error}</span>{lastAttempt && !pending ? <button type="button" onClick={() => requestReply(lastAttempt.userMessage)}>Retry</button> : null}</div> : null}
-        <div ref={endRef} />
       </div>
       <div className="qc-composer-zone">
           {quickReplies.length ? <div className="qc-quick-replies">{quickReplies.map((option) => <button type="button" key={option} disabled={pending} onClick={() => send(option)}>{option}</button>)}</div> : null}
@@ -362,7 +384,7 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
             <button type="button" className="qc-composer-tool" onClick={() => fileRef.current?.click()} disabled={pending} aria-label="Attach image or PDF"><FiImage /></button>
             <input ref={fileRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" onChange={chooseFile} />
             <label className="sr-only" htmlFor="qc-message">Message</label>
-            <textarea ref={textareaRef} id="qc-message" rows="1" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown} placeholder="Message QuoteChem…" disabled={pending} />
+            <textarea ref={textareaRef} id="qc-message" rows="1" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown} onFocus={onComposerFocus} onBlur={onComposerBlur} placeholder="Message QuoteChem…" disabled={pending} />
             <button type="submit" className="qc-send" disabled={pending || (!draft.trim() && !attachment)} aria-label="Send message"><FiSend /></button>
           </form>
           <div className="qc-composer-meta"><span>Messages and uploads are saved securely for QuoteChem staff review.</span><button type="button" disabled={!conversationId} onClick={onFinish}>Finish request</button></div>
@@ -420,32 +442,44 @@ function CompleteStage({ requestId, onRestart }) {
 }
 
 export default function QuoteChem() {
-  const [stage, setStage] = useState('need');
-  const [need, setNeed] = useState('');
-  const [area, setArea] = useState('');
-  const [issue, setIssue] = useState('');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const routeState = location.state || {};
+  const isChatRoute = location.pathname.endsWith('/chat');
+  const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || 'need'));
+  const [need, setNeed] = useState(routeState.need || (isChatRoute ? 'describe' : ''));
+  const [area, setArea] = useState(routeState.area || '');
+  const [issue, setIssue] = useState(routeState.issue || '');
   const [contact, setContact] = useState({ name: '', company: '', email: '', phone: '', country: '' });
   const [requestId, setRequestId] = useState('');
   const [conversationId, setConversationId] = useState('');
 
-  const chooseNeed = (id) => { setNeed(id); setStage(id === 'production' ? 'problem' : 'chat'); };
+  const openChat = (nextNeed = need, nextArea = area, nextIssue = issue) => navigate('/apps/quotechem/chat', { state: { need: nextNeed, area: nextArea, issue: nextIssue } });
+  const chooseNeed = (id) => {
+    setNeed(id);
+    if (id === 'production') setStage('problem');
+    else openChat(id, '', '');
+  };
   const goBack = () => {
     if (stage === 'problem') setStage('need');
-    else if (stage === 'chat') setStage(need === 'production' ? 'problem' : 'need');
+    else if (stage === 'chat') navigate('/apps/quotechem', { state: need === 'production' ? { stage: 'problem', need, area, issue } : undefined });
     else if (stage === 'contact') setStage('chat');
   };
-  const restart = () => { setStage('need'); setNeed(''); setArea(''); setIssue(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); setConversationId(''); };
+  const restart = () => {
+    if (isChatRoute) return navigate('/apps/quotechem', { replace: true });
+    setStage('need'); setNeed(''); setArea(''); setIssue(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); setConversationId('');
+  };
   const complete = async () => {
     const result = await postJson('quotechemComplete', { conversationId, contact }, { authed: true });
     setRequestId(result.requestId); setStage('complete');
   };
 
   return (
-    <div className="quotechem-app">
+    <div className={`quotechem-app ${isChatRoute && stage === 'chat' ? 'qc-is-chat' : ''}`}>
       <header className="qc-app-header"><div className="qc-wordmark">Quote<span>Chem</span><small>Global Oilfield Chemical Sourcing</small></div>{stage !== 'need' && stage !== 'complete' ? <button type="button" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}{stage !== 'need' ? <button type="button" onClick={restart}><FiRefreshCw /> Start over</button> : <span />}</header>
       <div className="qc-content"><Progress stage={stage} />
         {stage === 'need' ? <NeedStage onChoose={chooseNeed} /> : null}
-        {stage === 'problem' ? <ProblemStage area={area} issue={issue} onArea={setArea} onIssue={setIssue} onContinue={() => setStage('chat')} /> : null}
+        {stage === 'problem' ? <ProblemStage area={area} issue={issue} onArea={setArea} onIssue={setIssue} onContinue={() => openChat(need, area, issue)} /> : null}
         {stage === 'chat' ? <ChatStage need={need} area={area} issue={issue} conversationId={conversationId} onConversation={setConversationId} onFinish={() => conversationId && setStage('contact')} /> : null}
         {stage === 'contact' ? <ContactStage values={contact} onChange={(key, value) => setContact((prev) => ({ ...prev, [key]: value }))} onSubmit={complete} /> : null}
         {stage === 'complete' ? <CompleteStage requestId={requestId} onRestart={restart} /> : null}
