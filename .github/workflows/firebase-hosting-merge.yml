@@ -39,6 +39,15 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+      - name: Ensure public anonymous authentication is enabled
+        run: |
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          curl --fail-with-body --silent --show-error --request PATCH \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -H "x-goog-user-project: quotechemfb" \
+            "https://identitytoolkit.googleapis.com/admin/v2/projects/quotechemfb/config?updateMask=signIn.anonymous.enabled" \
+            --data '{"signIn":{"anonymous":{"enabled":true}}}'
       - name: Create .env for React build
         run: |
           cat > .env << 'EOV'

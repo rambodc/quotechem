@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FiPlus, FiRefreshCw, FiRotateCcw, FiTool, FiTrash2 } from 'react-icons/fi';
 import { postJson } from '../../lib/api';
 import { Thumb } from './ItemsPage';
-const PageObserver=globalThis.IntersectionObserver||class{observe(){} disconnect(){}};
+const PageObserver=window.IntersectionObserver||class{observe(){} disconnect(){}};
 const today=()=>new Date().toISOString().slice(0,10); const number=value=>Number(value)||0; const shown=value=>Math.round(number(value)*10000)/10000; const complete=value=>Math.abs(value-100)<=1e-6;
 function Picker({label,items,value,onChange,exclude=[]}){return <label>{label}<select aria-label={label} required value={value} onChange={e=>onChange(e.target.value)}><option value="">Select an item</option>{items.filter(x=>!exclude.includes(x.productId)).map(item=><option key={item.productId} value={item.productId}>{item.item} · {item.quantityOnHand} {item.unitOfMeasure}</option>)}</select></label>}
 function BuildForm({items,onPosted}){const [outputId,setOutputId]=useState(''),[components,setComponents]=useState([{productId:'',percentage:100}]),[outputQuantity,setOutputQuantity]=useState(''),[buildDate,setBuildDate]=useState(today()),[reference,setReference]=useState(''),[notes,setNotes]=useState(''),[ack,setAck]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');const byId=useMemo(()=>new Map(items.map(x=>[x.productId,x])),[items]);const output=byId.get(outputId);const total=components.reduce((s,x)=>s+number(x.percentage),0);

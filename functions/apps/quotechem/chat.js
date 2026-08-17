@@ -3,7 +3,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { admin, db, storage } from '../../core/firebase.js';
-import { requireMiniAppAccess } from '../../core/auth.js';
+import { authenticateToken, requireMiniAppAccess } from '../../core/auth.js';
 import { REGION, jsonError, preflight, setCors } from '../../core/http.js';
 import { asString, readSecret } from '../../core/values.js';
 
@@ -15,6 +15,7 @@ const MESSAGE_MAX_CHARS = 5000;
 const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const MAX_QUESTIONS = 3;
 const ATTACHMENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']);
+export const SOURCING_STAGES = ['received', 'technical_review', 'supplier_sourcing', 'options_preparing', 'follow_up'];
 
 function invalid(message, status = 400) { throw Object.assign(new Error(message), { status }); }
 
@@ -149,7 +150,7 @@ export const quotechemChat = onRequest(
     if (preflight(req, res)) return;
     if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
     try {
-      const user = await requireMiniAppAccess(req, 'quotechem');
+      const user = await authenticateToken(req);
       const text = asString(req.body?.text).slice(0, MESSAGE_MAX_CHARS);
       const messageId = safeId(req.body?.messageId);
       if (!messageId || (!text && !req.body?.attachment?.dataUrl)) return jsonError(res, 400, 'A message or attachment is required.');
@@ -158,7 +159,7 @@ export const quotechemChat = onRequest(
       const now = admin.firestore.FieldValue.serverTimestamp();
       if (!conversation?.data) {
         const id = conversation?.id || randomUUID(); const ref = conversation?.ref || db.collection(CONVERSATIONS).doc(id);
-        await ref.set({ conversationId: id, ownerUid: user.uid, ownerEmail: user.email || '', guidedContext: req.body?.context || {}, status: 'active', questionCount: 0, attachmentCount: 0, createdAt: now, updatedAt: now });
+        await ref.set({ conversationId: id, ownerUid: user.uid, ownerEmail: user.email || '', ownerAnonymous: Boolean(user.isAnonymous), source: 'public', guidedContext: req.body?.context || {}, status: 'active', questionCount: 0, attachmentCount: 0, createdAt: now, updatedAt: now });
         conversation = { id, ref, data: { questionCount: 0 } };
       }
       const userRef = conversation.ref.collection('messages').doc(messageId);
@@ -202,7 +203,7 @@ export const quotechemComplete = onRequest({ region: REGION }, async (req, res) 
   if (preflight(req, res)) return;
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
   try {
-    const user = await requireMiniAppAccess(req, 'quotechem');
+    const user = await authenticateToken(req);
     const conversation = await ownedConversation(req.body?.conversationId, user);
     if (!conversation) return jsonError(res, 400, 'Start a conversation before completing the request.');
     const contact = {
@@ -211,7 +212,105 @@ export const quotechemComplete = onRequest({ region: REGION }, async (req, res) 
     };
     if (!contact.name || !contact.company || !/^\S+@\S+\.\S+$/.test(contact.email) || !contact.country) return jsonError(res, 400, 'Complete the required contact details.');
     const requestId = `QC-${new Date().getFullYear()}-${String(Math.floor(10000 + Math.random() * 90000))}`;
-    await conversation.ref.set({ contact, requestId, status: 'submitted', submittedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await conversation.ref.set({ contact, requestId, status: 'submitted', sourcingStage: 'received', submittedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     setCors(res); return res.status(200).json({ ok: true, requestId });
   } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to complete the request.'); }
+});
+
+function timestampValue(value) {
+  return value?.toDate?.()?.toISOString?.() || null;
+}
+
+function publicConversation(data = {}) {
+  return {
+    conversationId: data.conversationId || '', requestId: data.requestId || '', status: data.status || 'active',
+    sourcingStage: data.sourcingStage || 'received', guidedContext: data.guidedContext || {}, contact: data.contact || null,
+    questionCount: Number(data.questionCount) || 0, attachmentCount: Number(data.attachmentCount) || 0,
+    createdAt: timestampValue(data.createdAt), updatedAt: timestampValue(data.updatedAt), submittedAt: timestampValue(data.submittedAt),
+  };
+}
+
+async function conversationMessages(ref, limit = 100) {
+  const snap = await ref.collection('messages').orderBy('createdAt', 'asc').limit(limit).get();
+  return snap.docs.map((doc) => {
+    const data = doc.data() || {};
+    return { messageId: doc.id, role: data.role, text: data.text || '', attachment: data.attachment || null, response: data.response || null, createdAt: timestampValue(data.createdAt) };
+  });
+}
+
+export const quotechemResume = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    const user = await authenticateToken(req);
+    const conversation = await ownedConversation(req.body?.conversationId, user);
+    setCors(res); return res.status(200).json({ ok: true, conversation: publicConversation(conversation.data), messages: await conversationMessages(conversation.ref) });
+  } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to restore conversation.'); }
+});
+
+export const quotechemListRequests = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    await requireMiniAppAccess(req, 'quotechem');
+    const limit = Math.min(Math.max(Number(req.body?.limit) || 30, 1), 50);
+    let listQuery = db.collection(CONVERSATIONS).orderBy('updatedAt', 'desc');
+    const cursor = safeId(req.body?.cursor);
+    if (cursor) {
+      const cursorSnap = await db.collection(CONVERSATIONS).doc(cursor).get();
+      if (cursorSnap.exists) listQuery = listQuery.startAfter(cursorSnap);
+    }
+    const snap = await listQuery.limit(limit).get();
+    const query = asString(req.body?.query).toLowerCase();
+    const status = asString(req.body?.status);
+    const stage = asString(req.body?.stage);
+    let items = snap.docs.map((doc) => ({ ...publicConversation(doc.data()), conversationId: doc.id }));
+    if (status) items = items.filter((item) => item.status === status);
+    if (stage) items = items.filter((item) => item.sourcingStage === stage);
+    if (query) items = items.filter((item) => [item.requestId, item.contact?.name, item.contact?.company, item.contact?.email, item.guidedContext?.needLabel, item.guidedContext?.issueLabel].some((value) => asString(value).toLowerCase().includes(query)));
+    setCors(res); return res.status(200).json({ ok: true, items, nextCursor: snap.size === limit ? snap.docs[snap.docs.length - 1].id : null });
+  } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to list QuoteChem requests.'); }
+});
+
+export const quotechemGetRequest = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    await requireMiniAppAccess(req, 'quotechem');
+    const id = safeId(req.body?.conversationId);
+    const ref = db.collection(CONVERSATIONS).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return jsonError(res, 404, 'Request not found.');
+    const messages = await conversationMessages(ref);
+    setCors(res); return res.status(200).json({ ok: true, conversation: { ...publicConversation(snap.data()), conversationId: id }, messages });
+  } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to load QuoteChem request.'); }
+});
+
+export const quotechemGetAttachment = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    await requireMiniAppAccess(req, 'quotechem');
+    const id = safeId(req.body?.conversationId); const messageId = safeId(req.body?.messageId);
+    const message = await db.collection(CONVERSATIONS).doc(id).collection('messages').doc(messageId).get();
+    const path = asString(message.data()?.attachment?.path);
+    if (!message.exists || !path.startsWith('quotechem-conversations/')) return jsonError(res, 404, 'Attachment not found.');
+    const [url] = await storage.bucket().file(path).getSignedUrl({ action: 'read', expires: Date.now() + 15 * 60 * 1000 });
+    setCors(res); return res.status(200).json({ ok: true, url });
+  } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to open attachment.'); }
+});
+
+export const quotechemUpdateStage = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    const staff = await requireMiniAppAccess(req, 'quotechem');
+    const id = safeId(req.body?.conversationId); const sourcingStage = asString(req.body?.sourcingStage);
+    if (!SOURCING_STAGES.includes(sourcingStage)) return jsonError(res, 400, 'Choose a valid sourcing stage.');
+    const ref = db.collection(CONVERSATIONS).doc(id); const snap = await ref.get();
+    if (!snap.exists) return jsonError(res, 404, 'Request not found.');
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await ref.set({ sourcingStage, stageUpdatedAt: now, stageUpdatedByUid: staff.uid, stageUpdatedByEmail: staff.email || '', updatedAt: now }, { merge: true });
+    setCors(res); return res.status(200).json({ ok: true, sourcingStage });
+  } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to update sourcing stage.'); }
 });

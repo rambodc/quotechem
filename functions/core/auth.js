@@ -31,11 +31,29 @@ export async function authenticateRequest(req) {
     return {
       uid: decoded.uid,
       email: asString(decoded.email) || asString(userData.email),
+      isAnonymous: decoded.firebase?.sign_in_provider === 'anonymous',
       role: normalizeRole(userData.role),
       enabledMiniApps: Array.isArray(userData.enabledMiniApps) ? userData.enabledMiniApps : null,
     };
   } catch (error) {
     if (error?.status) throw error;
+    throw Object.assign(new Error('Invalid authentication token'), { status: 401, cause: error });
+  }
+}
+
+export async function authenticateToken(req) {
+  const header = asString(req.headers?.authorization || req.headers?.Authorization);
+  if (!header.toLowerCase().startsWith('bearer ') || !header.slice(7).trim()) {
+    throw Object.assign(new Error('Missing Bearer token'), { status: 401 });
+  }
+  try {
+    const decoded = await admin.auth().verifyIdToken(header.slice(7).trim());
+    return {
+      uid: decoded.uid,
+      email: asString(decoded.email),
+      isAnonymous: decoded.firebase?.sign_in_provider === 'anonymous',
+    };
+  } catch (error) {
     throw Object.assign(new Error('Invalid authentication token'), { status: 401, cause: error });
   }
 }

@@ -6,7 +6,9 @@ import {
   FiTarget, FiTool, FiTruck, FiUsers, FiWind, FiX, FiXCircle, FiZap,
 } from 'react-icons/fi';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { signInAnonymously } from 'firebase/auth';
 import { postJson } from '../../lib/api';
+import { auth } from '../../firebase';
 import './QuoteChem.css';
 
 export const NEEDS = [
@@ -233,7 +235,12 @@ function MessageActions({ message }) {
   );
 }
 
-function ChatStage({ need, area, issue, conversationId, onConversation, onFinish }) {
+async function ensurePublicIdentity() {
+  if (!auth.currentUser) await signInAnonymously(auth);
+  return auth.currentUser;
+}
+
+function ChatStage({ need, area, issue, conversationId, onConversation, onFinish, publicMode = false }) {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState([]);
   const [quickReplies, setQuickReplies] = useState([]);
@@ -257,6 +264,26 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   }), [area, issue, need]);
 
   const nextId = (prefix) => `${prefix}-${Date.now()}-${messageNumberRef.current += 1}`;
+
+  useEffect(() => {
+    if (!publicMode || !conversationId) return;
+    let live = true;
+    ensurePublicIdentity().then(() => postJson('quotechemResume', { conversationId }, { authed: true })).then((result) => {
+      if (!live) return;
+      const restored = (result.messages || []).map((message) => ({
+        id: message.messageId, role: message.role, text: message.text,
+        attachment: message.attachment ? { ...message.attachment, kind: message.attachment.kind || (message.attachment.contentType === 'application/pdf' ? 'pdf' : 'image') } : null,
+        attachmentAcknowledged: message.response?.attachmentAcknowledged,
+        attachmentSummary: message.response?.attachmentSummary,
+        attachmentKind: message.attachment?.kind,
+        response: message.response,
+      }));
+      setMessages(restored);
+      const lastAssistant = [...restored].reverse().find((message) => message.role === 'assistant');
+      setReady(Boolean(lastAssistant?.response?.readyForContact || result.conversation?.status === 'ready'));
+    }).catch(() => {}).finally(() => {});
+    return () => { live = false; };
+  }, [conversationId, publicMode]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -309,6 +336,7 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
     const attempt = { userMessage };
     setLastAttempt(attempt);
     try {
+      if (publicMode) await ensurePublicIdentity();
       const result = await postJson('quotechemChat', {
         context,
         conversationId: userMessage.conversationId,
@@ -381,7 +409,7 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
         {!messages.length ? <div className="qc-chat-welcome"><div className="qc-ai-mark"><FiDroplet /></div><h2>What should we know?</h2><p>Describe the requirement or attach a useful field photo, product label, SDS/TDS, water analysis, or lab report. I’ll ask no more than three focused questions.</p></div> : null}
         {messages.map((message) => <div className={`qc-message-row ${message.role}`} key={message.id}>
           <div className="qc-message-avatar">{message.role === 'assistant' ? <FiDroplet /> : 'You'}</div>
-          <div className="qc-message-body">{message.attachment ? (message.attachment.kind === 'pdf' ? <div className="qc-file-card"><FiFileText /><span>{message.attachment.name}</span></div> : <img src={message.attachment.dataUrl} alt={`Attached ${message.attachment.name}`} />) : null}<div className="qc-message-text">{message.text}</div>{message.attachmentAcknowledged ? <div className="qc-analysis-proof"><FiCheckCircle /><div><strong>{message.attachmentKind === 'pdf' ? 'PDF reviewed' : 'Image analyzed'}</strong><span>{message.attachmentSummary}</span></div></div> : null}{message.role === 'assistant' ? <MessageActions message={message} /> : null}</div>
+          <div className="qc-message-body">{message.attachment ? (message.attachment.kind === 'pdf' || !message.attachment.dataUrl ? <div className="qc-file-card">{message.attachment.kind === 'pdf' ? <FiFileText /> : <FiImage />}<span>{message.attachment.name}</span></div> : <img src={message.attachment.dataUrl} alt={`Attached ${message.attachment.name}`} />) : null}<div className="qc-message-text">{message.text}</div>{message.attachmentAcknowledged ? <div className="qc-analysis-proof"><FiCheckCircle /><div><strong>{message.attachmentKind === 'pdf' ? 'PDF reviewed' : 'Image analyzed'}</strong><span>{message.attachmentSummary}</span></div></div> : null}{message.role === 'assistant' ? <MessageActions message={message} /> : null}</div>
         </div>)}
         {pending ? <div className="qc-message-row assistant"><div className="qc-message-avatar"><FiDroplet /></div><div className="qc-typing" aria-label="Assistant is thinking"><i /><i /><i /></div></div> : null}
         {error ? <div className="qc-chat-error" role="alert"><FiXCircle /><span>{error}</span>{lastAttempt && !pending ? <button type="button" onClick={() => requestReply(lastAttempt.userMessage)}>Retry</button> : null}</div> : null}
@@ -443,28 +471,47 @@ function CompleteStage({ requestId, onRestart }) {
   ];
   return (
     <div className="qc-stage qc-complete">
-      <div className="qc-success-icon"><FiCheck /></div><p className="qc-kicker">Request {requestId}</p><h1>We’re on it.</h1><p className="qc-lead">Your demo request is ready for the QuoteChem sourcing workflow.</p>
-      <div className="qc-timeline">{steps.map(([label, Icon, status], index) => <div key={label} className={status || ''}><span><Icon /></span><p><strong>{label}</strong><small>{index === 0 ? 'Completed in this prototype' : 'Next step in the future workflow'}</small></p></div>)}</div>
+      <div className="qc-success-icon"><FiCheck /></div><p className="qc-kicker">Request {requestId}</p><h1>We’re on it.</h1><p className="qc-lead">Your request has been sent to the QuoteChem sourcing team.</p>
+      <div className="qc-timeline">{steps.map(([label, Icon, status], index) => <div key={label} className={status || ''}><span><Icon /></span><p><strong>{label}</strong><small>{index === 0 ? 'Your request has been received' : 'Upcoming sourcing step'}</small></p></div>)}</div>
       <div className="qc-demo-notice"><FiShield /><div><strong>Request saved securely</strong><p>Your conversation, uploads, and contact details are now available for authorized QuoteChem staff review.</p></div></div>
       <button type="button" className="qc-primary" onClick={onRestart}><FiRefreshCw /> Start another request</button>
     </div>
   );
 }
 
-export default function QuoteChem() {
+const PUBLIC_SESSION_KEY = 'quotechem:public-sourcing-session';
+
+function readPublicSession() {
+  try { return JSON.parse(window.localStorage.getItem(PUBLIC_SESSION_KEY) || 'null'); } catch { return null; }
+}
+
+export default function QuoteChem({ publicMode = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = location.state || {};
-  const isChatRoute = location.pathname.endsWith('/chat');
-  const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || 'need'));
-  const [need, setNeed] = useState(routeState.need || (isChatRoute ? 'describe' : ''));
-  const [area, setArea] = useState(routeState.area || '');
-  const [issue, setIssue] = useState(routeState.issue || '');
-  const [contact, setContact] = useState({ name: '', company: '', email: '', phone: '', country: '' });
-  const [requestId, setRequestId] = useState('');
-  const [conversationId, setConversationId] = useState('');
+  const isChatRoute = location.pathname === '/chat' || location.pathname.endsWith('/apps/quotechem/chat');
+  const restored = useMemo(() => publicMode ? readPublicSession() : null, [publicMode]);
+  const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || restored?.stage || 'need'));
+  const [need, setNeed] = useState(routeState.need || restored?.need || (isChatRoute ? 'describe' : ''));
+  const [area, setArea] = useState(routeState.area || restored?.area || '');
+  const [issue, setIssue] = useState(routeState.issue || restored?.issue || '');
+  const [contact, setContact] = useState(restored?.contact || { name: '', company: '', email: '', phone: '', country: '' });
+  const [requestId, setRequestId] = useState(restored?.requestId || '');
+  const [conversationId, setConversationId] = useState(restored?.conversationId || '');
 
-  const openChat = (nextNeed = need, nextArea = area, nextIssue = issue) => navigate('/apps/quotechem/chat', { state: { need: nextNeed, area: nextArea, issue: nextIssue } });
+  useEffect(() => {
+    if (!publicMode) return;
+    window.localStorage.setItem(PUBLIC_SESSION_KEY, JSON.stringify({ stage, need, area, issue, contact, requestId, conversationId }));
+  }, [publicMode, stage, need, area, issue, contact, requestId, conversationId]);
+
+  useEffect(() => { if (publicMode && !auth.currentUser) signInAnonymously(auth).catch(() => {}); }, [publicMode]);
+  useEffect(() => {
+    if (publicMode && stage === 'chat' && location.pathname !== '/chat') navigate('/chat', { replace: true, state: { need, area, issue } });
+  }, [publicMode, stage, location.pathname, navigate, need, area, issue]);
+
+  const homePath = publicMode ? '/' : '/apps/quotechem';
+  const chatPath = publicMode ? '/chat' : '/apps/quotechem/chat';
+  const openChat = (nextNeed = need, nextArea = area, nextIssue = issue) => navigate(chatPath, { state: { need: nextNeed, area: nextArea, issue: nextIssue } });
   const chooseNeed = (id) => {
     setNeed(id);
     if (id === 'production') setStage('problem');
@@ -472,25 +519,27 @@ export default function QuoteChem() {
   };
   const goBack = () => {
     if (stage === 'problem') setStage('need');
-    else if (stage === 'chat') navigate('/apps/quotechem', { state: need === 'production' ? { stage: 'problem', need, area, issue } : undefined });
+    else if (stage === 'chat') navigate(homePath, { state: need === 'production' ? { stage: 'problem', need, area, issue } : undefined });
     else if (stage === 'contact') setStage('chat');
   };
   const restart = () => {
-    if (isChatRoute) return navigate('/apps/quotechem', { replace: true });
+    if (publicMode) window.localStorage.removeItem(PUBLIC_SESSION_KEY);
+    if (isChatRoute) return navigate(homePath, { replace: true });
     setStage('need'); setNeed(''); setArea(''); setIssue(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); setConversationId('');
   };
   const complete = async () => {
+    if (publicMode) await ensurePublicIdentity();
     const result = await postJson('quotechemComplete', { conversationId, contact }, { authed: true });
     setRequestId(result.requestId); setStage('complete');
   };
 
   return (
-    <div className={`quotechem-app ${isChatRoute && stage === 'chat' ? 'qc-is-chat' : ''}`}>
-      <header className="qc-app-header"><div className="qc-wordmark">Quote<span>Chem</span><small>Global Oilfield Chemical Sourcing</small></div>{stage !== 'need' && stage !== 'complete' ? <button type="button" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}{stage !== 'need' ? <button type="button" onClick={restart}><FiRefreshCw /> Start over</button> : <span />}</header>
+    <div className={`quotechem-app ${publicMode ? 'qc-public' : ''} ${stage === 'chat' ? 'qc-is-chat' : ''}`}>
+      <header className="qc-app-header"><div className="qc-wordmark">Quote<span>Chem</span><small>Global Oilfield Chemical Sourcing</small></div>{stage !== 'need' && stage !== 'complete' ? <button type="button" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}{stage !== 'need' ? <button type="button" onClick={restart}><FiRefreshCw /> Start over</button> : publicMode ? <button type="button" onClick={() => navigate('/signin')}>Portal <FiArrowRight /></button> : <span />}</header>
       <div className="qc-content"><Progress stage={stage} />
         {stage === 'need' ? <NeedStage onChoose={chooseNeed} /> : null}
         {stage === 'problem' ? <ProblemStage area={area} issue={issue} onArea={setArea} onIssue={setIssue} onContinue={() => openChat(need, area, issue)} /> : null}
-        {stage === 'chat' ? <ChatStage need={need} area={area} issue={issue} conversationId={conversationId} onConversation={setConversationId} onFinish={() => conversationId && setStage('contact')} /> : null}
+        {stage === 'chat' ? <ChatStage need={need} area={area} issue={issue} conversationId={conversationId} onConversation={setConversationId} onFinish={() => conversationId && setStage('contact')} publicMode={publicMode} /> : null}
         {stage === 'contact' ? <ContactStage values={contact} onChange={(key, value) => setContact((prev) => ({ ...prev, [key]: value }))} onSubmit={complete} /> : null}
         {stage === 'complete' ? <CompleteStage requestId={requestId} onRestart={restart} /> : null}
       </div>

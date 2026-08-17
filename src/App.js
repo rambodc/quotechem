@@ -3,8 +3,6 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import CatalogHome from './home/CatalogHome';
-import ProductPage from './home/ProductPage';
 import Login from './auth/Login';
 import ForgotPassword from './auth/ForgotPassword';
 import InviteRegister from './auth/InviteRegister';
@@ -17,6 +15,7 @@ import Uniquem from './apps/uniquem';
 import ThreeD from './apps/three-d';
 import UserAccess from './admin/UserAccess';
 import QuoteChem from './apps/quotechem';
+import QuoteChemInbox from './apps/quotechem/QuoteChemInbox';
 
 export const UserContext = createContext(null);
 
@@ -84,21 +83,24 @@ function MiniAppRoute({ user, checking, appId, appPath, standalone = false, chil
 }
 
 function App() {
-  const [firebaseUser, setFirebaseUser] = useState(null);
   const [appUser, setAppUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const profileUnsubRef = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
-      setFirebaseUser(u);
-
       if (profileUnsubRef.current) {
         profileUnsubRef.current();
         profileUnsubRef.current = null;
       }
 
       if (!u) {
+        setAppUser(null);
+        setCheckingAuth(false);
+        return;
+      }
+
+      if (u.isAnonymous) {
         setAppUser(null);
         setCheckingAuth(false);
         return;
@@ -165,34 +167,34 @@ function App() {
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={<CatalogHome />} />
-          <Route path="/operations" element={<CatalogHome page="operations" />} />
-          <Route path="/chemicals" element={<CatalogHome page="chemicals" />} />
-          <Route path="/technology" element={<CatalogHome page="technology" />} />
-          <Route path="/health-safety" element={<CatalogHome page="safety" />} />
-          <Route path="/careers" element={<CatalogHome page="careers" />} />
-          <Route path="/locations" element={<CatalogHome page="locations" />} />
-          <Route path="/contact-us" element={<CatalogHome page="contact" />} />
-          <Route path="/chemicals/:slug" element={<ProductPage />} />
-          <Route path="/invite/:token" element={firebaseUser ? <Navigate to="/portal" replace /> : <InviteRegister />} />
+          <Route path="/" element={<QuoteChem key="quotechem-public" publicMode />} />
+          <Route path="/chat" element={<QuoteChem key="quotechem-public-chat" publicMode />} />
+          <Route path="/operations" element={<Navigate to="/" replace />} />
+          <Route path="/chemicals/*" element={<Navigate to="/" replace />} />
+          <Route path="/technology" element={<Navigate to="/" replace />} />
+          <Route path="/health-safety" element={<Navigate to="/" replace />} />
+          <Route path="/careers" element={<Navigate to="/" replace />} />
+          <Route path="/locations" element={<Navigate to="/" replace />} />
+          <Route path="/contact-us" element={<Navigate to="/" replace />} />
+          <Route path="/invite/:token" element={appUser ? <Navigate to="/portal" replace /> : <InviteRegister />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route
             path="/signin"
-            element={firebaseUser ? <Navigate to="/portal" replace /> : <Login />}
+            element={appUser ? <Navigate to="/portal" replace /> : <Login />}
           />
           <Route
             path="/signup"
-            element={<Navigate to={firebaseUser ? '/portal' : '/signin'} replace />}
+            element={<Navigate to={appUser ? '/portal' : '/signin'} replace />}
           />
           <Route
             path="/forgot"
-            element={firebaseUser ? <Navigate to="/portal" replace /> : <ForgotPassword />}
+            element={appUser ? <Navigate to="/portal" replace /> : <ForgotPassword />}
           />
 
           <Route
             path="/portal"
             element={
-              <ProtectedRoute user={firebaseUser} checking={checkingAuth}>
+              <ProtectedRoute user={contextValue} checking={checkingAuth}>
                 <PortalLayout user={contextValue}>
                   <AppLauncher user={contextValue} />
                 </PortalLayout>
@@ -206,15 +208,7 @@ function App() {
             path="/apps/quotechem"
             element={
               <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotechem" appPath="sourcing">
-                <QuoteChem key="quotechem-guided" />
-              </MiniAppRoute>
-            }
-          />
-          <Route
-            path="/apps/quotechem/chat"
-            element={
-              <MiniAppRoute user={contextValue} checking={checkingAuth} appId="quotechem" appPath="sourcing" standalone>
-                <QuoteChem key="quotechem-chat" />
+                <QuoteChemInbox />
               </MiniAppRoute>
             }
           />

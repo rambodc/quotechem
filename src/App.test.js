@@ -89,6 +89,7 @@ jest.mock('firebase/auth', () => ({
   onAuthStateChanged: jest.fn(),
   signInWithCustomToken: jest.fn(),
   signInWithEmailAndPassword: jest.fn(),
+  signInAnonymously: jest.fn(),
   signOut: jest.fn(),
   updatePassword: jest.fn(),
 }));
@@ -127,7 +128,7 @@ jest.mock('three/examples/jsm/controls/OrbitControls', () => ({
 }));
 
 beforeEach(() => {
-  const { onAuthStateChanged, signInWithCustomToken, signOut, updatePassword } = require('firebase/auth');
+  const { onAuthStateChanged, signInWithCustomToken, signInAnonymously, signOut, updatePassword } = require('firebase/auth');
   const { getDoc, onSnapshot, serverTimestamp, setDoc } = require('firebase/firestore');
   const { postJson } = require('./lib/api');
   const { auth } = require('./firebase');
@@ -156,6 +157,7 @@ beforeEach(() => {
   });
   signOut.mockImplementation(() => Promise.resolve());
   signInWithCustomToken.mockImplementation(() => Promise.resolve());
+  signInAnonymously.mockImplementation(() => { auth.currentUser = { uid: 'anonymous-1', isAnonymous: true, getIdToken: jest.fn(() => Promise.resolve('token')) }; return Promise.resolve({ user: auth.currentUser }); });
   updatePassword.mockImplementation(() => Promise.resolve());
 
   getDoc.mockImplementation(() => Promise.resolve({ exists: () => true }));
@@ -207,6 +209,7 @@ beforeEach(() => {
         ],
       });
     }
+    if (path === 'quotechemListRequests') return Promise.resolve({ items: [] });
     if (path === 'adminInviteUser') return Promise.resolve({ mode: 'invited', invite: { email: 'new@example.com', status: 'pending' } });
     if (path === 'adminResendInvite') return Promise.resolve({ ok: true });
     if (path === 'adminUpdateInvite') return Promise.resolve({ invite: { ...(body || {}) } });
@@ -325,17 +328,14 @@ function renderSignedOutAt(path) {
 }
 
 describe('mini-app portal routing', () => {
-  test('QuoteChem chat opens as a standalone protected page', async () => {
-    const view = renderAt('/apps/quotechem/chat', 'admin');
-
-    expect(await screen.findByRole('heading', { name: /qualify your requirement/i })).toBeTruthy();
-    expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
-    expect(view.container.querySelector('.portal-topbar')).toBeNull();
-    expect(view.container.querySelector('.qc-is-chat')).toBeTruthy();
+  test('QuoteChem mini app opens the staff sourcing inbox', async () => {
+    renderAt('/apps/quotechem', 'admin');
+    expect(await screen.findByRole('heading', { name: /Requests and conversations/i })).toBeTruthy();
+    expect(await screen.findByText(/New public conversations will appear here/i)).toBeTruthy();
   });
 
-  test('QuoteChem chat rejects users without app access', async () => {
-    renderAt('/apps/quotechem/chat', 'user', []);
+  test('QuoteChem inbox rejects users without app access', async () => {
+    renderAt('/apps/quotechem', 'user', []);
 
     expect(await screen.findByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.queryByPlaceholderText('Message QuoteChem…')).toBeNull();
@@ -573,11 +573,10 @@ describe('mini-app portal routing', () => {
     expect(screen.queryByRole('heading', { name: /Change Email/i })).not.toBeTruthy();
   });
 
-  test('public chat route is not available', async () => {
+  test('public chat route is available without portal access', async () => {
     renderSignedOutAt('/chat');
-
-    expect(await screen.findByRole('heading', { name: /Advanced Solutions in Specialty Chemicals/i })).toBeTruthy();
-    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(await screen.findByRole('heading', { name: /qualify your requirement/i })).toBeTruthy();
+    expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
   });
 
   test('User Access uses one roster with dropdown actions for users and invites', async () => {

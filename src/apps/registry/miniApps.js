@@ -4,12 +4,12 @@ export const MINI_APPS = [
   {
     id: 'quotechem',
     label: 'QuoteChem',
-    description: 'Prototype the guided oilfield chemical sourcing experience.',
+    description: 'Review public sourcing conversations and requests.',
     icon: FiDroplet,
     adminOnly: false,
     defaultVisibleForRoles: ['admin'],
     defaultPath: '/apps/quotechem',
-    navItems: [],
+    navItems: [{ path: '/apps/quotechem', label: 'Sourcing Inbox' }],
   },
   {
     id: 'uniquem',
