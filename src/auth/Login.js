@@ -39,7 +39,10 @@ export default function Login() {
     <div className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
         <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
+        <div className="auth-brand">Quote<span>Chem</span></div>
+        <p className="auth-eyebrow">Employee portal</p>
         <h1>Sign in</h1>
+        <p className="auth-intro">Sign in to review sourcing conversations and requests.</p>
 
         {error ? <p className="auth-error">{error}</p> : null}
 

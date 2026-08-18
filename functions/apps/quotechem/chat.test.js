@@ -9,8 +9,9 @@ test('normalizes bounded user and assistant history', () => {
 
 test('builds guided context and attaches an image to the latest user message', () => {
   const image = { contentType: 'image/png', name: 'deposit.png', dataUrl: 'data:image/png;base64,AA==' };
-  const input = buildChatInput([{ role: 'user', text: 'See this deposit' }], { needLabel: 'Production', areaLabel: 'Flowline', issueLabel: 'Scale' }, image, 0);
-  assert.match(input[0].content[0].text, /Flowline/);
+  const input = buildChatInput([{ role: 'user', text: 'See this deposit' }], { needLabel: 'Production Chemical Problem', subcategoryLabel: 'Scale' }, image, 0);
+  assert.match(input[0].content[0].text, /Selected subcategory: Scale/);
+  assert.match(input[0].content[0].text, /Never ask the user to identify or select them again/);
   assert.equal(input[1].content[1].type, 'input_image');
 });
 

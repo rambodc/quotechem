@@ -85,6 +85,7 @@ function extractResponseJson(data) {
 function contextText(context = {}) {
   return [
     `Need: ${asString(context.needLabel) || 'Open requirement'}`,
+    asString(context.subcategoryLabel) ? `Selected subcategory: ${asString(context.subcategoryLabel)}` : '',
     asString(context.areaLabel) ? `Production area: ${asString(context.areaLabel)}` : '',
     asString(context.issueLabel) ? `Issue: ${asString(context.issueLabel)}` : '',
   ].filter(Boolean).join('\n');
@@ -94,7 +95,7 @@ export function buildChatInput(messages, context, attachment, questionCount = 0)
   const input = [{ role: 'system', content: [{ type: 'input_text', text: [
     'You are QuoteChem, a concise technical sourcing representative for specialty oilfield chemicals.',
     `You may ask at most ${MAX_QUESTIONS} qualification questions total. ${questionCount >= MAX_QUESTIONS ? 'Do not ask another question; provide a short qualification summary and set readyForContact true.' : `You have already asked ${questionCount}. Ask only the single most useful next question if needed.`}`,
-    'Do not repeat supplied facts. Prioritize application, observed problem, current treatment, operating conditions, location, quantity, packaging, and timing only when relevant.',
+    'Treat the guided need and selected subcategory as known facts. Never ask the user to identify or select them again. Do not repeat supplied facts. Prioritize observed symptoms, current treatment, operating conditions, location, quantity, packaging, and timing only when relevant.',
     'Once, when useful, suggest uploading a product label, field photo, SDS/TDS, water analysis, or lab report. Never require or repeatedly request an upload.',
     'Never claim a product, diagnosis, price, manufacturer, availability, or technical solution has been confirmed. Keep reply under 120 words.',
     attachment ? 'You received an attachment. Inspect it, explicitly state what is visibly or documentably present, describe uncertainty, set attachmentAcknowledged true, and provide a useful attachmentSummary.' : 'No attachment was supplied in this turn. Set attachmentAcknowledged false and attachmentSummary to an empty string.',
@@ -267,7 +268,7 @@ export const quotechemListRequests = onRequest({ region: REGION }, async (req, r
     let items = snap.docs.map((doc) => ({ ...publicConversation(doc.data()), conversationId: doc.id }));
     if (status) items = items.filter((item) => item.status === status);
     if (stage) items = items.filter((item) => item.sourcingStage === stage);
-    if (query) items = items.filter((item) => [item.requestId, item.contact?.name, item.contact?.company, item.contact?.email, item.guidedContext?.needLabel, item.guidedContext?.issueLabel].some((value) => asString(value).toLowerCase().includes(query)));
+    if (query) items = items.filter((item) => [item.requestId, item.contact?.name, item.contact?.company, item.contact?.email, item.guidedContext?.needLabel, item.guidedContext?.subcategoryLabel, item.guidedContext?.issueLabel].some((value) => asString(value).toLowerCase().includes(query)));
     setCors(res); return res.status(200).json({ ok: true, items, nextCursor: snap.size === limit ? snap.docs[snap.docs.length - 1].id : null });
   } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to list QuoteChem requests.'); }
 });

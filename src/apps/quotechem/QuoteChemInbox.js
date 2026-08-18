@@ -44,7 +44,7 @@ export default function QuoteChemInbox() {
       <div className="qci-summary">
         <article><small>Status</small><strong>{conversation.status === 'submitted' ? 'Submitted request' : 'Unfinished conversation'}</strong></article>
         <article><small>Need</small><strong>{conversation.guidedContext?.needLabel || 'Open requirement'}</strong></article>
-        <article><small>Area / issue</small><strong>{[conversation.guidedContext?.areaLabel, conversation.guidedContext?.issueLabel].filter(Boolean).join(' · ') || 'Not selected'}</strong></article>
+        <article><small>Category</small><strong>{conversation.guidedContext?.subcategoryLabel || [conversation.guidedContext?.areaLabel, conversation.guidedContext?.issueLabel].filter(Boolean).join(' · ') || 'Not selected'}</strong></article>
         <article><small>Contact</small><strong>{conversation.contact?.email || 'Not provided'}</strong><span>{conversation.contact?.phone || ''} {conversation.contact?.country || ''}</span></article>
       </div>
       <div className="qci-thread">{messages.map((message) => <article key={message.messageId} className={message.role}>

@@ -27,6 +27,8 @@ export default function ForgotPassword() {
     <div className="auth-page">
       <form className="auth-card" onSubmit={onSubmit}>
         <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
+        <div className="auth-brand">Quote<span>Chem</span></div>
+        <p className="auth-eyebrow">Employee portal</p>
         <h1>Reset password</h1>
 
         {error ? <p className="auth-error">{error}</p> : null}

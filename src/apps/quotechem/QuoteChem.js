@@ -20,119 +20,31 @@ export const NEEDS = [
   { id: 'exact', title: 'I Know the Product I Need', detail: 'Source a specific chemical or equivalent', icon: FiDroplet },
 ];
 
-export const AREAS = [
-  { id: 'wellhead', label: 'Wellhead' },
-  { id: 'flowline', label: 'Flowline' },
-  { id: 'separator', label: 'Separator' },
-  { id: 'water', label: 'Produced water' },
-  { id: 'tank', label: 'Storage tank' },
-  { id: 'injection', label: 'Injection system' },
+const item = (id, title, detail, icon = FiDroplet) => ({ id, title, detail, icon });
+const commercialFamilies = [
+  item('production-chemicals', 'Production Chemicals', 'Chemistry for producing wells and facilities', FiActivity),
+  item('drilling-chemicals', 'Drilling Chemicals', 'Drilling-fluid and wellbore additives', FiTarget),
+  item('completion-chemicals', 'Completion Chemicals', 'Completion-fluid and well-delivery chemistry', FiGitMerge),
+  item('stimulation-chemicals', 'Stimulation Chemicals', 'Acidizing and hydraulic-fracturing chemistry', FiZap),
+  item('water-treatment', 'Water Treatment', 'Produced, process, and injection-water chemistry', FiDroplet),
+  item('flow-assurance', 'Pipeline / Flow Assurance', 'Pipeline integrity, deposits, and flow reliability', FiTool),
+  item('other', 'Other Specialty Oilfield Chemistry', 'A product family not listed here', FiMessageSquare),
 ];
 
-export const ISSUES = [
-  { id: 'corrosion', title: 'Corrosion', detail: 'Metal loss, pitting, or corrosion under insulation', icon: FiShield },
-  { id: 'scale', title: 'Scale', detail: 'Mineral buildup in lines or equipment', icon: FiCircle },
-  { id: 'h2s', title: 'H₂S / Sulfide', detail: 'High sulfide levels or sour-system concerns', icon: FiXCircle },
-  { id: 'emulsion', title: 'Emulsion', detail: 'Stable water-in-oil or oil-in-water emulsions', icon: FiDroplet },
-  { id: 'wax', title: 'Paraffin / Wax', detail: 'Wax deposition or pour-point issues', icon: FiZap },
-  { id: 'foaming', title: 'Foaming', detail: 'Excessive foam in systems or tanks', icon: FiWind },
-  { id: 'bacteria', title: 'Bacteria (MIC)', detail: 'Microbiologically influenced corrosion', icon: FiActivity },
-  { id: 'flow', title: 'Flow Assurance', detail: 'Restrictions, deposits, or unstable flow', icon: FiTool },
-  { id: 'other', title: 'Other Issue', detail: 'Something else not listed here', icon: FiMessageSquare },
-];
-
-const commonTail = [
-  { id: 'quantity', prompt: 'What quantity or expected usage should we plan for?', placeholder: 'For example: 4 IBCs per month or 20 drums initially' },
-  { id: 'location', prompt: 'Where will the chemical need to be delivered?', placeholder: 'Country, region, or nearest city' },
-  { id: 'timing', prompt: 'When do you need the first delivery?', options: ['Urgently — under 2 weeks', 'Within 30 days', 'Within 1–3 months', 'Planning / no fixed date'] },
-];
-
-const productionIssueQuestions = {
-  scale: [
-    { id: 'scaleType', prompt: 'Do you know what type of scale you are seeing?', options: ['Calcium carbonate', 'Barium sulfate', 'Strontium sulfate', 'Mixed / other', 'Not sure'] },
-    { id: 'currentTreatment', prompt: 'Are you currently treating with a scale inhibitor?', options: ['Yes, continuously', 'Yes, batch treatment', 'No current treatment', 'Not sure'] },
-    { id: 'conditions', prompt: 'Share any useful operating conditions or water-analysis details.', placeholder: 'Temperature, pressure, water chemistry, deposition rate…', optional: true },
-  ],
-  corrosion: [
-    { id: 'corrosionType', prompt: 'How is the corrosion presenting?', options: ['General metal loss', 'Pitting', 'Under-deposit corrosion', 'Corrosion under insulation', 'Not yet confirmed'] },
-    { id: 'currentTreatment', prompt: 'Is a corrosion inhibitor currently being applied?', options: ['Continuous injection', 'Batch treatment', 'No treatment', 'Not sure'] },
-    { id: 'conditions', prompt: 'What are the key fluid and operating conditions?', placeholder: 'Temperature, pressure, water cut, CO₂/H₂S levels…', optional: true },
-  ],
-  h2s: [
-    { id: 'h2sLevel', prompt: 'What H₂S level or target are you working with?', placeholder: 'Current ppm and desired outlet specification' },
-    { id: 'fluidType', prompt: 'Which stream needs treatment?', options: ['Crude oil', 'Natural gas', 'Produced water', 'Mixed production fluid', 'Other'] },
-    { id: 'currentTreatment', prompt: 'Are you using a scavenger today?', options: ['Yes', 'No', 'Trialing options', 'Not sure'] },
-  ],
-  emulsion: [
-    { id: 'emulsionType', prompt: 'Which emulsion are you trying to resolve?', options: ['Water in oil', 'Oil in water', 'Both / variable', 'Not sure'] },
-    { id: 'currentTreatment', prompt: 'Is a demulsifier currently in use?', options: ['Yes — underperforming', 'Yes — seeking an alternative', 'No', 'Not sure'] },
-    { id: 'conditions', prompt: 'Share any known fluid or separation conditions.', placeholder: 'API gravity, water cut, temperature, residence time…', optional: true },
-  ],
-  wax: [
-    { id: 'waxLocation', prompt: 'Where is wax deposition most severe?', options: ['Downhole', 'Flowline', 'Pipeline', 'Storage', 'Multiple areas'] },
-    { id: 'currentTreatment', prompt: 'How are you treating or removing it now?', options: ['Continuous chemical', 'Batch chemical', 'Hot oil / mechanical', 'No current treatment'] },
-    { id: 'conditions', prompt: 'What temperatures or pour-point information are available?', placeholder: 'Operating temperature, cloud point, pour point…', optional: true },
-  ],
-  foaming: [
-    { id: 'fluidType', prompt: 'Where is excessive foam affecting operations?', options: ['Separator', 'Produced-water system', 'Storage tank', 'Gas processing', 'Other'] },
-    { id: 'currentTreatment', prompt: 'Is an antifoam or defoamer being used?', options: ['Yes — underperforming', 'Yes — seeking an alternative', 'No', 'Not sure'] },
-    { id: 'conditions', prompt: 'Describe the foam and operating conditions.', placeholder: 'Persistent or transient, temperature, fluid composition…', optional: true },
-  ],
-  bacteria: [
-    { id: 'evidence', prompt: 'What evidence of bacterial activity do you have?', options: ['Positive bacteria counts', 'MIC / pitting', 'Biofilm or plugging', 'Souring', 'Suspected only'] },
-    { id: 'currentTreatment', prompt: 'What biocide program is currently used?', options: ['Continuous', 'Batch / slug', 'No current program', 'Not sure'] },
-    { id: 'conditions', prompt: 'Share any sampling results or system details.', placeholder: 'Counts, organisms, water source, temperature…', optional: true },
-  ],
-  flow: [
-    { id: 'flowProblem', prompt: 'What is restricting or destabilizing flow?', options: ['Hydrates', 'Solids / deposits', 'High viscosity', 'Pressure instability', 'Not sure'] },
-    { id: 'conditions', prompt: 'Describe the operating envelope and symptoms.', placeholder: 'Temperature, pressure, fluid composition, restriction location…' },
-    { id: 'currentTreatment', prompt: 'Is a flow-assurance chemical being used?', options: ['Yes — underperforming', 'Yes — seeking an alternative', 'No', 'Not sure'] },
-  ],
-  other: [
-    { id: 'problemDescription', prompt: 'Describe the problem in your own words.', placeholder: 'What are you observing, and what outcome do you need?' },
-    { id: 'conditions', prompt: 'Add any relevant operating or fluid conditions.', placeholder: 'Temperature, pressure, fluid type, specifications…', optional: true },
-  ],
+export const CATEGORY_CONFIG = {
+  production: { image: '/assets/quotechem/category-production.jpg', alt: 'Oilfield production facility with wellhead and process equipment', eyebrow: 'Production operations', title: 'What production challenge are you solving?', description: 'Choose the closest application so our technical assistant starts with the right operating context.', items: [
+    item('corrosion', 'Corrosion', 'Metal loss, pitting, or integrity concerns', FiShield), item('scale', 'Scale', 'Mineral deposits in wells, lines, or equipment', FiCircle), item('h2s', 'H₂S / Sulfide', 'Sour-fluid treatment and sulfide control', FiXCircle), item('emulsion', 'Emulsion / Separation', 'Oil-water separation and demulsification', FiDroplet), item('wax', 'Paraffin / Wax', 'Deposition, cloud point, or pour-point issues', FiZap), item('foaming', 'Foaming', 'Excessive foam in process systems or tanks', FiWind), item('bacteria', 'Bacteria / MIC', 'Microbial control and influenced corrosion', FiActivity), item('hydrates', 'Flow Assurance / Hydrates', 'Restrictions, hydrates, or unstable flow', FiTool), item('produced-water', 'Produced-Water Treatment', 'Oil removal, clarification, and water quality', FiDroplet), item('oxygen', 'Oxygen Scavenging', 'Dissolved-oxygen control and corrosion protection', FiShield), item('other', 'Other / Not sure', 'Describe the challenge and we will guide you', FiMessageSquare),
+  ]},
+  drilling: { image: '/assets/quotechem/category-drilling.jpg', alt: 'Active land drilling rig at dawn', eyebrow: 'Drilling operations', title: 'What drilling challenge are you solving?', description: 'Select the drilling-fluid or wellbore performance area that best matches the requirement.', items: [
+    item('fluid-loss', 'Fluid Loss', 'Control filtrate invasion and fluid losses'), item('shale-inhibition', 'Shale Inhibition', 'Improve wellbore stability and clay control'), item('lubricity', 'Lubricity / Torque', 'Reduce friction, torque, and drag'), item('lost-circulation', 'Lost Circulation', 'Bridge or seal thief zones'), item('rheology', 'Rheology / Viscosity', 'Build and maintain the required fluid profile'), item('emulsifiers', 'Emulsifiers / Wetting Agents', 'Stabilize invert systems and oil-wet solids'), item('defoaming', 'Defoaming', 'Control entrained air and surface foam'), item('corrosion-h2s', 'Corrosion / H₂S Control', 'Protect equipment and manage sour conditions'), item('detergents', 'Detergents / Surfactants', 'Cleaning, water wetting, and interfacial control'), item('other', 'Other / Not sure', 'Describe the challenge and we will guide you', FiMessageSquare),
+  ]},
+  completion: { image: '/assets/quotechem/category-completion.jpg', alt: 'Oilfield completion and stimulation equipment on a well pad', eyebrow: 'Completion and stimulation', title: 'Which completion or stimulation application?', description: 'Choose the application where chemistry, compatibility, or performance support is needed.', items: [
+    item('completion-brines', 'Completion Brines', 'Clear brines, density, and compatibility'), item('acidizing', 'Acidizing', 'Acid systems, inhibitors, and additives'), item('hydraulic-fracturing', 'Hydraulic Fracturing', 'Frac-fluid performance and compatibility'), item('friction-reducers', 'Friction Reducers', 'Reduce pumping friction and pressure'), item('fluid-loss', 'Fluid-Loss Additives', 'Control leakoff during completion work'), item('surfactants', 'Surfactants / Flowback Aids', 'Improve cleanup, recovery, and flowback'), item('clay-stabilizers', 'Clay Stabilizers', 'Reduce swelling and fines migration'), item('scale-corrosion', 'Scale / Corrosion Control', 'Protect completion fluids and equipment'), item('diverters', 'Diverters', 'Improve treatment placement and coverage'), item('breakers', 'Breakers / Crosslinkers', 'Control fluid structure and cleanup'), item('other', 'Other / Not sure', 'Describe the application and we will guide you', FiMessageSquare),
+  ]},
+  supplier: { image: '/assets/quotechem/category-supplier.jpg', alt: 'Specialty chemical totes in an industrial logistics facility', eyebrow: 'Alternative supplier', title: 'Which chemical family needs a new supplier?', description: 'Choose the closest family. We will use the conversation to understand the product, specification, and reason for changing supply.', items: commercialFamilies },
+  pricing: { image: '/assets/quotechem/category-pricing.jpg', alt: 'Organized oilfield chemical supply and logistics yard', eyebrow: 'Competitive pricing', title: 'Which chemical family should we price?', description: 'Select the product family, then share the technical and commercial details that matter.', items: commercialFamilies },
+  exact: { image: '/assets/quotechem/category-exact.jpg', alt: 'Specialty chemical sample and laboratory equipment', eyebrow: 'Exact product sourcing', title: 'What type of product do you know you need?', description: 'Choose the closest chemical family, then provide the trade name, chemistry, CAS number, or specification in chat.', items: commercialFamilies },
 };
-
-const generalQuestions = {
-  drilling: [
-    { id: 'application', prompt: 'What drilling-fluid or wellbore challenge should we solve?', options: ['Fluid loss', 'Shale inhibition', 'Lubricity / torque', 'Lost circulation', 'Foam control', 'Other'] },
-    { id: 'conditions', prompt: 'Describe the mud system and operating conditions.', placeholder: 'Water/oil based, temperature, density, formation details…' },
-    { id: 'currentProduct', prompt: 'Are you using a product today?', placeholder: 'Product name, dosage, or “none”', optional: true },
-  ],
-  completion: [
-    { id: 'application', prompt: 'Which completion or stimulation application is this for?', options: ['Completion brine', 'Acid stimulation', 'Hydraulic fracturing', 'Fluid-loss control', 'Surfactant / flowback aid', 'Other'] },
-    { id: 'conditions', prompt: 'What performance requirements or conditions matter most?', placeholder: 'Temperature, pressure, salinity, compatibility, formation…' },
-    { id: 'currentProduct', prompt: 'Is there a current product or specification to match?', placeholder: 'Product, active chemistry, specification, or “not yet”', optional: true },
-  ],
-  supplier: [
-    { id: 'product', prompt: 'Which product or chemical family needs an alternative supplier?', placeholder: 'Product name, chemistry, or application' },
-    { id: 'reason', prompt: 'What is driving the supplier change?', options: ['Availability / lead time', 'Quality or performance', 'Commercial terms', 'Regional supply', 'Supplier diversification', 'Other'] },
-    { id: 'specification', prompt: 'What must an alternative match?', placeholder: 'Specification, active content, approvals, packaging…' },
-  ],
-  pricing: [
-    { id: 'product', prompt: 'Which product do you want priced more competitively?', placeholder: 'Product name, chemistry, or application' },
-    { id: 'currentProduct', prompt: 'Share current dosage, packaging, or price context if available.', placeholder: 'Optional commercial or technical context', optional: true },
-    { id: 'specification', prompt: 'Are there specifications an equivalent must meet?', placeholder: 'Active content, performance target, approvals…', optional: true },
-  ],
-  exact: [
-    { id: 'product', prompt: 'What exact product or chemistry do you need?', placeholder: 'Trade name, chemical name, CAS, or specification' },
-    { id: 'application', prompt: 'What application will it be used for?', placeholder: 'Describe the process, fluid, or treatment point' },
-    { id: 'specification', prompt: 'List any required grade, concentration, or packaging.', placeholder: 'Technical specification and packaging requirements', optional: true },
-  ],
-  describe: [
-    { id: 'problemDescription', prompt: 'Tell me what you need help with.', placeholder: 'Describe the field problem, product, or sourcing requirement' },
-    { id: 'application', prompt: 'Where or how will this chemistry be used?', placeholder: 'Application, system, fluid, or treatment point' },
-    { id: 'currentProduct', prompt: 'Is a chemical currently being used?', placeholder: 'Product, dosage, performance, or “no”', optional: true },
-  ],
-};
-
-export function buildQuestions(need, issue) {
-  const base = need === 'production'
-    ? (productionIssueQuestions[issue] || productionIssueQuestions.other)
-    : (generalQuestions[need] || generalQuestions.describe);
-  return [...base, ...commonTail];
-}
 
 function titleFor(items, id) {
   return items.find((item) => item.id === id)?.title || items.find((item) => item.id === id)?.label || id;
@@ -140,7 +52,7 @@ function titleFor(items, id) {
 
 function Progress({ stage }) {
   const steps = ['Need', 'Problem', 'Conversation', 'Details'];
-  const active = stage === 'need' ? 0 : stage === 'problem' ? 1 : stage === 'chat' ? 2 : 3;
+  const active = stage === 'need' ? 0 : stage === 'category' ? 1 : stage === 'chat' ? 2 : 3;
   if (stage === 'complete') return null;
   return (
     <ol className="qc-progress" aria-label="Sourcing request progress">
@@ -150,23 +62,6 @@ function Progress({ stage }) {
         </li>
       ))}
     </ol>
-  );
-}
-
-function EquipmentMap({ selected, onSelect }) {
-  return (
-    <div className="qc-equipment" aria-label="Production system area selector">
-      <div className="qc-skyline" aria-hidden="true"><span /><span /><span /></div>
-      <div className="qc-pipe qc-pipe-main" aria-hidden="true" />
-      <div className="qc-vessel qc-separator" aria-hidden="true" />
-      <div className="qc-vessel qc-tank" aria-hidden="true" />
-      <div className="qc-well" aria-hidden="true" />
-      {AREAS.map((area) => (
-        <button key={area.id} type="button" className={`qc-hotspot ${area.id} ${selected === area.id ? 'selected' : ''}`} onClick={() => onSelect(area.id)}>
-          <span>+</span>{area.label}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -196,20 +91,23 @@ function NeedStage({ onChoose }) {
   );
 }
 
-function ProblemStage({ area, issue, onArea, onIssue, onContinue }) {
+function CategoryStage({ need, subcategory, onSelect, onContinue }) {
+  const category = CATEGORY_CONFIG[need];
+  if (!category) return null;
   return (
-    <div className="qc-stage qc-problem">
-      <div className="qc-section-heading"><span>Production system</span><h1>Where is the problem occurring?</h1><p>Select a system area, then choose the issue that best matches the situation.</p></div>
-      <EquipmentMap selected={area} onSelect={onArea} />
-      <h2 className="qc-subheading">What issue are you facing?</h2>
-      <div className="qc-issue-grid">
-        {ISSUES.map(({ id, title, detail, icon: Icon }) => (
-          <button type="button" key={id} className={`qc-issue ${issue === id ? 'selected' : ''}`} onClick={() => onIssue(id)}>
+    <div className="qc-stage qc-category">
+      <section className="qc-category-hero">
+        <img src={category.image} alt={category.alt} />
+        <div><span>{category.eyebrow}</span><h1>{category.title}</h1><p>{category.description}</p></div>
+      </section>
+      <div className="qc-issue-grid" role="list" aria-label={`${category.eyebrow} choices`}>
+        {category.items.map(({ id, title, detail, icon: Icon }) => (
+          <button type="button" key={id} className={`qc-issue ${subcategory === id ? 'selected' : ''}`} onClick={() => onSelect(id)}>
             <Icon /><span><strong>{title}</strong><small>{detail}</small></span><FiChevronRight />
           </button>
         ))}
       </div>
-      <button type="button" className="qc-primary qc-continue" disabled={!area || !issue} onClick={onContinue}>Continue to technical questions <FiArrowRight /></button>
+      <button type="button" className="qc-primary qc-continue" disabled={!subcategory} onClick={onContinue}>Continue to technical conversation <FiArrowRight /></button>
     </div>
   );
 }
@@ -240,7 +138,7 @@ async function ensurePublicIdentity() {
   return auth.currentUser;
 }
 
-function ChatStage({ need, area, issue, conversationId, onConversation, onFinish, publicMode = false }) {
+function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conversationId, onConversation, onFinish, publicMode = false }) {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState([]);
   const [quickReplies, setQuickReplies] = useState([]);
@@ -259,9 +157,10 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   const viewportTimerRef = useRef(null);
   const context = useMemo(() => ({
     needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
-    areaLabel: area ? titleFor(AREAS, area) : '',
-    issueLabel: issue ? titleFor(ISSUES, issue) : '',
-  }), [area, issue, need]);
+    subcategoryLabel: subcategory ? titleFor(CATEGORY_CONFIG[need]?.items || [], subcategory) : '',
+    ...(legacyArea ? { areaLabel: legacyArea } : {}),
+    ...(legacyIssue ? { issueLabel: legacyIssue } : {}),
+  }), [legacyArea, legacyIssue, need, subcategory]);
 
   const nextId = (prefix) => `${prefix}-${Date.now()}-${messageNumberRef.current += 1}`;
 
@@ -403,7 +302,7 @@ function ChatStage({ need, area, issue, conversationId, onConversation, onFinish
   return (
     <div className="qc-stage qc-chat-stage">
       <div className="qc-chat-heading"><div><span>AI technical sourcing assistant</span><h1>Let’s qualify your requirement</h1></div><div className="qc-live"><i /> AI connected</div></div>
-      <div className="qc-context"><strong>{context.needLabel}</strong>{context.areaLabel ? <><FiChevronRight /><span>{context.areaLabel}</span></> : null}{context.issueLabel ? <><FiChevronRight /><span>{context.issueLabel}</span></> : null}</div>
+      <div className="qc-context"><strong>{context.needLabel}</strong>{context.subcategoryLabel ? <><FiChevronRight /><span>{context.subcategoryLabel}</span></> : null}{context.areaLabel ? <><FiChevronRight /><span>{context.areaLabel}</span></> : null}{context.issueLabel ? <><FiChevronRight /><span>{context.issueLabel}</span></> : null}</div>
       <div className="qc-chat-shell">
       <div ref={chatRef} className="qc-chat" aria-live="polite">
         {!messages.length ? <div className="qc-chat-welcome"><div className="qc-ai-mark"><FiDroplet /></div><h2>What should we know?</h2><p>Describe the requirement or attach a useful field photo, product label, SDS/TDS, water analysis, or lab report. I’ll ask no more than three focused questions.</p></div> : null}
@@ -491,41 +390,43 @@ export default function QuoteChem({ publicMode = false }) {
   const routeState = location.state || {};
   const isChatRoute = location.pathname === '/chat' || location.pathname.endsWith('/apps/quotechem/chat');
   const restored = useMemo(() => publicMode ? readPublicSession() : null, [publicMode]);
-  const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || restored?.stage || 'need'));
+  const restoredStage = restored?.stage === 'problem' ? 'category' : restored?.stage;
+  const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || restoredStage || 'need'));
   const [need, setNeed] = useState(routeState.need || restored?.need || (isChatRoute ? 'describe' : ''));
-  const [area, setArea] = useState(routeState.area || restored?.area || '');
-  const [issue, setIssue] = useState(routeState.issue || restored?.issue || '');
+  const [subcategory, setSubcategory] = useState(routeState.subcategory || restored?.subcategory || (restored?.need === 'production' ? restored?.issue : '') || '');
+  const legacyArea = routeState.areaLabel || restored?.areaLabel || restored?.area || '';
+  const legacyIssue = routeState.issueLabel || restored?.issueLabel || '';
   const [contact, setContact] = useState(restored?.contact || { name: '', company: '', email: '', phone: '', country: '' });
   const [requestId, setRequestId] = useState(restored?.requestId || '');
   const [conversationId, setConversationId] = useState(restored?.conversationId || '');
 
   useEffect(() => {
     if (!publicMode) return;
-    window.localStorage.setItem(PUBLIC_SESSION_KEY, JSON.stringify({ stage, need, area, issue, contact, requestId, conversationId }));
-  }, [publicMode, stage, need, area, issue, contact, requestId, conversationId]);
+    window.localStorage.setItem(PUBLIC_SESSION_KEY, JSON.stringify({ stage, need, subcategory, contact, requestId, conversationId }));
+  }, [publicMode, stage, need, subcategory, contact, requestId, conversationId]);
 
   useEffect(() => { if (publicMode && !auth.currentUser) signInAnonymously(auth).catch(() => {}); }, [publicMode]);
   useEffect(() => {
-    if (publicMode && stage === 'chat' && location.pathname !== '/chat') navigate('/chat', { replace: true, state: { need, area, issue } });
-  }, [publicMode, stage, location.pathname, navigate, need, area, issue]);
+    if (publicMode && stage === 'chat' && location.pathname !== '/chat') navigate('/chat', { replace: true, state: { need, subcategory } });
+  }, [publicMode, stage, location.pathname, navigate, need, subcategory]);
 
   const homePath = publicMode ? '/' : '/apps/quotechem';
   const chatPath = publicMode ? '/chat' : '/apps/quotechem/chat';
-  const openChat = (nextNeed = need, nextArea = area, nextIssue = issue) => navigate(chatPath, { state: { need: nextNeed, area: nextArea, issue: nextIssue } });
+  const openChat = (nextNeed = need, nextSubcategory = subcategory) => navigate(chatPath, { state: { need: nextNeed, subcategory: nextSubcategory } });
   const chooseNeed = (id) => {
-    setNeed(id);
-    if (id === 'production') setStage('problem');
-    else openChat(id, '', '');
+    setNeed(id); setSubcategory('');
+    if (id === 'describe') openChat(id, '');
+    else setStage('category');
   };
   const goBack = () => {
-    if (stage === 'problem') setStage('need');
-    else if (stage === 'chat') navigate(homePath, { state: need === 'production' ? { stage: 'problem', need, area, issue } : undefined });
+    if (stage === 'category') setStage('need');
+    else if (stage === 'chat') navigate(homePath, { state: need === 'describe' ? undefined : { stage: 'category', need, subcategory } });
     else if (stage === 'contact') setStage('chat');
   };
   const restart = () => {
     if (publicMode) window.localStorage.removeItem(PUBLIC_SESSION_KEY);
     if (isChatRoute) return navigate(homePath, { replace: true });
-    setStage('need'); setNeed(''); setArea(''); setIssue(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); setConversationId('');
+    setStage('need'); setNeed(''); setSubcategory(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); setConversationId('');
   };
   const complete = async () => {
     if (publicMode) await ensurePublicIdentity();
@@ -535,11 +436,11 @@ export default function QuoteChem({ publicMode = false }) {
 
   return (
     <div className={`quotechem-app ${publicMode ? 'qc-public' : ''} ${stage === 'chat' ? 'qc-is-chat' : ''}`}>
-      <header className="qc-app-header"><div className="qc-wordmark">Quote<span>Chem</span><small>Global Oilfield Chemical Sourcing</small></div>{stage !== 'need' && stage !== 'complete' ? <button type="button" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}{stage !== 'need' ? <button type="button" onClick={restart}><FiRefreshCw /> Start over</button> : publicMode ? <button type="button" onClick={() => navigate('/signin')}>Portal <FiArrowRight /></button> : <span />}</header>
+      <header className="qc-app-header"><div className="qc-wordmark"><img src="/assets/quotechem-logo.png" alt="" /> <span className="qc-wordmark-text">Quote<b>Chem</b><small>Global Oilfield Chemical Sourcing</small></span></div>{stage !== 'need' && stage !== 'complete' ? <button type="button" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}{stage !== 'need' ? <button type="button" onClick={restart}><FiRefreshCw /> Start over</button> : <span />}</header>
       <div className="qc-content"><Progress stage={stage} />
         {stage === 'need' ? <NeedStage onChoose={chooseNeed} /> : null}
-        {stage === 'problem' ? <ProblemStage area={area} issue={issue} onArea={setArea} onIssue={setIssue} onContinue={() => openChat(need, area, issue)} /> : null}
-        {stage === 'chat' ? <ChatStage need={need} area={area} issue={issue} conversationId={conversationId} onConversation={setConversationId} onFinish={() => conversationId && setStage('contact')} publicMode={publicMode} /> : null}
+        {stage === 'category' ? <CategoryStage need={need} subcategory={subcategory} onSelect={setSubcategory} onContinue={() => openChat(need, subcategory)} /> : null}
+        {stage === 'chat' ? <ChatStage need={need} subcategory={subcategory} legacyArea={legacyArea} legacyIssue={legacyIssue} conversationId={conversationId} onConversation={setConversationId} onFinish={() => conversationId && setStage('contact')} publicMode={publicMode} /> : null}
         {stage === 'contact' ? <ContactStage values={contact} onChange={(key, value) => setContact((prev) => ({ ...prev, [key]: value }))} onSubmit={complete} /> : null}
         {stage === 'complete' ? <CompleteStage requestId={requestId} onRestart={restart} /> : null}
       </div>

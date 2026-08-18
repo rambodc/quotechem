@@ -84,6 +84,8 @@ export default function InviteRegister() {
     <div className="auth-page">
       <form className="auth-card" onSubmit={acceptInvite}>
         <img src={`${process.env.PUBLIC_URL}/assets/quotechem-logo.png`} alt="QuoteChem" className="auth-logo" />
+        <div className="auth-brand">Quote<span>Chem</span></div>
+        <p className="auth-eyebrow">Employee portal</p>
         <h1>Finish registration</h1>
 
         {loading ? <p className="auth-status">Loading invite...</p> : null}
