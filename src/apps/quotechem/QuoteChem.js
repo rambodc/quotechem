@@ -157,8 +157,10 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
   const messageNumberRef = useRef(0);
   const composerFocusedRef = useRef(false);
   const syncViewportRef = useRef(() => {});
+  const syncViewportNowRef = useRef(() => {});
   const blurTimerRef = useRef(null);
   const viewportTimerRef = useRef(null);
+  const viewportPollRef = useRef(null);
   const viewportBaselineRef = useRef(0);
   const autoStartedRef = useRef(false);
   const context = useMemo(() => ({
@@ -177,14 +179,20 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
       if (!composerFocusedRef.current) viewportBaselineRef.current = visibleHeight;
       else viewportBaselineRef.current = Math.max(viewportBaselineRef.current, visibleHeight);
       const keyboardOpen = composerFocusedRef.current && viewportBaselineRef.current - visibleHeight > 120;
-      document.documentElement.style.setProperty('--qc-viewport-height', `${visibleHeight}px`);
-      document.documentElement.style.setProperty('--qc-viewport-top', `${Math.round(viewport?.offsetTop || 0)}px`);
+      if (keyboardOpen) {
+        document.documentElement.style.setProperty('--qc-viewport-height', `${visibleHeight}px`);
+        document.documentElement.style.setProperty('--qc-viewport-top', `${Math.round(viewport?.offsetTop || 0)}px`);
+      } else {
+        document.documentElement.style.removeProperty('--qc-viewport-height');
+        document.documentElement.style.removeProperty('--qc-viewport-top');
+      }
       document.documentElement.classList.toggle('qc-keyboard-open', keyboardOpen);
     };
     const scheduleViewportSync = () => {
       window.clearTimeout(viewportTimerRef.current);
       viewportTimerRef.current = window.setTimeout(syncViewport, 100);
     };
+    syncViewportNowRef.current = syncViewport;
     syncViewportRef.current = scheduleViewportSync;
     const previousRootBackground = document.documentElement.style.backgroundColor;
     const previousBodyBackground = document.body.style.backgroundColor;
@@ -203,6 +211,7 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
       window.removeEventListener('orientationchange', scheduleViewportSync);
       window.clearTimeout(blurTimerRef.current);
       window.clearTimeout(viewportTimerRef.current);
+      window.clearInterval(viewportPollRef.current);
       document.documentElement.style.removeProperty('--qc-keyboard-height');
       document.documentElement.style.removeProperty('--qc-keyboard-top');
       document.documentElement.style.removeProperty('--qc-viewport-height');
@@ -292,10 +301,13 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
     composerFocusedRef.current = true;
     document.documentElement.classList.add('qc-composer-focused');
     syncViewportRef.current();
+    window.clearInterval(viewportPollRef.current);
+    viewportPollRef.current = window.setInterval(() => syncViewportNowRef.current(), 200);
   };
 
   const onComposerBlur = () => {
     composerFocusedRef.current = false;
+    window.clearInterval(viewportPollRef.current);
     blurTimerRef.current = window.setTimeout(() => {
       document.documentElement.classList.remove('qc-composer-focused');
       document.documentElement.classList.remove('qc-keyboard-open');

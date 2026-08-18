@@ -83,16 +83,17 @@ describe('QuoteChem category flow', () => {
     </Routes></MemoryRouter>);
 
     const composer = screen.getByPlaceholderText('Message QuoteChem…');
-    expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('800px');
+    expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('');
     fireEvent.focus(composer);
     viewport.height = 480;
     act(() => { viewport.dispatchEvent(new Event('resize')); jest.advanceTimersByTime(100); });
     expect(document.documentElement.classList.contains('qc-keyboard-open')).toBe(true);
+    expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('480px');
 
     viewport.height = 800;
     act(() => { viewport.dispatchEvent(new Event('resize')); jest.advanceTimersByTime(100); });
     expect(document.documentElement.classList.contains('qc-keyboard-open')).toBe(false);
-    expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('800px');
+    expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('');
 
     view.unmount();
     delete window.visualViewport;
