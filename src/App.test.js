@@ -575,7 +575,7 @@ describe('mini-app portal routing', () => {
 
   test('public chat route is available without portal access', async () => {
     renderSignedOutAt('/chat');
-    expect(await screen.findByRole('heading', { name: /qualify your requirement/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /what should we know/i })).toBeTruthy();
     expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
   });
 

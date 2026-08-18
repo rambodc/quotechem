@@ -165,26 +165,6 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
   const nextId = (prefix) => `${prefix}-${Date.now()}-${messageNumberRef.current += 1}`;
 
   useEffect(() => {
-    if (!publicMode || !conversationId) return;
-    let live = true;
-    ensurePublicIdentity().then(() => postJson('quotechemResume', { conversationId }, { authed: true })).then((result) => {
-      if (!live) return;
-      const restored = (result.messages || []).map((message) => ({
-        id: message.messageId, role: message.role, text: message.text,
-        attachment: message.attachment ? { ...message.attachment, kind: message.attachment.kind || (message.attachment.contentType === 'application/pdf' ? 'pdf' : 'image') } : null,
-        attachmentAcknowledged: message.response?.attachmentAcknowledged,
-        attachmentSummary: message.response?.attachmentSummary,
-        attachmentKind: message.attachment?.kind,
-        response: message.response,
-      }));
-      setMessages(restored);
-      const lastAssistant = [...restored].reverse().find((message) => message.role === 'assistant');
-      setReady(Boolean(lastAssistant?.response?.readyForContact || result.conversation?.status === 'ready'));
-    }).catch(() => {}).finally(() => {});
-    return () => { live = false; };
-  }, [conversationId, publicMode]);
-
-  useEffect(() => {
     const viewport = window.visualViewport;
     const syncViewport = () => {
       if (!composerFocusedRef.current) return;
@@ -258,7 +238,9 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
     if (pending || (!text && !attachment)) return;
     const targetConversationId = conversationId || window.crypto?.randomUUID?.() || nextId('conversation');
     if (!conversationId) onConversation(targetConversationId);
-    const userMessage = { id: nextId('user'), role: 'user', text: text || `Please review the attached ${attachment?.kind || 'file'}.`, attachment, conversationId: targetConversationId };
+    const selection = !messages.length && context.subcategoryLabel ? `${context.needLabel} — ${context.subcategoryLabel}` : '';
+    const requestText = text || `Please review the attached ${attachment?.kind || 'file'}.`;
+    const userMessage = { id: nextId('user'), role: 'user', text: [selection, requestText].filter(Boolean).join('\n\n'), attachment, conversationId: targetConversationId };
     setMessages((current) => [...current, userMessage]); setDraft(''); setAttachment(null); setReady(false);
     await requestReply(userMessage);
   };
@@ -301,8 +283,7 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
 
   return (
     <div className="qc-stage qc-chat-stage">
-      <div className="qc-chat-heading"><div><span>AI technical sourcing assistant</span><h1>Let’s qualify your requirement</h1></div><div className="qc-live"><i /> AI connected</div></div>
-      <div className="qc-context"><strong>{context.needLabel}</strong>{context.subcategoryLabel ? <><FiChevronRight /><span>{context.subcategoryLabel}</span></> : null}{context.areaLabel ? <><FiChevronRight /><span>{context.areaLabel}</span></> : null}{context.issueLabel ? <><FiChevronRight /><span>{context.issueLabel}</span></> : null}</div>
+      <div className="qc-chat-heading"><div className="qc-live"><i /> AI connected</div></div>
       <div className="qc-chat-shell">
       <div ref={chatRef} className="qc-chat" aria-live="polite">
         {!messages.length ? <div className="qc-chat-welcome"><div className="qc-ai-mark"><FiDroplet /></div><h2>What should we know?</h2><p>Describe the requirement or attach a useful field photo, product label, SDS/TDS, water analysis, or lab report. I’ll ask no more than three focused questions.</p></div> : null}

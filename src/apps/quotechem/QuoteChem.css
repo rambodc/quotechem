@@ -168,3 +168,8 @@
 .qc-category-hero{min-height:340px;margin-bottom:22px;border:1px solid rgba(89,135,176,.28);border-radius:22px;overflow:hidden;position:relative;display:flex;align-items:flex-end;background:#0b1b2a}.qc-category-hero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.qc-category-hero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,13,23,.95),rgba(3,14,25,.68) 55%,rgba(3,14,25,.2)),linear-gradient(0deg,rgba(3,13,23,.82),transparent 70%)}.qc-category-hero>div{position:relative;z-index:1;max-width:720px;padding:clamp(24px,5vw,50px)}.qc-category-hero h1{margin:10px 0;font-size:clamp(2rem,4.5vw,3.65rem);line-height:1;letter-spacing:-.045em}.qc-category-hero p{margin:0;color:#c0cfdb;line-height:1.55;font-size:1.03rem}.qc-category .qc-issue-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.qc-category .qc-issue{min-height:118px}.qc-category .qc-continue{margin-top:24px}
 @media(max-width:960px){.qc-category .qc-issue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.qc-wordmark>img{width:32px;height:32px}.qc-wordmark{gap:7px}.qc-wordmark small{font-size:.53rem}.qc-category-hero{min-height:280px;margin:0 -14px 18px;border-radius:0}.qc-category-hero>div{padding:24px 20px}.qc-category-hero h1{font-size:2rem}.qc-category .qc-issue-grid{grid-template-columns:1fr}.qc-category .qc-issue{min-height:98px}.qc-hero{background-position:62% center}}
+
+/* Minimal chat chrome: retain only the desktop connection status. */
+.quotechem-app.qc-is-chat .qc-chat-stage{grid-template-rows:auto minmax(0,1fr)}
+.qc-chat-stage .qc-chat-heading{justify-content:flex-end;margin-bottom:6px}
+@media(max-width:680px){.qc-chat-stage .qc-chat-heading{display:none}}
