@@ -368,6 +368,7 @@ function CompleteStage({ requestId, onRestart }) {
 }
 
 const PUBLIC_SESSION_KEY = 'quotechem:public-sourcing-session';
+const CHAT_TRANSITION_KEY = 'quotechem:chat-transition';
 
 function readPublicSession() {
   try { return JSON.parse(window.localStorage.getItem(PUBLIC_SESSION_KEY) || 'null'); } catch { return null; }
@@ -378,9 +379,19 @@ export default function QuoteChem({ publicMode = false }) {
   const location = useLocation();
   const routeState = location.state || {};
   const isChatRoute = location.pathname === '/chat' || location.pathname.endsWith('/apps/quotechem/chat');
-  const navigationType = window.performance?.getEntriesByType?.('navigation')?.[0]?.type;
-  const validChatTransition = Boolean(routeState.need && (routeState.need === 'describe' || routeState.subcategory));
-  const invalidChatEntry = isChatRoute && (navigationType === 'reload' || !validChatTransition);
+  const [validChatEntry] = useState(() => {
+    if (!isChatRoute) return true;
+    const transitionToken = routeState.chatTransitionToken;
+    const storedToken = window.sessionStorage.getItem(CHAT_TRANSITION_KEY);
+    window.sessionStorage.removeItem(CHAT_TRANSITION_KEY);
+    return Boolean(
+      transitionToken
+      && storedToken === transitionToken
+      && routeState.need
+      && (routeState.need === 'describe' || routeState.subcategory)
+    );
+  });
+  const invalidChatEntry = isChatRoute && !validChatEntry;
   const restored = useMemo(() => publicMode ? readPublicSession() : null, [publicMode]);
   const restoredStage = restored?.stage === 'problem' ? 'category' : restored?.stage;
   const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || restoredStage || 'need'));
@@ -409,7 +420,11 @@ export default function QuoteChem({ publicMode = false }) {
 
   const homePath = publicMode ? '/' : '/apps/quotechem';
   const chatPath = publicMode ? '/chat' : '/apps/quotechem/chat';
-  const openChat = (nextNeed = need, nextSubcategory = subcategory) => navigate(chatPath, { state: { need: nextNeed, subcategory: nextSubcategory } });
+  const openChat = (nextNeed = need, nextSubcategory = subcategory) => {
+    const chatTransitionToken = window.crypto?.randomUUID?.() || `chat-transition-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.sessionStorage.setItem(CHAT_TRANSITION_KEY, chatTransitionToken);
+    navigate(chatPath, { state: { need: nextNeed, subcategory: nextSubcategory, chatTransitionToken } });
+  };
   const chooseNeed = (id) => {
     setNeed(id); setSubcategory('');
     if (id === 'describe') openChat(id, '');
