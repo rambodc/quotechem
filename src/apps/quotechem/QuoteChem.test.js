@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import QuoteChem, { CATEGORY_CONFIG, NEEDS } from './QuoteChem';
 import { postJson } from '../../lib/api';
@@ -15,6 +15,7 @@ function renderQuoteChem() {
 }
 
 beforeEach(() => {
+  window.scrollTo = jest.fn();
   postJson.mockReset();
   postJson.mockResolvedValue({
     conversationId: 'c-1',
@@ -36,9 +37,11 @@ describe('QuoteChem category flow', () => {
   test('subcategory selection opens chat and automatically submits both values once', async () => {
     renderQuoteChem();
     fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' });
     expect(screen.getByRole('heading', { name: /What drilling challenge/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Continue to technical conversation/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Fluid Loss/i }));
+    expect(window.scrollTo.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
     expect(screen.getByText(/Need: Drilling Chemical/)).toBeTruthy();
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('quotechemChat', expect.objectContaining({
@@ -62,5 +65,37 @@ describe('QuoteChem category flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /Return to QuoteChem home/i }));
     expect(screen.getByRole('heading', { name: /What do you need help with/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Start over/i })).toBeNull();
+  });
+
+  test('tracks the visual viewport and clears keyboard state when the viewport expands', () => {
+    jest.useFakeTimers();
+    const viewport = new EventTarget();
+    viewport.height = 800;
+    viewport.offsetTop = 0;
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    window.sessionStorage.setItem('quotechem:chat-transition', 'viewport-test');
+    const view = render(<MemoryRouter initialEntries={[{
+      pathname: '/apps/quotechem/chat',
+      state: { need: 'describe', subcategory: '', chatTransitionToken: 'viewport-test' },
+    }]}><Routes>
+      <Route path="/apps/quotechem" element={<QuoteChem key="guided" />} />
+      <Route path="/apps/quotechem/chat" element={<QuoteChem key="chat" />} />
+    </Routes></MemoryRouter>);
+
+    const composer = screen.getByPlaceholderText('Message QuoteChem…');
+    expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('800px');
+    fireEvent.focus(composer);
+    viewport.height = 480;
+    act(() => { viewport.dispatchEvent(new Event('resize')); jest.advanceTimersByTime(100); });
+    expect(document.documentElement.classList.contains('qc-keyboard-open')).toBe(true);
+
+    viewport.height = 800;
+    act(() => { viewport.dispatchEvent(new Event('resize')); jest.advanceTimersByTime(100); });
+    expect(document.documentElement.classList.contains('qc-keyboard-open')).toBe(false);
+    expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('800px');
+
+    view.unmount();
+    delete window.visualViewport;
+    jest.useRealTimers();
   });
 });

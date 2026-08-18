@@ -120,6 +120,11 @@ function readAsDataUrl(file) {
   });
 }
 
+function scrollPageToTop() {
+  window.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+  document.scrollingElement?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+}
+
 function MessageActions({ message }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -154,6 +159,7 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
   const syncViewportRef = useRef(() => {});
   const blurTimerRef = useRef(null);
   const viewportTimerRef = useRef(null);
+  const viewportBaselineRef = useRef(0);
   const autoStartedRef = useRef(false);
   const context = useMemo(() => ({
     needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
@@ -167,9 +173,13 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
   useEffect(() => {
     const viewport = window.visualViewport;
     const syncViewport = () => {
-      if (!composerFocusedRef.current) return;
-      document.documentElement.style.setProperty('--qc-keyboard-height', `${Math.round(viewport?.height || window.innerHeight)}px`);
-      document.documentElement.style.setProperty('--qc-keyboard-top', `${Math.round(viewport?.offsetTop || 0)}px`);
+      const visibleHeight = Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight);
+      if (!composerFocusedRef.current) viewportBaselineRef.current = visibleHeight;
+      else viewportBaselineRef.current = Math.max(viewportBaselineRef.current, visibleHeight);
+      const keyboardOpen = composerFocusedRef.current && viewportBaselineRef.current - visibleHeight > 120;
+      document.documentElement.style.setProperty('--qc-viewport-height', `${visibleHeight}px`);
+      document.documentElement.style.setProperty('--qc-viewport-top', `${Math.round(viewport?.offsetTop || 0)}px`);
+      document.documentElement.classList.toggle('qc-keyboard-open', keyboardOpen);
     };
     const scheduleViewportSync = () => {
       window.clearTimeout(viewportTimerRef.current);
@@ -180,20 +190,25 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
     const previousBodyBackground = document.body.style.backgroundColor;
     document.documentElement.style.backgroundColor = '#061321';
     document.body.style.backgroundColor = '#061321';
-    document.scrollingElement?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+    scrollPageToTop();
     syncViewport();
     viewport?.addEventListener('resize', scheduleViewportSync);
     viewport?.addEventListener('scroll', scheduleViewportSync);
     window.addEventListener('resize', scheduleViewportSync);
+    window.addEventListener('orientationchange', scheduleViewportSync);
     return () => {
       viewport?.removeEventListener('resize', scheduleViewportSync);
       viewport?.removeEventListener('scroll', scheduleViewportSync);
       window.removeEventListener('resize', scheduleViewportSync);
+      window.removeEventListener('orientationchange', scheduleViewportSync);
       window.clearTimeout(blurTimerRef.current);
       window.clearTimeout(viewportTimerRef.current);
       document.documentElement.style.removeProperty('--qc-keyboard-height');
       document.documentElement.style.removeProperty('--qc-keyboard-top');
+      document.documentElement.style.removeProperty('--qc-viewport-height');
+      document.documentElement.style.removeProperty('--qc-viewport-top');
       document.documentElement.classList.remove('qc-composer-focused');
+      document.documentElement.classList.remove('qc-keyboard-open');
       document.documentElement.style.backgroundColor = previousRootBackground;
       document.body.style.backgroundColor = previousBodyBackground;
     };
@@ -283,9 +298,9 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
     composerFocusedRef.current = false;
     blurTimerRef.current = window.setTimeout(() => {
       document.documentElement.classList.remove('qc-composer-focused');
-      document.documentElement.style.removeProperty('--qc-keyboard-height');
-      document.documentElement.style.removeProperty('--qc-keyboard-top');
-      document.scrollingElement?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+      document.documentElement.classList.remove('qc-keyboard-open');
+      syncViewportRef.current();
+      scrollPageToTop();
     }, 250);
   };
 
@@ -423,19 +438,22 @@ export default function QuoteChem({ publicMode = false }) {
   const openChat = (nextNeed = need, nextSubcategory = subcategory) => {
     const chatTransitionToken = window.crypto?.randomUUID?.() || `chat-transition-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     window.sessionStorage.setItem(CHAT_TRANSITION_KEY, chatTransitionToken);
+    scrollPageToTop();
     navigate(chatPath, { state: { need: nextNeed, subcategory: nextSubcategory, chatTransitionToken } });
   };
   const chooseNeed = (id) => {
     setNeed(id); setSubcategory('');
     if (id === 'describe') openChat(id, '');
-    else setStage('category');
+    else { scrollPageToTop(); setStage('category'); }
   };
   const goBack = () => {
+    scrollPageToTop();
     if (stage === 'category') setStage('need');
     else if (stage === 'chat') navigate(homePath, { state: need === 'describe' ? undefined : { stage: 'category', need, subcategory } });
     else if (stage === 'contact') setStage('chat');
   };
   const restart = () => {
+    scrollPageToTop();
     if (publicMode) window.localStorage.removeItem(PUBLIC_SESSION_KEY);
     if (isChatRoute) return navigate(homePath, { replace: true });
     setStage('need'); setNeed(''); setSubcategory(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); setConversationId('');
