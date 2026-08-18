@@ -573,10 +573,10 @@ describe('mini-app portal routing', () => {
     expect(screen.queryByRole('heading', { name: /Change Email/i })).not.toBeTruthy();
   });
 
-  test('public chat route is available without portal access', async () => {
+  test('a direct public chat URL returns to the QuoteChem first step', async () => {
     renderSignedOutAt('/chat');
-    expect(await screen.findByRole('heading', { name: /what should we know/i })).toBeTruthy();
-    expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /What do you need help with/i })).toBeTruthy();
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
   test('User Access uses one roster with dropdown actions for users and invites', async () => {

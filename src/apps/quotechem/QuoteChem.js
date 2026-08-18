@@ -91,7 +91,7 @@ function NeedStage({ onChoose }) {
   );
 }
 
-function CategoryStage({ need, subcategory, onSelect, onContinue }) {
+function CategoryStage({ need, subcategory, onSelect }) {
   const category = CATEGORY_CONFIG[need];
   if (!category) return null;
   return (
@@ -107,7 +107,6 @@ function CategoryStage({ need, subcategory, onSelect, onContinue }) {
           </button>
         ))}
       </div>
-      <button type="button" className="qc-primary qc-continue" disabled={!subcategory} onClick={onContinue}>Continue to technical conversation <FiArrowRight /></button>
     </div>
   );
 }
@@ -155,6 +154,7 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
   const syncViewportRef = useRef(() => {});
   const blurTimerRef = useRef(null);
   const viewportTimerRef = useRef(null);
+  const autoStartedRef = useRef(false);
   const context = useMemo(() => ({
     needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
     subcategoryLabel: subcategory ? titleFor(CATEGORY_CONFIG[need]?.items || [], subcategory) : '',
@@ -233,17 +233,25 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
     } finally { setPending(false); }
   };
 
-  const send = async (textValue = draft) => {
+  const send = async (textValue = draft, { includeSelection = true } = {}) => {
     const text = String(textValue || '').trim();
     if (pending || (!text && !attachment)) return;
     const targetConversationId = conversationId || window.crypto?.randomUUID?.() || nextId('conversation');
     if (!conversationId) onConversation(targetConversationId);
-    const selection = !messages.length && context.subcategoryLabel ? `${context.needLabel} — ${context.subcategoryLabel}` : '';
+    const selection = includeSelection && !messages.length && context.subcategoryLabel ? `${context.needLabel} — ${context.subcategoryLabel}` : '';
     const requestText = text || `Please review the attached ${attachment?.kind || 'file'}.`;
     const userMessage = { id: nextId('user'), role: 'user', text: [selection, requestText].filter(Boolean).join('\n\n'), attachment, conversationId: targetConversationId };
     setMessages((current) => [...current, userMessage]); setDraft(''); setAttachment(null); setReady(false);
     await requestReply(userMessage);
   };
+
+  useEffect(() => {
+    if (!context.subcategoryLabel || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    send(`Need: ${context.needLabel}\nCategory: ${context.subcategoryLabel}`, { includeSelection: false });
+    // The guided message must run exactly once for this mounted chat route.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context.needLabel, context.subcategoryLabel]);
 
   const submitText = (event) => {
     event.preventDefault();
@@ -370,6 +378,9 @@ export default function QuoteChem({ publicMode = false }) {
   const location = useLocation();
   const routeState = location.state || {};
   const isChatRoute = location.pathname === '/chat' || location.pathname.endsWith('/apps/quotechem/chat');
+  const navigationType = window.performance?.getEntriesByType?.('navigation')?.[0]?.type;
+  const validChatTransition = Boolean(routeState.need && (routeState.need === 'describe' || routeState.subcategory));
+  const invalidChatEntry = isChatRoute && (navigationType === 'reload' || !validChatTransition);
   const restored = useMemo(() => publicMode ? readPublicSession() : null, [publicMode]);
   const restoredStage = restored?.stage === 'problem' ? 'category' : restored?.stage;
   const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || restoredStage || 'need'));
@@ -387,6 +398,11 @@ export default function QuoteChem({ publicMode = false }) {
   }, [publicMode, stage, need, subcategory, contact, requestId, conversationId]);
 
   useEffect(() => { if (publicMode && !auth.currentUser) signInAnonymously(auth).catch(() => {}); }, [publicMode]);
+  useEffect(() => {
+    if (!invalidChatEntry) return;
+    if (publicMode) window.localStorage.removeItem(PUBLIC_SESSION_KEY);
+    navigate(publicMode ? '/' : '/apps/quotechem', { replace: true });
+  }, [invalidChatEntry, navigate, publicMode]);
   useEffect(() => {
     if (publicMode && stage === 'chat' && location.pathname !== '/chat') navigate('/chat', { replace: true, state: { need, subcategory } });
   }, [publicMode, stage, location.pathname, navigate, need, subcategory]);
@@ -415,12 +431,18 @@ export default function QuoteChem({ publicMode = false }) {
     setRequestId(result.requestId); setStage('complete');
   };
 
+  if (invalidChatEntry) return null;
+
   return (
     <div className={`quotechem-app ${publicMode ? 'qc-public' : ''} ${stage === 'chat' ? 'qc-is-chat' : ''}`}>
-      <header className="qc-app-header"><div className="qc-wordmark"><img src="/assets/quotechem-logo.png" alt="" /> <span className="qc-wordmark-text">Quote<b>Chem</b><small>Global Oilfield Chemical Sourcing</small></span></div>{stage !== 'need' && stage !== 'complete' ? <button type="button" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}{stage !== 'need' ? <button type="button" onClick={restart}><FiRefreshCw /> Start over</button> : <span />}</header>
+      <header className="qc-app-header">
+        {stage !== 'need' && stage !== 'complete' ? <button type="button" className="qc-header-back" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}
+        <span />
+        <button type="button" className="qc-brand-home" onClick={restart} aria-label="Return to QuoteChem home"><span className="qc-wordmark"><img src="/assets/quotechem-logo.png" alt="" /><span className="qc-wordmark-text">Quote<b>Chem</b><small>Global Oilfield Chemical Sourcing</small></span></span></button>
+      </header>
       <div className="qc-content"><Progress stage={stage} />
         {stage === 'need' ? <NeedStage onChoose={chooseNeed} /> : null}
-        {stage === 'category' ? <CategoryStage need={need} subcategory={subcategory} onSelect={setSubcategory} onContinue={() => openChat(need, subcategory)} /> : null}
+        {stage === 'category' ? <CategoryStage need={need} subcategory={subcategory} onSelect={(id) => { setSubcategory(id); openChat(need, id); }} /> : null}
         {stage === 'chat' ? <ChatStage need={need} subcategory={subcategory} legacyArea={legacyArea} legacyIssue={legacyIssue} conversationId={conversationId} onConversation={setConversationId} onFinish={() => conversationId && setStage('contact')} publicMode={publicMode} /> : null}
         {stage === 'contact' ? <ContactStage values={contact} onChange={(key, value) => setContact((prev) => ({ ...prev, [key]: value }))} onSubmit={complete} /> : null}
         {stage === 'complete' ? <CompleteStage requestId={requestId} onRestart={restart} /> : null}

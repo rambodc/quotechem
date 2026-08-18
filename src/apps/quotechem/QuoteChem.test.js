@@ -14,6 +14,16 @@ function renderQuoteChem() {
   </Routes></MemoryRouter>);
 }
 
+beforeEach(() => {
+  postJson.mockReset();
+  postJson.mockResolvedValue({
+    conversationId: 'c-1',
+    reply: 'Tell me more.',
+    quickReplies: [],
+    readyForContact: false,
+  });
+});
+
 describe('QuoteChem category flow', () => {
   test('defines a complete image-led category for every guided need', () => {
     expect(Object.keys(CATEGORY_CONFIG)).toEqual(NEEDS.map(({ id }) => id));
@@ -23,28 +33,34 @@ describe('QuoteChem category flow', () => {
     for (const need of ['supplier', 'pricing', 'exact']) expect(CATEGORY_CONFIG[need].items).toHaveLength(7);
   });
 
-  test('requires a subcategory and carries both values in the first chat message', async () => {
+  test('subcategory selection opens chat and automatically submits both values once', async () => {
     renderQuoteChem();
     fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
     expect(screen.getByRole('heading', { name: /What drilling challenge/i })).toBeTruthy();
-    const continueButton = screen.getByRole('button', { name: /Continue to technical conversation/i });
-    expect(continueButton.disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /Continue to technical conversation/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Fluid Loss/i }));
-    expect(continueButton.disabled).toBe(false);
-    fireEvent.click(continueButton);
-    const composer = screen.getByPlaceholderText('Message QuoteChem…');
-    expect(screen.queryByText(/Let’s qualify your requirement/i)).toBeNull();
-    fireEvent.change(composer, { target: { value: 'We have severe losses.' } });
-    fireEvent.keyDown(composer, { key: 'Enter', shiftKey: false });
+    expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
+    expect(screen.getByText(/Need: Drilling Chemical/)).toBeTruthy();
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('quotechemChat', expect.objectContaining({
       context: expect.objectContaining({ needLabel: 'Drilling Chemical', subcategoryLabel: 'Fluid Loss' }),
-      text: expect.stringContaining('Drilling Chemical — Fluid Loss'),
+      text: 'Need: Drilling Chemical\nCategory: Fluid Loss',
     }), { authed: true }));
+    expect(postJson).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('Tell me more.')).toBeTruthy();
   });
 
-  test('the open-description path still enters chat directly', () => {
+  test('the open-description path enters an empty chat without auto submission', () => {
     renderQuoteChem();
     fireEvent.click(screen.getByRole('button', { name: /Just describe what you need/i }));
     expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
+    expect(postJson).not.toHaveBeenCalled();
+  });
+
+  test('the logo clears the flow and returns to the first step', () => {
+    renderQuoteChem();
+    fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Return to QuoteChem home/i }));
+    expect(screen.getByRole('heading', { name: /What do you need help with/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Start over/i })).toBeNull();
   });
 });
