@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildChatInput, decodeAttachment, normalizeChatMessages, normalizeChatResult } from './chat.js';
+import { buildChatInput, decodeAttachment, normalizeChatMessages, normalizeChatResult, normalizeGuidedContext } from './chat.js';
+
+test('normalizes guided context and supports clearing a previous subcategory', () => {
+  assert.deepEqual(normalizeGuidedContext({ needLabel: 'Better pricing', subcategoryLabel: '' }), {
+    needLabel: 'Better pricing', subcategoryLabel: '', areaLabel: '', issueLabel: '',
+  });
+});
 
 test('normalizes bounded user and assistant history', () => {
   const result = normalizeChatMessages([{ role: 'system', text: 'ignore' }, { role: 'user', text: ' Scale problem ' }, { role: 'assistant', text: 'Where?' }]);

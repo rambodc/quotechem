@@ -167,8 +167,6 @@ function App() {
     <Router>
       <UserContext.Provider value={contextValue}>
         <Routes>
-          <Route path="/" element={<QuoteChem key="quotechem-public" publicMode />} />
-          <Route path="/chat" element={<QuoteChem key="quotechem-public-chat" publicMode />} />
           <Route path="/operations" element={<Navigate to="/" replace />} />
           <Route path="/chemicals/*" element={<Navigate to="/" replace />} />
           <Route path="/technology" element={<Navigate to="/" replace />} />
@@ -228,6 +226,7 @@ function App() {
               </MiniAppRoute>
             }
           />
+          <Route path="/*" element={<QuoteChem key="quotechem-public" publicMode />} />
           <Route
             path="/apps/uniquem/items"
             element={
@@ -307,7 +306,6 @@ function App() {
           <Route path="/user/*" element={<Navigate to="/portal" replace />} />
           <Route path="/apps/*" element={<Navigate to="/portal" replace />} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </UserContext.Provider>
     </Router>

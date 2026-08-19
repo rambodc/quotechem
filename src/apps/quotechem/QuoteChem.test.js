@@ -8,20 +8,18 @@ jest.mock('../../firebase', () => ({ auth: { currentUser: { uid: 'staff-1' } } }
 jest.mock('../../lib/api', () => ({ postJson: jest.fn(() => Promise.resolve({ conversationId: 'c-1', reply: 'Tell me more.', quickReplies: [], readyForContact: false })) }));
 
 function renderQuoteChem() {
-  return render(<MemoryRouter initialEntries={['/apps/quotechem']}><Routes>
-    <Route path="/apps/quotechem" element={<QuoteChem key="guided" />} />
-    <Route path="/apps/quotechem/chat" element={<QuoteChem key="chat" />} />
-  </Routes></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={['/']}><Routes><Route path="/*" element={<QuoteChem publicMode />} /></Routes></MemoryRouter>);
 }
 
 beforeEach(() => {
   window.scrollTo = jest.fn();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
   postJson.mockReset();
-  postJson.mockResolvedValue({
-    conversationId: 'c-1',
-    reply: 'Tell me more.',
-    quickReplies: [],
-    readyForContact: false,
+  postJson.mockImplementation((path) => {
+    if (path === 'quotechemComplete') return Promise.resolve({ requestId: 'QC-2026-10001' });
+    if (path === 'quotechemAbandon') return Promise.resolve({});
+    return Promise.resolve({ conversationId: 'c-1', reply: 'Tell me more.', quickReplies: [], readyForContact: false });
   });
 });
 
@@ -63,8 +61,77 @@ describe('QuoteChem category flow', () => {
     renderQuoteChem();
     fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
     fireEvent.click(screen.getByRole('button', { name: /Return to QuoteChem home/i }));
+    expect(screen.getByRole('dialog', { name: /Start a new request/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('dialog', { name: /Start a new request/i }).querySelector('.qc-primary'));
     expect(screen.getByRole('heading', { name: /What do you need help with/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Start over/i })).toBeNull();
+  });
+
+  test('Back from contact restores the existing in-memory conversation', async () => {
+    renderQuoteChem();
+    fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fluid Loss/i }));
+    expect(await screen.findByText('Tell me more.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish request' }));
+    expect(screen.getByRole('heading', { name: /Where should we send/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }));
+    expect(screen.getByText('Tell me more.')).toBeTruthy();
+    expect(postJson.mock.calls.filter(([path]) => path === 'quotechemChat')).toHaveLength(1);
+  });
+
+  test('changing a category updates the same conversation instead of creating another', async () => {
+    renderQuoteChem();
+    fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fluid Loss/i }));
+    await screen.findByText('Tell me more.');
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Lubricity \/ Torque/i }));
+    await waitFor(() => expect(postJson.mock.calls.filter(([path]) => path === 'quotechemChat')).toHaveLength(2));
+    const chatCalls = postJson.mock.calls.filter(([path]) => path === 'quotechemChat');
+    const updatePayload = chatCalls[1][1];
+    expect(updatePayload.conversationId).toBe(chatCalls[0][1].conversationId);
+    expect(updatePayload.text).toMatch(/Requirement updated[\s\S]*Lubricity \/ Torque/);
+  });
+
+  test('restores a saved Firestore thread and exact stage after remount', async () => {
+    window.localStorage.setItem('quotechem:public-sourcing-session', JSON.stringify({ version: 2, stage: 'chat', need: 'drilling', subcategory: 'fluid-loss', activeContext: { need: 'drilling', subcategory: 'fluid-loss' }, contact: {}, conversationId: 'saved-1', status: 'active' }));
+    postJson.mockImplementation((path) => path === 'quotechemResume' ? Promise.resolve({
+      conversation: { conversationId: 'saved-1', status: 'active', requestId: '', contact: null },
+      messages: [{ messageId: 'saved-user', role: 'user', text: 'Saved field details', attachment: null, response: null }, { messageId: 'saved-ai', role: 'assistant', text: 'Saved assistant response', attachment: null, response: { quickReplies: ['Saved reply'], readyForContact: false } }],
+    }) : Promise.resolve({}));
+    renderQuoteChem();
+    expect(await screen.findByText('Saved assistant response')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Message QuoteChem…')).toBeTruthy();
+    expect(postJson).toHaveBeenCalledWith('quotechemResume', { conversationId: 'saved-1' }, { authed: true });
+  });
+
+  test('explicit restart abandons the active draft before opening a fresh request', async () => {
+    renderQuoteChem();
+    fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fluid Loss/i }));
+    await screen.findByText('Tell me more.');
+    const chatCall = postJson.mock.calls.find(([path]) => path === 'quotechemChat');
+    fireEvent.click(screen.getByRole('button', { name: /Start new request/i }));
+    fireEvent.click(screen.getByRole('dialog', { name: /Start a new request/i }).querySelector('.qc-primary'));
+    await waitFor(() => expect(postJson).toHaveBeenCalledWith('quotechemAbandon', { conversationId: chatCall[1].conversationId }, { authed: true }));
+    expect(screen.getByRole('heading', { name: /What do you need help with/i })).toBeTruthy();
+  });
+
+  test('submission ends on a minimal confirmation and Done clears the browser session', async () => {
+    renderQuoteChem();
+    fireEvent.click(screen.getByRole('button', { name: /Drilling Chemical/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fluid Loss/i }));
+    await screen.findByText('Tell me more.');
+    fireEvent.click(screen.getByRole('button', { name: 'Finish request' }));
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Test Engineer' } });
+    fireEvent.change(screen.getByLabelText(/^Company/), { target: { value: 'Field Co' } });
+    fireEvent.change(screen.getByLabelText(/^Work email/), { target: { value: 'engineer@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^Country \/ location/), { target: { value: 'Canada' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create sourcing request/i }));
+    expect(await screen.findByRole('heading', { name: /Thank you/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Back/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('heading', { name: /What do you need help with/i })).toBeTruthy();
+    expect(window.localStorage.getItem('quotechem:public-sourcing-session')).toBeNull();
   });
 
   test('tracks the visual viewport and clears keyboard state when the viewport expands', () => {
@@ -73,14 +140,8 @@ describe('QuoteChem category flow', () => {
     viewport.height = 800;
     viewport.offsetTop = 0;
     Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
-    window.sessionStorage.setItem('quotechem:chat-transition', 'viewport-test');
-    const view = render(<MemoryRouter initialEntries={[{
-      pathname: '/apps/quotechem/chat',
-      state: { need: 'describe', subcategory: '', chatTransitionToken: 'viewport-test' },
-    }]}><Routes>
-      <Route path="/apps/quotechem" element={<QuoteChem key="guided" />} />
-      <Route path="/apps/quotechem/chat" element={<QuoteChem key="chat" />} />
-    </Routes></MemoryRouter>);
+    window.localStorage.setItem('quotechem:public-sourcing-session', JSON.stringify({ version: 2, stage: 'chat', need: 'describe', subcategory: '', activeContext: { need: 'describe', subcategory: '' }, contact: {}, conversationId: '' }));
+    const view = render(<MemoryRouter initialEntries={['/chat']}><Routes><Route path="/*" element={<QuoteChem publicMode />} /></Routes></MemoryRouter>);
 
     const composer = screen.getByPlaceholderText('Message QuoteChem…');
     expect(document.documentElement.style.getPropertyValue('--qc-viewport-height')).toBe('');

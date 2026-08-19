@@ -31,4 +31,4 @@ export {
   restoreThreeDModelVersion,
   archiveThreeDModel,
 } from './apps/three-d/models.js';
-export { quotechemChat, quotechemComplete, quotechemResume, quotechemListRequests, quotechemGetRequest, quotechemGetAttachment, quotechemUpdateStage } from './apps/quotechem/chat.js';
+export { quotechemChat, quotechemComplete, quotechemAbandon, quotechemResume, quotechemListRequests, quotechemGetRequest, quotechemGetAttachment, quotechemUpdateStage } from './apps/quotechem/chat.js';

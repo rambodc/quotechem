@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FiActivity, FiArrowLeft, FiArrowRight, FiCheck, FiCheckCircle, FiChevronRight,
   FiCircle, FiCopy, FiDollarSign, FiDroplet, FiFileText, FiGitMerge, FiImage,
-  FiMessageSquare, FiPackage, FiRefreshCw, FiRepeat, FiSend, FiShield,
-  FiTarget, FiTool, FiTruck, FiUsers, FiWind, FiX, FiXCircle, FiZap,
+  FiMessageSquare, FiRepeat, FiSend, FiShield,
+  FiTarget, FiTool, FiWind, FiX, FiXCircle, FiZap,
 } from 'react-icons/fi';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { signInAnonymously } from 'firebase/auth';
@@ -142,11 +142,8 @@ async function ensurePublicIdentity() {
   return auth.currentUser;
 }
 
-function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conversationId, onConversation, onFinish, publicMode = false }) {
+function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conversationId, onConversation, onFinish, publicMode = false, messages, setMessages, quickReplies, setQuickReplies, ready, setReady, queuedMessage, onQueuedSent }) {
   const [draft, setDraft] = useState('');
-  const [messages, setMessages] = useState([]);
-  const [quickReplies, setQuickReplies] = useState([]);
-  const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [attachment, setAttachment] = useState(null);
@@ -162,7 +159,7 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
   const viewportTimerRef = useRef(null);
   const viewportPollRef = useRef(null);
   const viewportBaselineRef = useRef(0);
-  const autoStartedRef = useRef(false);
+  const autoStartedRef = useRef('');
   const context = useMemo(() => ({
     needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need),
     subcategoryLabel: subcategory ? titleFor(CATEGORY_CONFIG[need]?.items || [], subcategory) : '',
@@ -248,7 +245,7 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
         attachment: userMessage.attachment ? { dataUrl: userMessage.attachment.dataUrl, name: userMessage.attachment.name } : null,
       }, { authed: true });
       if (!conversationId) onConversation(result.conversationId);
-      setMessages((current) => [...current, { id: nextId('assistant'), role: 'assistant', text: result.reply, attachmentAcknowledged: result.attachmentAcknowledged, attachmentSummary: result.attachmentSummary, attachmentKind: userMessage.attachment?.kind }]);
+      setMessages((current) => current.some((item) => item.id === (result.assistantMessageId || `${userMessage.id}-assistant`)) ? current : [...current, { id: result.assistantMessageId || `${userMessage.id}-assistant`, role: 'assistant', text: result.reply, attachmentAcknowledged: result.attachmentAcknowledged, attachmentSummary: result.attachmentSummary, attachmentKind: userMessage.attachment?.kind }]);
       setQuickReplies(Array.isArray(result.quickReplies) ? result.quickReplies : []);
       setReady(Boolean(result.readyForContact));
       setLastAttempt(null);
@@ -257,25 +254,26 @@ function ChatStage({ need, subcategory, legacyArea = '', legacyIssue = '', conve
     } finally { setPending(false); }
   };
 
-  const send = async (textValue = draft, { includeSelection = true } = {}) => {
+  const send = async (textValue = draft, { includeSelection = true, messageId = '' } = {}) => {
     const text = String(textValue || '').trim();
     if (pending || (!text && !attachment)) return;
     const targetConversationId = conversationId || window.crypto?.randomUUID?.() || nextId('conversation');
     if (!conversationId) onConversation(targetConversationId);
     const selection = includeSelection && !messages.length && context.subcategoryLabel ? `${context.needLabel} — ${context.subcategoryLabel}` : '';
     const requestText = text || `Please review the attached ${attachment?.kind || 'file'}.`;
-    const userMessage = { id: nextId('user'), role: 'user', text: [selection, requestText].filter(Boolean).join('\n\n'), attachment, conversationId: targetConversationId };
-    setMessages((current) => [...current, userMessage]); setDraft(''); setAttachment(null); setReady(false);
+    const userMessage = { id: messageId || nextId('user'), role: 'user', text: [selection, requestText].filter(Boolean).join('\n\n'), attachment, conversationId: targetConversationId };
+    setMessages((current) => current.some((item) => item.id === userMessage.id) ? current : [...current, userMessage]); setDraft(''); setAttachment(null); setReady(false);
     await requestReply(userMessage);
+    onQueuedSent?.(userMessage.id);
   };
 
   useEffect(() => {
-    if (!context.subcategoryLabel || autoStartedRef.current) return;
-    autoStartedRef.current = true;
-    send(`Need: ${context.needLabel}\nCategory: ${context.subcategoryLabel}`, { includeSelection: false });
-    // The guided message must run exactly once for this mounted chat route.
+    if (!queuedMessage?.id || autoStartedRef.current === queuedMessage.id) return;
+    autoStartedRef.current = queuedMessage.id;
+    send(queuedMessage.text, { includeSelection: false, messageId: queuedMessage.id });
+    // Queued guided and context-change messages are idempotent by message ID.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [context.needLabel, context.subcategoryLabel]);
+  }, [queuedMessage?.id]);
 
   const submitText = (event) => {
     event.preventDefault();
@@ -380,119 +378,189 @@ function ContactStage({ values, onChange, onSubmit }) {
   );
 }
 
-function CompleteStage({ requestId, onRestart }) {
-  const steps = [
-    ['Request Received', FiCheckCircle, 'complete'], ['Technical Review', FiTool], ['Supplier Sourcing', FiUsers], ['Options Being Prepared', FiPackage], ['QuoteChem Follow-Up', FiTruck],
-  ];
-  return (
-    <div className="qc-stage qc-complete">
-      <div className="qc-success-icon"><FiCheck /></div><p className="qc-kicker">Request {requestId}</p><h1>We’re on it.</h1><p className="qc-lead">Your request has been sent to the QuoteChem sourcing team.</p>
-      <div className="qc-timeline">{steps.map(([label, Icon, status], index) => <div key={label} className={status || ''}><span><Icon /></span><p><strong>{label}</strong><small>{index === 0 ? 'Your request has been received' : 'Upcoming sourcing step'}</small></p></div>)}</div>
-      <div className="qc-demo-notice"><FiShield /><div><strong>Request saved securely</strong><p>Your conversation, uploads, and contact details are now available for authorized QuoteChem staff review.</p></div></div>
-      <button type="button" className="qc-primary" onClick={onRestart}><FiRefreshCw /> Start another request</button>
-    </div>
-  );
+function CompleteStage({ onDone }) {
+  return <main className="quotechem-app qc-public qc-complete-only"><div className="qc-stage qc-complete">
+    <div className="qc-success-icon"><FiCheck /></div><h1>Thank you.</h1>
+    <p className="qc-lead">The QuoteChem team has received your request and will contact you by email.</p>
+    <button type="button" className="qc-primary" onClick={onDone}>Done</button>
+  </div></main>;
 }
 
 const PUBLIC_SESSION_KEY = 'quotechem:public-sourcing-session';
-const CHAT_TRANSITION_KEY = 'quotechem:chat-transition';
+const SESSION_VERSION = 2;
+const EMPTY_CONTACT = { name: '', company: '', email: '', phone: '', country: '' };
+const ROUTES = { need: '/', category: '/request/category', chat: '/chat', contact: '/request/contact', complete: '/request/complete' };
+const PATH_STAGES = Object.fromEntries(Object.entries(ROUTES).map(([stageName, path]) => [path, stageName]));
 
 function readPublicSession() {
-  try { return JSON.parse(window.localStorage.getItem(PUBLIC_SESSION_KEY) || 'null'); } catch { return null; }
+  try { const value = JSON.parse(window.localStorage.getItem(PUBLIC_SESSION_KEY) || 'null'); return value?.version === SESSION_VERSION ? value : null; } catch { return null; }
+}
+
+function freshId(prefix) {
+  return window.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function contextFor(need, subcategory) {
+  return { needLabel: need === 'describe' ? 'Open requirement' : titleFor(NEEDS, need), subcategoryLabel: subcategory ? titleFor(CATEGORY_CONFIG[need]?.items || [], subcategory) : '' };
+}
+
+function restoredMessages(items = []) {
+  return items.map((message) => ({
+    id: message.messageId, role: message.role, text: message.text, attachment: message.attachment,
+    attachmentAcknowledged: Boolean(message.response?.attachmentAcknowledged), attachmentSummary: message.response?.attachmentSummary || '',
+    attachmentKind: message.attachment?.kind,
+  }));
 }
 
 export default function QuoteChem({ publicMode = false }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const routeState = location.state || {};
-  const isChatRoute = location.pathname === '/chat' || location.pathname.endsWith('/apps/quotechem/chat');
-  const [validChatEntry] = useState(() => {
-    if (!isChatRoute) return true;
-    const transitionToken = routeState.chatTransitionToken;
-    const storedToken = window.sessionStorage.getItem(CHAT_TRANSITION_KEY);
-    window.sessionStorage.removeItem(CHAT_TRANSITION_KEY);
-    return Boolean(
-      transitionToken
-      && storedToken === transitionToken
-      && routeState.need
-      && (routeState.need === 'describe' || routeState.subcategory)
-    );
-  });
-  const invalidChatEntry = isChatRoute && !validChatEntry;
   const restored = useMemo(() => publicMode ? readPublicSession() : null, [publicMode]);
-  const restoredStage = restored?.stage === 'problem' ? 'category' : restored?.stage;
-  const [stage, setStage] = useState(isChatRoute ? 'chat' : (routeState.stage || restoredStage || 'need'));
-  const [need, setNeed] = useState(routeState.need || restored?.need || (isChatRoute ? 'describe' : ''));
-  const [subcategory, setSubcategory] = useState(routeState.subcategory || restored?.subcategory || (restored?.need === 'production' ? restored?.issue : '') || '');
-  const legacyArea = routeState.areaLabel || restored?.areaLabel || restored?.area || '';
-  const legacyIssue = routeState.issueLabel || restored?.issueLabel || '';
-  const [contact, setContact] = useState(restored?.contact || { name: '', company: '', email: '', phone: '', country: '' });
+  const initialStage = PATH_STAGES[location.pathname] || restored?.stage || 'need';
+  const [stage, setStage] = useState(initialStage);
+  const [need, setNeed] = useState(restored?.need || '');
+  const [subcategory, setSubcategory] = useState(restored?.subcategory || '');
+  const [activeContext, setActiveContext] = useState(restored?.activeContext || { need: restored?.need || '', subcategory: restored?.subcategory || '' });
+  const [contact, setContact] = useState(restored?.contact || EMPTY_CONTACT);
   const [requestId, setRequestId] = useState(restored?.requestId || '');
+  const [status, setStatus] = useState(restored?.status || '');
   const [conversationId, setConversationId] = useState(restored?.conversationId || '');
+  const [messages, setMessages] = useState([]);
+  const [quickReplies, setQuickReplies] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [queuedMessage, setQueuedMessage] = useState(restored?.queuedMessage || null);
+  const [restoring, setRestoring] = useState(Boolean(restored?.conversationId));
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const initializedRef = useRef(false);
+  const knownPath = Boolean(PATH_STAGES[location.pathname]);
 
-  useEffect(() => {
-    if (!publicMode) return;
-    window.localStorage.setItem(PUBLIC_SESSION_KEY, JSON.stringify({ stage, need, subcategory, contact, requestId, conversationId }));
-  }, [publicMode, stage, need, subcategory, contact, requestId, conversationId]);
-
-  useEffect(() => { if (publicMode && !auth.currentUser) signInAnonymously(auth).catch(() => {}); }, [publicMode]);
-  useEffect(() => {
-    if (!invalidChatEntry) return;
-    if (publicMode) window.localStorage.removeItem(PUBLIC_SESSION_KEY);
-    navigate(publicMode ? '/' : '/apps/quotechem', { replace: true });
-  }, [invalidChatEntry, navigate, publicMode]);
-  useEffect(() => {
-    if (publicMode && stage === 'chat' && location.pathname !== '/chat') navigate('/chat', { replace: true, state: { need, subcategory } });
-  }, [publicMode, stage, location.pathname, navigate, need, subcategory]);
-
-  const homePath = publicMode ? '/' : '/apps/quotechem';
-  const chatPath = publicMode ? '/chat' : '/apps/quotechem/chat';
-  const openChat = (nextNeed = need, nextSubcategory = subcategory) => {
-    const chatTransitionToken = window.crypto?.randomUUID?.() || `chat-transition-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    window.sessionStorage.setItem(CHAT_TRANSITION_KEY, chatTransitionToken);
-    scrollPageToTop();
-    navigate(chatPath, { state: { need: nextNeed, subcategory: nextSubcategory, chatTransitionToken } });
+  const go = (nextStage, options = {}) => {
+    scrollPageToTop(); setStage(nextStage); navigate(ROUTES[nextStage], options);
   };
+
+  useEffect(() => {
+    if (!knownPath) { navigate('/', { replace: true }); return; }
+    const routeStage = PATH_STAGES[location.pathname];
+    if (status === 'submitted' && routeStage !== 'complete') { setStage('complete'); navigate(ROUTES.complete, { replace: true }); return; }
+    setStage(routeStage);
+  }, [knownPath, location.pathname, navigate, status]);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    const initialize = async () => {
+      if (!publicMode) { setRestoring(false); return; }
+      if (!restored) {
+        setRestoring(false);
+        if (location.pathname !== '/') navigate('/', { replace: true });
+        return;
+      }
+      if (!restored.conversationId) {
+        setRestoring(false);
+        if (location.pathname === '/') navigate(ROUTES[restored.stage] || '/', { replace: true });
+        return;
+      }
+      try {
+        await ensurePublicIdentity();
+        const result = await postJson('quotechemResume', { conversationId: restored.conversationId }, { authed: true });
+        if (result.conversation.status === 'abandoned') throw new Error('Conversation is no longer active.');
+        const loadedMessages = restoredMessages(result.messages);
+        const lastAssistant = [...(result.messages || [])].reverse().find((message) => message.role === 'assistant');
+        setMessages(loadedMessages);
+        setQuickReplies(lastAssistant?.response?.quickReplies || []);
+        setReady(Boolean(lastAssistant?.response?.readyForContact || result.conversation.status === 'ready'));
+        setStatus(result.conversation.status);
+        setRequestId(result.conversation.requestId || restored.requestId || '');
+        if (result.conversation.contact) setContact(result.conversation.contact);
+        const queuedUser = restored.queuedMessage && (result.messages || []).find((message) => message.messageId === restored.queuedMessage.id);
+        if (queuedUser?.assistantMessageId && (result.messages || []).some((message) => message.messageId === queuedUser.assistantMessageId)) setQueuedMessage(null);
+        const targetStage = result.conversation.status === 'submitted' ? 'complete' : restored.stage;
+        setStage(targetStage);
+        const targetRoute = ROUTES[targetStage] || '/';
+        if (location.pathname !== targetRoute) navigate(targetRoute, { replace: true });
+      } catch {
+        window.localStorage.removeItem(PUBLIC_SESSION_KEY);
+        setConversationId(''); setMessages([]); setNeed(''); setSubcategory(''); setStatus(''); setStage('need');
+        navigate('/', { replace: true });
+      } finally { setRestoring(false); }
+    };
+    initialize();
+  }, [location.pathname, navigate, publicMode, restored]);
+
+  useEffect(() => {
+    if (!publicMode || restoring) return;
+    if (stage === 'need' && !need && !conversationId && !requestId) {
+      window.localStorage.removeItem(PUBLIC_SESSION_KEY);
+      return;
+    }
+    window.localStorage.setItem(PUBLIC_SESSION_KEY, JSON.stringify({
+      version: SESSION_VERSION, stage, need, subcategory, activeContext, contact, requestId, status, conversationId, queuedMessage, updatedAt: new Date().toISOString(),
+    }));
+  }, [activeContext, contact, conversationId, need, publicMode, queuedMessage, requestId, restoring, stage, status, subcategory]);
+
+  const openChat = (nextNeed, nextSubcategory) => {
+    setNeed(nextNeed); setSubcategory(nextSubcategory);
+    const nextContext = { need: nextNeed, subcategory: nextSubcategory };
+    if (conversationId) {
+      if (activeContext.need !== nextNeed || activeContext.subcategory !== nextSubcategory) {
+        const labels = contextFor(nextNeed, nextSubcategory);
+        setQueuedMessage({ id: freshId('context-update'), text: `Requirement updated\nNeed: ${labels.needLabel}${labels.subcategoryLabel ? `\nCategory: ${labels.subcategoryLabel}` : ''}` });
+      }
+    } else if (nextNeed !== 'describe') {
+      const id = freshId('conversation'); const labels = contextFor(nextNeed, nextSubcategory);
+      setConversationId(id);
+      setQueuedMessage({ id: `${id}-guided`, text: `Need: ${labels.needLabel}\nCategory: ${labels.subcategoryLabel}` });
+    }
+    setActiveContext(nextContext); go('chat');
+  };
+
   const chooseNeed = (id) => {
-    setNeed(id); setSubcategory('');
     if (id === 'describe') openChat(id, '');
-    else { scrollPageToTop(); setStage('category'); }
+    else { setNeed(id); setSubcategory(''); go('category'); }
   };
+
   const goBack = () => {
-    scrollPageToTop();
-    if (stage === 'category') setStage('need');
-    else if (stage === 'chat') navigate(homePath, { state: need === 'describe' ? undefined : { stage: 'category', need, subcategory } });
-    else if (stage === 'contact') setStage('chat');
+    if (stage === 'category') go('need');
+    else if (stage === 'chat') go(need === 'describe' ? 'need' : 'category');
+    else if (stage === 'contact') go('chat');
   };
-  const restart = () => {
-    scrollPageToTop();
-    if (publicMode) window.localStorage.removeItem(PUBLIC_SESSION_KEY);
-    if (isChatRoute) return navigate(homePath, { replace: true });
-    setStage('need'); setNeed(''); setSubcategory(''); setContact({ name: '', company: '', email: '', phone: '', country: '' }); setRequestId(''); setConversationId('');
+
+  const clearSession = ({ abandon = false } = {}) => {
+    const oldConversationId = conversationId;
+    window.localStorage.removeItem(PUBLIC_SESSION_KEY);
+    setStage('need'); setNeed(''); setSubcategory(''); setActiveContext({ need: '', subcategory: '' }); setContact(EMPTY_CONTACT);
+    setRequestId(''); setStatus(''); setConversationId(''); setMessages([]); setQuickReplies([]); setReady(false); setQueuedMessage(null); setConfirmRestart(false);
+    navigate('/', { replace: true }); scrollPageToTop();
+    if (abandon && oldConversationId) postJson('quotechemAbandon', { conversationId: oldConversationId }, { authed: true }).catch(() => {});
   };
+
+  const requestRestart = () => {
+    if (conversationId || need) setConfirmRestart(true);
+    else go('need');
+  };
+
   const complete = async () => {
     if (publicMode) await ensurePublicIdentity();
     const result = await postJson('quotechemComplete', { conversationId, contact }, { authed: true });
-    setRequestId(result.requestId); setStage('complete');
+    setRequestId(result.requestId); setStatus('submitted'); go('complete', { replace: true });
   };
 
-  if (invalidChatEntry) return null;
+  if (restoring) return <main className="quotechem-app qc-public qc-session-loading">Restoring your request…</main>;
+  if (stage === 'complete') return <CompleteStage onDone={() => clearSession()} />;
 
-  return (
-    <div className={`quotechem-app ${publicMode ? 'qc-public' : ''} ${stage === 'chat' ? 'qc-is-chat' : ''}`}>
-      <header className="qc-app-header">
-        {stage !== 'need' && stage !== 'complete' ? <button type="button" className="qc-header-back" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}
-        <span />
-        <button type="button" className="qc-brand-home" onClick={restart} aria-label="Return to QuoteChem home"><span className="qc-wordmark"><img src="/assets/quotechem-logo.png" alt="" /><span className="qc-wordmark-text">Quote<b>Chem</b><small>Global Oilfield Chemical Sourcing</small></span></span></button>
-      </header>
-      <div className="qc-content"><Progress stage={stage} />
-        {stage === 'need' ? <NeedStage onChoose={chooseNeed} /> : null}
-        {stage === 'category' ? <CategoryStage need={need} subcategory={subcategory} onSelect={(id) => { setSubcategory(id); openChat(need, id); }} /> : null}
-        {stage === 'chat' ? <ChatStage need={need} subcategory={subcategory} legacyArea={legacyArea} legacyIssue={legacyIssue} conversationId={conversationId} onConversation={setConversationId} onFinish={() => conversationId && setStage('contact')} publicMode={publicMode} /> : null}
-        {stage === 'contact' ? <ContactStage values={contact} onChange={(key, value) => setContact((prev) => ({ ...prev, [key]: value }))} onSubmit={complete} /> : null}
-        {stage === 'complete' ? <CompleteStage requestId={requestId} onRestart={restart} /> : null}
-      </div>
-      <footer className="qc-footer"><FiShield /> Secure AI sourcing <span>•</span> Conversations and uploads are saved for staff review</footer>
+  return <div className={`quotechem-app ${publicMode ? 'qc-public' : ''} ${stage === 'chat' ? 'qc-is-chat' : ''}`}>
+    <header className="qc-app-header">
+      {stage !== 'need' ? <button type="button" className="qc-header-back" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}
+      {(conversationId || need) ? <button type="button" className="qc-start-new" onClick={requestRestart}>Start new request</button> : <span />}
+      <button type="button" className="qc-brand-home" onClick={requestRestart} aria-label="Return to QuoteChem home"><span className="qc-wordmark"><img src="/assets/quotechem-logo.png" alt="" /><span className="qc-wordmark-text">Quote<b>Chem</b><small>Global Oilfield Chemical Sourcing</small></span></span></button>
+    </header>
+    <div className="qc-content"><Progress stage={stage} />
+      {stage === 'need' ? <NeedStage onChoose={chooseNeed} /> : null}
+      {stage === 'category' ? <CategoryStage need={need} subcategory={subcategory} onSelect={(id) => openChat(need, id)} /> : null}
+      {stage === 'chat' ? <ChatStage need={need} subcategory={subcategory} conversationId={conversationId} onConversation={(id) => { setConversationId(id); setActiveContext({ need, subcategory }); }} onFinish={() => conversationId && go('contact')} publicMode={publicMode} messages={messages} setMessages={setMessages} quickReplies={quickReplies} setQuickReplies={setQuickReplies} ready={ready} setReady={setReady} queuedMessage={queuedMessage} onQueuedSent={() => setQueuedMessage(null)} /> : null}
+      {stage === 'contact' ? <ContactStage values={contact} onChange={(key, value) => setContact((previous) => ({ ...previous, [key]: value }))} onSubmit={complete} /> : null}
     </div>
-  );
+    <footer className="qc-footer"><FiShield /> Secure AI sourcing <span>•</span> Conversations and uploads are saved for staff review</footer>
+    {confirmRestart ? <div className="qc-restart-backdrop" role="presentation"><section className="qc-restart-dialog" role="dialog" aria-modal="true" aria-labelledby="qc-restart-title"><h2 id="qc-restart-title">Start a new request?</h2><p>Your current conversation will remain available to the QuoteChem team as an abandoned draft.</p><div><button type="button" onClick={() => setConfirmRestart(false)}>Keep current request</button><button type="button" className="qc-primary" onClick={() => clearSession({ abandon: true })}>Start new request</button></div></section></div> : null}
+  </div>;
 }

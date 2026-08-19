@@ -21,6 +21,7 @@ const EXPECTED_EXPORTS = [
   'listUniquemItems',
   'postUniquemAssemblyBuild',
   'previewInvite',
+  'quotechemAbandon',
   'quotechemChat',
   'quotechemComplete',
   'quotechemGetAttachment',

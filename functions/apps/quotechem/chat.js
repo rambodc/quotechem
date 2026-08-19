@@ -91,6 +91,15 @@ function contextText(context = {}) {
   ].filter(Boolean).join('\n');
 }
 
+export function normalizeGuidedContext(value = {}) {
+  return {
+    needLabel: asString(value.needLabel).slice(0, 160) || 'Open requirement',
+    subcategoryLabel: asString(value.subcategoryLabel).slice(0, 160),
+    areaLabel: asString(value.areaLabel).slice(0, 160),
+    issueLabel: asString(value.issueLabel).slice(0, 160),
+  };
+}
+
 export function buildChatInput(messages, context, attachment, questionCount = 0) {
   const input = [{ role: 'system', content: [{ type: 'input_text', text: [
     'You are QuoteChem, a concise technical sourcing representative for specialty oilfield chemicals.',
@@ -156,18 +165,24 @@ export const quotechemChat = onRequest(
       const messageId = safeId(req.body?.messageId);
       if (!messageId || (!text && !req.body?.attachment?.dataUrl)) return jsonError(res, 400, 'A message or attachment is required.');
       const attachment = req.body?.attachment?.dataUrl ? decodeAttachment(req.body.attachment) : null;
+      const requestedContext = normalizeGuidedContext(req.body?.context);
       let conversation = await ownedConversation(req.body?.conversationId, user, true);
       const now = admin.firestore.FieldValue.serverTimestamp();
       if (!conversation?.data) {
         const id = conversation?.id || randomUUID(); const ref = conversation?.ref || db.collection(CONVERSATIONS).doc(id);
-        await ref.set({ conversationId: id, ownerUid: user.uid, ownerEmail: user.email || '', ownerAnonymous: Boolean(user.isAnonymous), source: 'public', guidedContext: req.body?.context || {}, status: 'active', questionCount: 0, attachmentCount: 0, createdAt: now, updatedAt: now });
-        conversation = { id, ref, data: { questionCount: 0 } };
+        await ref.set({ conversationId: id, ownerUid: user.uid, ownerEmail: user.email || '', ownerAnonymous: Boolean(user.isAnonymous), source: 'public', guidedContext: requestedContext, status: 'active', questionCount: 0, attachmentCount: 0, createdAt: now, updatedAt: now });
+        conversation = { id, ref, data: { questionCount: 0, guidedContext: requestedContext } };
+      } else {
+        if (conversation.data.status === 'submitted') return jsonError(res, 409, 'This request has already been submitted.');
+        if (conversation.data.status === 'abandoned') return jsonError(res, 410, 'This conversation has been abandoned.');
+        await conversation.ref.set({ guidedContext: requestedContext, updatedAt: now }, { merge: true });
+        conversation.data.guidedContext = requestedContext;
       }
       const userRef = conversation.ref.collection('messages').doc(messageId);
       const existing = await userRef.get();
       if (existing.exists && existing.data()?.assistantMessageId) {
         const assistant = await conversation.ref.collection('messages').doc(existing.data().assistantMessageId).get();
-        setCors(res); return res.status(200).json({ ok: true, conversationId: conversation.id, ...assistant.data()?.response });
+        setCors(res); return res.status(200).json({ ok: true, conversationId: conversation.id, assistantMessageId: existing.data().assistantMessageId, ...assistant.data()?.response });
       }
       const storedAttachment = existing.data()?.attachment || (attachment ? await saveAttachment(user, conversation.id, messageId, attachment) : null);
       if (!existing.exists) await userRef.set({ messageId, role: 'user', text: text || `Please review the attached ${storedAttachment?.kind || 'file'}.`, attachment: storedAttachment, createdAt: now });
@@ -192,7 +207,7 @@ export const quotechemChat = onRequest(
       batch.set(userRef, { assistantMessageId }, { merge: true });
       batch.set(conversation.ref, { questionCount: nextQuestionCount, attachmentCount: admin.firestore.FieldValue.increment(storedAttachment ? 1 : 0), status: result.readyForContact ? 'ready' : 'active', updatedAt: now }, { merge: true });
       await batch.commit();
-      setCors(res); return res.status(200).json({ ok: true, conversationId: conversation.id, ...result, model: CHAT_MODEL });
+      setCors(res); return res.status(200).json({ ok: true, conversationId: conversation.id, assistantMessageId, ...result, model: CHAT_MODEL });
     } catch (error) {
       logger.error('quotechemChat failed', { status: error?.status, message: error?.message });
       return jsonError(res, Number(error?.status) || 500, error?.message || 'Chat request failed.');
@@ -207,6 +222,9 @@ export const quotechemComplete = onRequest({ region: REGION }, async (req, res) 
     const user = await authenticateToken(req);
     const conversation = await ownedConversation(req.body?.conversationId, user);
     if (!conversation) return jsonError(res, 400, 'Start a conversation before completing the request.');
+    if (conversation.data.status === 'submitted' && conversation.data.requestId) {
+      setCors(res); return res.status(200).json({ ok: true, requestId: conversation.data.requestId });
+    }
     const contact = {
       name: asString(req.body?.contact?.name).slice(0, 120), company: asString(req.body?.contact?.company).slice(0, 160),
       email: asString(req.body?.contact?.email).toLowerCase().slice(0, 200), phone: asString(req.body?.contact?.phone).slice(0, 60), country: asString(req.body?.contact?.country).slice(0, 120),
@@ -216,6 +234,20 @@ export const quotechemComplete = onRequest({ region: REGION }, async (req, res) 
     await conversation.ref.set({ contact, requestId, status: 'submitted', sourcingStage: 'received', submittedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     setCors(res); return res.status(200).json({ ok: true, requestId });
   } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to complete the request.'); }
+});
+
+export const quotechemAbandon = onRequest({ region: REGION }, async (req, res) => {
+  if (preflight(req, res)) return;
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed');
+  try {
+    const user = await authenticateToken(req);
+    const conversation = await ownedConversation(req.body?.conversationId, user);
+    if (!conversation) return jsonError(res, 400, 'Conversation not found.');
+    if (conversation.data.status !== 'submitted') {
+      await conversation.ref.set({ status: 'abandoned', abandonedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+    setCors(res); return res.status(200).json({ ok: true });
+  } catch (error) { return jsonError(res, Number(error?.status) || 500, error?.message || 'Unable to abandon the conversation.'); }
 });
 
 function timestampValue(value) {
@@ -235,7 +267,7 @@ async function conversationMessages(ref, limit = 100) {
   const snap = await ref.collection('messages').orderBy('createdAt', 'asc').limit(limit).get();
   return snap.docs.map((doc) => {
     const data = doc.data() || {};
-    return { messageId: doc.id, role: data.role, text: data.text || '', attachment: data.attachment || null, response: data.response || null, createdAt: timestampValue(data.createdAt) };
+    return { messageId: doc.id, role: data.role, text: data.text || '', attachment: data.attachment || null, response: data.response || null, assistantMessageId: data.assistantMessageId || '', createdAt: timestampValue(data.createdAt) };
   });
 }
 
