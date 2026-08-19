@@ -551,7 +551,7 @@ export default function QuoteChem({ publicMode = false }) {
   return <div className={`quotechem-app ${publicMode ? 'qc-public' : ''} ${stage === 'chat' ? 'qc-is-chat' : ''}`}>
     <header className="qc-app-header">
       {stage !== 'need' ? <button type="button" className="qc-header-back" onClick={goBack}><FiArrowLeft /> Back</button> : <span />}
-      {(conversationId || need) ? <button type="button" className="qc-start-new" onClick={requestRestart}>Start new request</button> : <span />}
+      <span />
       <button type="button" className="qc-brand-home" onClick={requestRestart} aria-label="Return to QuoteChem home"><span className="qc-wordmark"><img src="/assets/quotechem-logo.png" alt="" /><span className="qc-wordmark-text">Quote<b>Chem</b><small>Global Oilfield Chemical Sourcing</small></span></span></button>
     </header>
     <div className="qc-content"><Progress stage={stage} />

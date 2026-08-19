@@ -110,7 +110,8 @@ describe('QuoteChem category flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /Fluid Loss/i }));
     await screen.findByText('Tell me more.');
     const chatCall = postJson.mock.calls.find(([path]) => path === 'quotechemChat');
-    fireEvent.click(screen.getByRole('button', { name: /Start new request/i }));
+    expect(screen.queryByRole('button', { name: /^Start new request$/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Return to QuoteChem home/i }));
     fireEvent.click(screen.getByRole('dialog', { name: /Start a new request/i }).querySelector('.qc-primary'));
     await waitFor(() => expect(postJson).toHaveBeenCalledWith('quotechemAbandon', { conversationId: chatCall[1].conversationId }, { authed: true }));
     expect(screen.getByRole('heading', { name: /What do you need help with/i })).toBeTruthy();
