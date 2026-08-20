@@ -6,6 +6,20 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "headers": [
+      {
+        "source": "/@(portal|account|signin|signup|forgot|chat)",
+        "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }]
+      },
+      {
+        "source": "/@(apps|account|invite|request)/**",
+        "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }]
+      },
+      {
+        "source": "/@(robots.txt|sitemap.xml|site.webmanifest)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+      }
+    ],
     "rewrites": [
       {
         "source": "**",

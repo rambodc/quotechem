@@ -71,9 +71,13 @@ function NeedStage({ onChoose }) {
       <section className="qc-hero">
         <p className="qc-kicker">Global oilfield chemical sourcing</p>
         <h1>Solving oilfield chemical challenges. <em>Globally.</em></h1>
-        <p>Tell us your problem or need. QuoteChem will help define the right chemistry, supplier, and value.</p>
+        <p>Source production, drilling, completion, stimulation, water-treatment, and flow-assurance chemicals with a technical sourcing process built around your operating need.</p>
+        <a className="qc-hero-cta" href="#start-request">Start a sourcing request <FiArrowRight /></a>
       </section>
-      <section className="qc-choices" aria-labelledby="need-heading">
+      <nav className="qc-home-nav" aria-label="QuoteChem services">
+        <a href="#services">Chemical sourcing</a><a href="#process">How it works</a><a href="#global-sourcing">Global supply</a><a href="#faq">FAQ</a>
+      </nav>
+      <section className="qc-choices" id="start-request" aria-labelledby="need-heading">
         <div className="qc-section-heading"><span>Start a sourcing request</span><h2 id="need-heading">What do you need help with?</h2><p>Choose the option that best describes your needs.</p></div>
         <div className="qc-card-grid">
           {NEEDS.map(({ id, title, detail, icon: Icon }) => (
@@ -86,6 +90,29 @@ function NeedStage({ onChoose }) {
         <button type="button" className="qc-describe" onClick={() => onChoose('describe')}>
           <FiMessageSquare /><span><strong>Just describe what you need</strong><small>Start a guided technical conversation</small></span><FiArrowRight />
         </button>
+      </section>
+      <section className="qc-marketing-section" id="services" aria-labelledby="services-heading">
+        <div className="qc-section-heading"><span>Oilfield chemical sourcing</span><h2 id="services-heading">Chemistry for the full oilfield lifecycle</h2><p>QuoteChem helps oil and gas teams define requirements and pursue qualified supply options across upstream operations.</p></div>
+        <div className="qc-service-grid">
+          <article><FiActivity /><h3>Production chemicals</h3><p>Corrosion and scale inhibitors, demulsifiers, H₂S treatment, paraffin control, biocides, oxygen scavengers, and produced-water treatment.</p></article>
+          <article><FiTarget /><h3>Drilling chemicals</h3><p>Fluid-loss additives, shale inhibitors, lubricants, lost-circulation materials, rheology modifiers, emulsifiers, surfactants, and defoamers.</p></article>
+          <article><FiGitMerge /><h3>Completion and stimulation</h3><p>Completion brines, acidizing additives, friction reducers, clay stabilizers, flowback aids, diverters, breakers, and crosslinkers.</p></article>
+          <article><FiTool /><h3>Water and flow assurance</h3><p>Chemistry for produced, process, and injection water, plus pipeline integrity, deposit control, hydrate risk, and flow reliability.</p></article>
+        </div>
+      </section>
+      <section className="qc-marketing-section qc-process" id="process" aria-labelledby="process-heading">
+        <div className="qc-section-heading"><span>Technical sourcing process</span><h2 id="process-heading">From field need to a clear sourcing request</h2></div>
+        <ol><li><strong>Describe the application</strong><span>Choose a chemical family or explain the operating challenge in your own words.</span></li><li><strong>Add technical context</strong><span>Share specifications, chemistry, trade names, SDS/TDS files, water analyses, lab reports, or field photos.</span></li><li><strong>Receive human follow-up</strong><span>The QuoteChem team reviews the saved request and follows up using the contact details you provide.</span></li></ol>
+      </section>
+      <section className="qc-marketing-section qc-global" id="global-sourcing" aria-labelledby="global-heading">
+        <div><span>Global supply</span><h2 id="global-heading">Alternative suppliers and competitive sourcing</h2><p>Whether you need an exact product, a technically suitable alternative, or a more competitive source, QuoteChem captures the product, specification, packaging, location, volume, and commercial context needed to begin.</p></div>
+        <button type="button" className="qc-primary" onClick={() => onChoose('supplier')}>Find an alternative supplier <FiArrowRight /></button>
+      </section>
+      <section className="qc-marketing-section qc-faq" id="faq" aria-labelledby="faq-heading">
+        <div className="qc-section-heading"><span>Frequently asked questions</span><h2 id="faq-heading">Oilfield chemical sourcing with QuoteChem</h2></div>
+        <details><summary>What oilfield chemicals can QuoteChem help source?</summary><p>QuoteChem supports sourcing across production, drilling, completion, stimulation, water-treatment, and flow-assurance chemical families.</p></details>
+        <details><summary>Can QuoteChem help find an alternative chemical supplier?</summary><p>Yes. Share the product, chemistry, specification, or operating need and QuoteChem can help define the requirement for alternative supplier sourcing.</p></details>
+        <details><summary>Do I need to know the exact chemical product?</summary><p>No. Describe the field problem or application and the guided sourcing conversation will collect the technical context needed for review.</p></details>
       </section>
     </div>
   );

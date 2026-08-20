@@ -24,6 +24,18 @@ beforeEach(() => {
 });
 
 describe('QuoteChem category flow', () => {
+  test('presents semantic oilfield sourcing content and matching visible FAQs', () => {
+    renderQuoteChem();
+    expect(screen.getByRole('heading', { level: 1, name: /Solving oilfield chemical challenges/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Chemistry for the full oilfield lifecycle/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Production chemicals/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Drilling chemicals/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Completion and stimulation/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Water and flow assurance/i })).toBeTruthy();
+    expect(screen.getByText(/What oilfield chemicals can QuoteChem help source/i)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Start a sourcing request/i }).getAttribute('href')).toBe('#start-request');
+  });
+
   test('defines a complete image-led category for every guided need', () => {
     expect(Object.keys(CATEGORY_CONFIG)).toEqual(NEEDS.map(({ id }) => id));
     expect(CATEGORY_CONFIG.production.items.map(({ title }) => title)).toEqual(expect.arrayContaining(['Corrosion', 'Produced-Water Treatment', 'Oxygen Scavenging', 'Other / Not sure']));

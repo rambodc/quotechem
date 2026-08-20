@@ -1,3 +1,13 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /portal
+Disallow: /account
+Disallow: /apps/
+Disallow: /signin
+Disallow: /signup
+Disallow: /forgot
+Disallow: /invite/
+Disallow: /chat
+Disallow: /request/
+
+Sitemap: https://quotechem.com/sitemap.xml

@@ -16,6 +16,7 @@ import ThreeD from './apps/three-d';
 import UserAccess from './admin/UserAccess';
 import QuoteChem from './apps/quotechem';
 import QuoteChemInbox from './apps/quotechem/QuoteChemInbox';
+import Seo from './Seo';
 
 export const UserContext = createContext(null);
 
@@ -165,6 +166,7 @@ function App() {
 
   return (
     <Router>
+      <Seo />
       <UserContext.Provider value={contextValue}>
         <Routes>
           <Route path="/operations" element={<Navigate to="/" replace />} />
